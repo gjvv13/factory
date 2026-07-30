@@ -66,13 +66,16 @@ export async function promote(
   kop(`Promoveren van ${tag} naar ${omgeving} (${config.naam})`);
 
   if (!existsSync(path.join(werkmap, '.git'))) {
-    kop(`Clone aanmaken in ${werkmap}`);
-    mkdirSync(path.dirname(werkmap), { recursive: true });
-    run('git', ['clone', '-q', repoDir, werkmap]);
+    // Bewust `git init` en geen `git clone`: de map kan al bestaan met een
+    // database van een eerdere versie erin, en die mag een herdeploy niet blokkeren.
+    kop(`Werkmap voor ${omgeving} inrichten in ${werkmap}`);
+    mkdirSync(werkmap, { recursive: true });
+    run('git', ['init', '-q', werkmap]);
   }
 
   kop('Tag uitchecken');
-  git(['remote', 'set-url', 'origin', repoDir], werkmap);
+  const remotes = (uitvoerVan('git', ['remote'], werkmap) ?? '').split('\n').filter(Boolean);
+  git(['remote', remotes.includes('origin') ? 'set-url' : 'add', 'origin', repoDir], werkmap);
   git(['fetch', '-q', '--tags', 'origin'], werkmap);
   git(['checkout', '-q', '--detach', tag], werkmap);
   git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules'], werkmap);
