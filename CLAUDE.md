@@ -74,8 +74,14 @@ en de factory als devDependency op een tag.
 ```
 
 ```json
-"devDependencies": { "factory": "github:gjvv13/factory#v1.0.3" }
+"devDependencies": { "factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }
 ```
+
+Schrijf de koppeling als `git+https://…` en niet als de verkorting
+`github:gjvv13/factory`. pnpm zet die verkorting in de lockfile om naar een
+ssh-URL, en een CI-runner heeft geen sleutel: dan kan de build de factory niet
+ophalen. Deze repo is daarom publiek — er staat geen enkel geheim in, alleen de
+pipeline en een generiek skelet.
 
 Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
 daar de versie te bumpen. Slash commands en de git hook moeten fysiek in de

@@ -100,7 +100,12 @@ export function nieuw(naam, opties = {}) {
         '{{PORT_DEV}}': String(poorten.dev),
         '{{PORT_ACC}}': String(poorten.acc),
         '{{PORT_PROD}}': String(poorten.prod),
-        '{{FACTORY_DEP}}': opties.link === true ? 'link:../factory' : `github:gjvv13/factory#v${factoryVersie()}`,
+        // Expliciet git+https en niet de github:-verkorting: die laatste zet pnpm
+        // in de lockfile om naar een ssh-URL, en dan heeft een CI-runner een
+        // sleutel nodig om de factory te kunnen ophalen.
+        '{{FACTORY_DEP}}': opties.link === true
+            ? 'link:../factory'
+            : `git+https://github.com/gjvv13/factory.git#v${factoryVersie()}`,
     });
     writeFileSync(path.join(appDir, APP_CONFIG_BESTAND), `${JSON.stringify({
         naam,
