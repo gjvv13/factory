@@ -89,4 +89,11 @@ factory nieuw proefapp --link  # test de generator met een lokale koppeling
 Met `--link` krijgt de nieuwe applicatie `link:../factory` in plaats van de
 git-tag, zodat je wijzigingen direct doorwerken zonder te releasen.
 
+`dist/` staat bewust in versiebeheer. Applicaties halen de factory als
+git-dependency binnen, en pnpm weigert daar een buildstap te draaien zonder
+toestemming die je per commit-hash zou moeten vastleggen — dat breekt bij elke
+release. Door de gebouwde CLI mee te leveren is het pakket direct bruikbaar.
+De pre-commit hook bouwt en stageert `dist/`, zodat de build nooit uit de pas
+loopt met de bron.
+
 TypeScript staat op 6.0.x: typescript-eslint ondersteunt TS 7 nog niet.

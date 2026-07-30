@@ -13,4 +13,11 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 corepack pnpm run build
+
+# dist/ staat bewust in git: applicaties halen de factory als git-dependency
+# binnen, en pnpm mag daar geen buildstap draaien zonder toestemming die je per
+# commit-hash zou moeten vastleggen. De build hoort dus in dezelfde commit als
+# de bron waar hij bij hoort, en wordt daarom hier meegenomen.
+git add dist
+
 node dist/cli.js verify --pre-commit
