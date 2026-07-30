@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import {
+  leesOmgevingsWaarden,
   pm2NaamVan,
   vereisAppConfig,
   werkmapVan,
@@ -26,8 +27,20 @@ async function wachtOpGezond(url: string, seconden: number): Promise<string> {
   throw new GebruikersFout(`Werd niet gezond binnen ${String(seconden)}s: ${laatsteFout}`);
 }
 
-function omgevingsVariabelen(werkmap: string, omgeving: Omgeving): NodeJS.ProcessEnv {
-  return { ...process.env, ROOT_DIR: werkmap, FACTORY_ENV: omgeving };
+function omgevingsVariabelen(
+  appDir: string,
+  werkmap: string,
+  omgeving: Omgeving,
+): NodeJS.ProcessEnv {
+  // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
+  // juiste database draaien (bijv. DATABASE_FILE=data/prod.sqlite) en niet op de
+  // default. ROOT_DIR en FACTORY_ENV dwingen we daarna af, net als de ecosystem.
+  return {
+    ...process.env,
+    ...leesOmgevingsWaarden(appDir, omgeving),
+    ROOT_DIR: werkmap,
+    FACTORY_ENV: omgeving,
+  };
 }
 
 /**
@@ -95,14 +108,14 @@ export async function promote(
   kop('Database migreren');
   run(commando, [...basisArgumenten, 'run', 'migrate'], {
     cwd: werkmap,
-    env: omgevingsVariabelen(werkmap, omgeving),
+    env: omgevingsVariabelen(repoDir, werkmap, omgeving),
   });
 
   if (omgeving === 'acc') {
     kop('Testdata inlezen op acceptatie');
     run(commando, [...basisArgumenten, 'run', 'seed'], {
       cwd: werkmap,
-      env: omgevingsVariabelen(werkmap, omgeving),
+      env: omgevingsVariabelen(repoDir, werkmap, omgeving),
     });
   }
 

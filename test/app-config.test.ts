@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isOmgeving,
   leesAppConfig,
+  leesOmgevingsWaarden,
   pm2NaamVan,
   vereisOmgeving,
   werkmapVan,
@@ -76,5 +77,33 @@ describe('app-config', () => {
     expect(isOmgeving('staging')).toBe(false);
     expect(isOmgeving(undefined)).toBe(false);
     expect(() => vereisOmgeving('staging')).toThrow(/dev, acc, prod/);
+  });
+
+  it('leest de omgevingswaarden met de secrets eroverheen', () => {
+    const dir = maakApp(geldig);
+    const envDir = path.join(dir, 'environments');
+    mkdirSync(envDir, { recursive: true });
+    writeFileSync(
+      path.join(envDir, 'prod.env'),
+      '# productie\nFACTORY_ENV=prod\nDATABASE_FILE=data/prod.sqlite\nLOG_LEVEL=warn\n',
+    );
+    writeFileSync(
+      path.join(envDir, 'prod.secrets.env'),
+      'WHATSAPP_ALLOWLIST=316@c.us\nLOG_LEVEL=info\n',
+    );
+
+    const waarden = leesOmgevingsWaarden(dir, 'prod');
+
+    expect(waarden.DATABASE_FILE).toBe('data/prod.sqlite');
+    // De secrets overrulen het basisbestand.
+    expect(waarden.LOG_LEVEL).toBe('info');
+    // Waarden met bijzondere tekens blijven heel; commentaar wordt genegeerd.
+    expect(waarden.WHATSAPP_ALLOWLIST).toBe('316@c.us');
+    expect(waarden).not.toHaveProperty('# productie');
+  });
+
+  it('geeft een lege set als er geen env-bestanden zijn', () => {
+    const dir = maakApp(geldig);
+    expect(leesOmgevingsWaarden(dir, 'prod')).toEqual({});
   });
 });

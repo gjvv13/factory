@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
+import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
 import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan } from '../shell.js';
 async function wachtOpGezond(url, seconden) {
     let laatsteFout = 'onbekend';
@@ -19,8 +19,16 @@ async function wachtOpGezond(url, seconden) {
     }
     throw new GebruikersFout(`Werd niet gezond binnen ${String(seconden)}s: ${laatsteFout}`);
 }
-function omgevingsVariabelen(werkmap, omgeving) {
-    return { ...process.env, ROOT_DIR: werkmap, FACTORY_ENV: omgeving };
+function omgevingsVariabelen(appDir, werkmap, omgeving) {
+    // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
+    // juiste database draaien (bijv. DATABASE_FILE=data/prod.sqlite) en niet op de
+    // default. ROOT_DIR en FACTORY_ENV dwingen we daarna af, net als de ecosystem.
+    return {
+        ...process.env,
+        ...leesOmgevingsWaarden(appDir, omgeving),
+        ROOT_DIR: werkmap,
+        FACTORY_ENV: omgeving,
+    };
 }
 /**
  * Zet een release-tag neer op acc of prod en herstart die omgeving.
@@ -72,13 +80,13 @@ export async function promote(omgevingArgument, tagArgument) {
     kop('Database migreren');
     run(commando, [...basisArgumenten, 'run', 'migrate'], {
         cwd: werkmap,
-        env: omgevingsVariabelen(werkmap, omgeving),
+        env: omgevingsVariabelen(repoDir, werkmap, omgeving),
     });
     if (omgeving === 'acc') {
         kop('Testdata inlezen op acceptatie');
         run(commando, [...basisArgumenten, 'run', 'seed'], {
             cwd: werkmap,
-            env: omgevingsVariabelen(werkmap, omgeving),
+            env: omgevingsVariabelen(repoDir, werkmap, omgeving),
         });
     }
     kop('Omgeving herstarten');

@@ -95,6 +95,40 @@ export function pm2NaamVan(config: AppConfig, omgeving: Omgeving): string {
   return `${config.naam}-${omgeving}`;
 }
 
+function leesEnvBestand(bestand: string): Record<string, string> {
+  if (!existsSync(bestand)) {
+    return {};
+  }
+  const resultaat: Record<string, string> = {};
+  for (const regel of readFileSync(bestand, 'utf8').split('\n')) {
+    const getrimd = regel.trim();
+    if (getrimd === '' || getrimd.startsWith('#')) {
+      continue;
+    }
+    const scheiding = getrimd.indexOf('=');
+    if (scheiding === -1) {
+      continue;
+    }
+    // Splitsen op de eerste `=`: waarden mogen zelf een `=` of spaties bevatten.
+    resultaat[getrimd.slice(0, scheiding)] = getrimd.slice(scheiding + 1);
+  }
+  return resultaat;
+}
+
+/**
+ * Leest de omgevingswaarden zoals de pm2-ecosystem dat doet: eerst `<omgeving>.env`,
+ * dan `<omgeving>.secrets.env` eroverheen. Zo draaien migrate en seed met dezelfde
+ * `DATABASE_FILE` (en de rest) als de draaiende omgeving, in plaats van terug te
+ * vallen op de standaardwaarden uit de config.
+ */
+export function leesOmgevingsWaarden(appDir: string, omgeving: Omgeving): Record<string, string> {
+  const map = path.join(appDir, 'environments');
+  return {
+    ...leesEnvBestand(path.join(map, `${omgeving}.env`)),
+    ...leesEnvBestand(path.join(map, `${omgeving}.secrets.env`)),
+  };
+}
+
 export function isOmgeving(waarde: string | undefined): waarde is Omgeving {
   return waarde !== undefined && (OMGEVINGEN as readonly string[]).includes(waarde);
 }
