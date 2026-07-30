@@ -74,4 +74,6 @@ Testdata staat in `app/test/fixtures/` en wordt vóór elke test opnieuw ingelez
 Een test mag nooit afhangen van wat een vorige test achterliet. Handmatig
 verversen: `pnpm seed` (geblokkeerd op prod).
 
-De coding guidelines staan in de factory-repo in `CODING_GUIDELINES.md`.
+De coding guidelines zijn de `coding-guidelines`-skill in
+`.claude/skills/coding-guidelines/`. Claude Code laadt die vanzelf zodra je code
+schrijft of wijzigt; hij komt via `factory sync` uit de factory-repo.

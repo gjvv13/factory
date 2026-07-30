@@ -30,11 +30,13 @@ repo (die geen e2e-tests heeft) en in een applicatie (die ze wel heeft).
 **Gedeelde configuratie**, geïmporteerd uit het pakket:
 
 - `factory/tsconfig.base.json` — strikte TypeScript-instellingen
-- `factory/eslint` — de afdwingbare helft van `CODING_GUIDELINES.md`
+- `factory/eslint` — de afdwingbare helft van de coding guidelines
 - `factory/prettier` — opmaak
 - `factory/vitest-unit`, `factory/vitest-contract`, `factory/vitest-e2e` — testpresets
 
-**Het proces**: `templates/`, de slash commands, en `CODING_GUIDELINES.md`.
+**Het proces**: `templates/`, de slash commands, en de `coding-guidelines`-skill
+(`skills/coding-guidelines/SKILL.md`) — de niet-afdwingbare helft van de regels,
+die Claude Code in een applicatie zelf laadt zodra er code ontstaat.
 
 **Het skeleton** (`skeleton/`): het startpunt van een nieuwe applicatie, met een
 werkende backend, drie omgevingen en een compleet testfundament. Placeholders
@@ -87,11 +89,13 @@ Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
 daar de versie te bumpen. Slash commands en de git hook moeten fysiek in de
 app-repo staan; die haal je op met `factory sync`.
 
-Drie soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
+Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash
-commands, de pre-commit hook en `.github/workflows/ci.yml`. Die staan hier in
-`claude-commands/`, `hooks/` en `workflows/`, en `factory sync` zet ze in een
-applicatie gelijk aan deze repo.
+commands, de skills, de pre-commit hook en `.github/workflows/ci.yml`. Die staan
+hier in `claude-commands/`, `skills/`, `hooks/` en `workflows/`, en `factory sync`
+zet ze in een applicatie gelijk aan deze repo. De factory gebruikt de skills zelf
+via een symlink in `.claude/skills/`, zodat de regels ook voor haar eigen code
+gelden zonder een tweede kopie.
 
 ## Ontwikkelen aan de factory zelf
 

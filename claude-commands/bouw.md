@@ -12,8 +12,8 @@ Doe dit zo:
 1. Lees `factory.json` van deze applicatie om te weten waar de backlog staat, en
    lees daar `refined/<id>.md`. Pak alleen de genoemde slice. Bouw niets uit een
    andere slice, ook niet "omdat het er toch bijna is".
-2. Lees `CODING_GUIDELINES.md` in de factory-repo en houd je aan de lagen en de
-   afhankelijkheidsrichting.
+2. De `coding-guidelines`-skill laadt hier vanzelf; houd je aan de lagen en de
+   afhankelijkheidsrichting die hij beschrijft.
 3. Maak een branch: `git checkout -b slice/<id>-<nummer>`.
 4. Bouw de slice. Zet nieuw gedrag achter de feature flag uit de refinement, en
    voeg die flag toe aan `app/test/fixtures/feature-flags.json` (uit voor productie,

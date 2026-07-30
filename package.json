@@ -35,7 +35,8 @@
     "templates",
     "claude-commands",
     "hooks",
-    "workflows"
+    "workflows",
+    "skills"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

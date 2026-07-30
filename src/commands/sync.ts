@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { zoekAppDir } from '../app-config.js';
-import { claudeCommandsDir, hooksDir, workflowsDir } from '../paths.js';
+import { claudeCommandsDir, hooksDir, skillsDir, workflowsDir } from '../paths.js';
 import { GebruikersFout, git, kop, ok, waarschuwing } from '../shell.js';
 
 function kopieerAlsAnders(bron: string, doel: string): boolean {
@@ -14,10 +14,28 @@ function kopieerAlsAnders(bron: string, doel: string): boolean {
 }
 
 /**
+ * Kopieert een hele boom (een skill kan naast SKILL.md ook referenties of
+ * scripts bevatten) en geeft de bijgewerkte paden terug, relatief aan doelBasis.
+ */
+function kopieerBoom(bronDir: string, doelDir: string, doelBasis: string): string[] {
+  const bijgewerkt: string[] = [];
+  for (const item of readdirSync(bronDir, { withFileTypes: true })) {
+    const bron = path.join(bronDir, item.name);
+    const doel = path.join(doelDir, item.name);
+    if (item.isDirectory()) {
+      bijgewerkt.push(...kopieerBoom(bron, doel, doelBasis));
+    } else if (kopieerAlsAnders(bron, doel)) {
+      bijgewerkt.push(path.relative(doelBasis, doel));
+    }
+  }
+  return bijgewerkt;
+}
+
+/**
  * Zet de bestanden die de factory aanlevert maar die in de app-repo moeten
- * staan gelijk aan de versie uit het pakket: de slash commands, de git hook en
- * de CI-workflow. Deze kunnen niet uit node_modules komen omdat Claude Code,
- * git en GitHub Actions ze op een vaste plek in de repo verwachten.
+ * staan gelijk aan de versie uit het pakket: de slash commands, de skills, de
+ * git hook en de CI-workflow. Deze kunnen niet uit node_modules komen omdat
+ * Claude Code, git en GitHub Actions ze op een vaste plek in de repo verwachten.
  */
 export function syncNaarApp(appDir: string): string[] {
   const bijgewerkt: string[] = [];
@@ -27,6 +45,12 @@ export function syncNaarApp(appDir: string): string[] {
     if (kopieerAlsAnders(path.join(claudeCommandsDir, bestand), doel)) {
       bijgewerkt.push(path.join('.claude', 'commands', bestand));
     }
+  }
+
+  for (const skill of readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!skill.isDirectory()) continue;
+    const doelDir = path.join(appDir, '.claude', 'skills', skill.name);
+    bijgewerkt.push(...kopieerBoom(path.join(skillsDir, skill.name), doelDir, appDir));
   }
 
   for (const bestand of readdirSync(workflowsDir)) {
@@ -52,7 +76,7 @@ export function sync(): void {
     throw new GebruikersFout('factory sync hoort in een applicatiemap te draaien.');
   }
 
-  kop('Slash commands, git hook en CI-workflow gelijkzetten');
+  kop('Slash commands, skills, git hook en CI-workflow gelijkzetten');
   const bijgewerkt = syncNaarApp(appDir);
 
   if (bijgewerkt.length === 0) {

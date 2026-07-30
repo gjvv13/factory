@@ -6,7 +6,9 @@ Refine dit backlog-item: $ARGUMENTS (formaat: `<app> <id>`, of alleen `<id>` als
 
 Doe dit zo:
 
-1. Lees `backlog/<app>/ideas/<id>.md`, `templates/refinement.md` en `CODING_GUIDELINES.md`.
+1. Lees `backlog/<app>/ideas/<id>.md` en `templates/refinement.md`. De
+   coding-guidelines-skill (`skills/coding-guidelines/SKILL.md`) beschrijft de
+   lagen waarin je de technische architectuur straks indeelt; houd die aan.
 2. Verken de code van de applicatie voordat je iets ontwerpt. Die staat naast deze
    repo, in `../<app>/`. Kijk vooral naar `app/src/app.ts` (hier wordt alles
    samengeknoopt), `app/src/core/commands.ts`, `app/src/db/schema.ts` en
