@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { zoekAppDir } from '../app-config.js';
-import { claudeCommandsDir, hooksDir } from '../paths.js';
+import { claudeCommandsDir, hooksDir, workflowsDir } from '../paths.js';
 import { GebruikersFout, git, kop, ok, waarschuwing } from '../shell.js';
 function kopieerAlsAnders(bron, doel) {
     if (existsSync(doel) && readFileSync(bron, 'utf8') === readFileSync(doel, 'utf8')) {
@@ -13,9 +13,9 @@ function kopieerAlsAnders(bron, doel) {
 }
 /**
  * Zet de bestanden die de factory aanlevert maar die in de app-repo moeten
- * staan gelijk aan de versie uit het pakket: de slash commands en de git hook.
- * Deze kunnen niet uit node_modules komen omdat Claude Code en git ze op een
- * vaste plek in de repo verwachten.
+ * staan gelijk aan de versie uit het pakket: de slash commands, de git hook en
+ * de CI-workflow. Deze kunnen niet uit node_modules komen omdat Claude Code,
+ * git en GitHub Actions ze op een vaste plek in de repo verwachten.
  */
 export function syncNaarApp(appDir) {
     const bijgewerkt = [];
@@ -23,6 +23,12 @@ export function syncNaarApp(appDir) {
         const doel = path.join(appDir, '.claude', 'commands', bestand);
         if (kopieerAlsAnders(path.join(claudeCommandsDir, bestand), doel)) {
             bijgewerkt.push(path.join('.claude', 'commands', bestand));
+        }
+    }
+    for (const bestand of readdirSync(workflowsDir)) {
+        const doel = path.join(appDir, '.github', 'workflows', bestand);
+        if (kopieerAlsAnders(path.join(workflowsDir, bestand), doel)) {
+            bijgewerkt.push(path.join('.github', 'workflows', bestand));
         }
     }
     const hookDoel = path.join(appDir, '.githooks', 'pre-commit');

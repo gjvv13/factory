@@ -12,3 +12,4 @@ export const skeletonDir = path.join(factoryPakketDir, 'skeleton');
 export const templatesDir = path.join(factoryPakketDir, 'templates');
 export const claudeCommandsDir = path.join(factoryPakketDir, 'claude-commands');
 export const hooksDir = path.join(factoryPakketDir, 'hooks');
+export const workflowsDir = path.join(factoryPakketDir, 'workflows');

@@ -13,15 +13,15 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 
 **Een CLI** (`factory`) die elke applicatie als devDependency binnenhaalt:
 
-| Commando                                   | Wat het doet                                                     |
-| ------------------------------------------ | ---------------------------------------------------------------- |
-| `factory verify [--snel]`                  | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build |
-| `factory release [patch\|minor\|major]`    | Verify, versie verhogen, committen, taggen, pushen               |
-| `factory promote <acc\|prod> [tag]`        | Tag uitrollen, migreren, herstarten, gezondheid controleren      |
-| `factory env <status\|start\|stop\|logs>`  | Omgevingen bedienen via pm2                                      |
-| `factory flag <omgeving> [naam] [on\|off]` | Feature flags omzetten zonder deploy                             |
-| `factory nieuw <naam>`                     | Nieuwe applicatie uit het skeleton, met een vrij poortblok       |
-| `factory sync`                             | Slash commands en git hook in een app gelijkzetten aan deze repo |
+| Commando                                   | Wat het doet                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------------------- |
+| `factory verify [--snel]`                  | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build              |
+| `factory release [patch\|minor\|major]`    | Verify, versie verhogen, committen, taggen, pushen                            |
+| `factory promote <acc\|prod> [tag]`        | Tag uitrollen, migreren, herstarten, gezondheid controleren                   |
+| `factory env <status\|start\|stop\|logs>`  | Omgevingen bedienen via pm2                                                   |
+| `factory flag <omgeving> [naam] [on\|off]` | Feature flags omzetten zonder deploy                                          |
+| `factory nieuw <naam>`                     | Nieuwe applicatie uit het skeleton, met een vrij poortblok                    |
+| `factory sync`                             | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze
@@ -78,6 +78,12 @@ en de factory als devDependency op een tag.
 Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
 daar de versie te bumpen. Slash commands en de git hook moeten fysiek in de
 app-repo staan; die haal je op met `factory sync`.
+
+Drie soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
+git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash
+commands, de pre-commit hook en `.github/workflows/ci.yml`. Die staan hier in
+`claude-commands/`, `hooks/` en `workflows/`, en `factory sync` zet ze in een
+applicatie gelijk aan deze repo.
 
 ## Ontwikkelen aan de factory zelf
 
