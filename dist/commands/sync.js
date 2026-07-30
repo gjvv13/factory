@@ -44,7 +44,7 @@ export function sync() {
     if (appDir === undefined) {
         throw new GebruikersFout('factory sync hoort in een applicatiemap te draaien.');
     }
-    kop('Slash commands en git hook gelijkzetten');
+    kop('Slash commands, git hook en CI-workflow gelijkzetten');
     const bijgewerkt = syncNaarApp(appDir);
     if (bijgewerkt.length === 0) {
         waarschuwing('Niets te doen: alles staat al gelijk aan de factory.');

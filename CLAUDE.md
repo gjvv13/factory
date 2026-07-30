@@ -38,7 +38,9 @@ repo (die geen e2e-tests heeft) en in een applicatie (die ze wel heeft).
 
 **Het skeleton** (`skeleton/`): het startpunt van een nieuwe applicatie, met een
 werkende backend, drie omgevingen en een compleet testfundament. Placeholders
-(`__APP_NAAM__`, `__PORT_DEV__`, …) worden door `factory nieuw` ingevuld.
+(`{{APP_NAAM}}`, `{{PORT_DEV}}`, …) worden door `factory nieuw` ingevuld.
+Dubbele accolades en geen onderstrepingen: dat laatste leest markdown als
+vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 
 ## De pipeline
 
@@ -72,7 +74,7 @@ en de factory als devDependency op een tag.
 ```
 
 ```json
-"devDependencies": { "factory": "github:gjvv13/factory#v1.0.0" }
+"devDependencies": { "factory": "github:gjvv13/factory#v1.0.3" }
 ```
 
 Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
