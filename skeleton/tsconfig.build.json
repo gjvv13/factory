@@ -1,0 +1,9 @@
+{
+  "extends": "factory/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "app/src",
+    "outDir": "dist"
+  },
+  "include": ["app/src/**/*.ts"]
+}

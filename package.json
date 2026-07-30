@@ -1,0 +1,82 @@
+{
+  "name": "factory",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Software factory: pipeline, gereedschap en gedeelde configuratie voor de applicaties.",
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "factory": "./dist/cli.js"
+  },
+  "exports": {
+    "./eslint": "./configs/eslint.js",
+    "./prettier": "./configs/prettier.json",
+    "./tsconfig.base.json": "./configs/tsconfig.base.json",
+    "./vitest-unit": {
+      "types": "./configs/vitest-unit.d.ts",
+      "default": "./configs/vitest-unit.js"
+    },
+    "./vitest-contract": {
+      "types": "./configs/vitest-contract.d.ts",
+      "default": "./configs/vitest-contract.js"
+    },
+    "./vitest-e2e": {
+      "types": "./configs/vitest-e2e.d.ts",
+      "default": "./configs/vitest-e2e.js"
+    }
+  },
+  "files": [
+    "dist",
+    "configs",
+    "skeleton",
+    "templates",
+    "claude-commands",
+    "hooks"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
+    "verify": "node dist/cli.js verify"
+  },
+  "dependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "typescript-eslint": "^8.65.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "eslint": ">=10",
+    "prettier": ">=3",
+    "typescript": ">=6 <7",
+    "vitest": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    },
+    "prettier": {
+      "optional": true
+    },
+    "typescript": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.10"
+  }
+}

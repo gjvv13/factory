@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Snelle poort vóór elke commit: opmaak, lint, types en unit tests.
+# De volledige poort (inclusief contract- en e2e-tests) draait in
+# `factory verify` en in CI. Overslaan kan met: git commit --no-verify
+#
+# Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
+# hier op met `factory sync`.
+
+set -euo pipefail
+
+if ! command -v node >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+corepack pnpm exec factory verify --pre-commit

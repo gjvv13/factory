@@ -1,0 +1,7 @@
+{
+  "extends": "factory/tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["app/src/**/*.ts", "app/test/**/*.ts", "*.config.ts", "drizzle.config.ts"]
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+pnpm-lock.yaml
+coverage/
+# Het skeleton is een sjabloon met placeholders en verwijst naar het
+# factory-pakket; het wordt opgemaakt in de applicatie die eruit ontstaat.
+skeleton/

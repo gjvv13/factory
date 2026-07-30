@@ -1,0 +1,8 @@
+node_modules/
+dist/
+migrations/
+pnpm-lock.yaml
+data/
+coverage/
+pacts/
+.tmp/

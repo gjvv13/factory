@@ -1,0 +1,82 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import {
+  GebruikersFout,
+  git,
+  kop,
+  ok,
+  pakketbeheerder,
+  run,
+  uitvoerVan,
+  waarschuwing,
+} from '../shell.js';
+import { verify } from './verify.js';
+
+const SOORTEN = ['patch', 'minor', 'major'] as const;
+type Soort = (typeof SOORTEN)[number];
+
+function leesVersie(repoDir: string): string {
+  const inhoud: unknown = JSON.parse(readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
+  const versie =
+    typeof inhoud === 'object' && inhoud !== null && 'version' in inhoud
+      ? (inhoud as { version?: unknown }).version
+      : undefined;
+  if (typeof versie !== 'string' || versie === '') {
+    throw new GebruikersFout('Kon de versie niet uit package.json lezen.');
+  }
+  return versie;
+}
+
+/**
+ * Een release is een git-tag waarvan bewezen is dat de poort groen was.
+ * Promoveren gebeurt altijd op zo'n tag, nooit op een branch.
+ */
+export function release(soortArgument: string | undefined): void {
+  const soort: Soort = (soortArgument ?? 'patch') as Soort;
+  if (!(SOORTEN as readonly string[]).includes(soort)) {
+    throw new GebruikersFout(`Gebruik: factory release [${SOORTEN.join('|')}]`);
+  }
+
+  const repoDir = process.cwd();
+  const branch = uitvoerVan('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoDir);
+  if (branch !== 'main') {
+    throw new GebruikersFout(`Releasen gaat alleen vanaf main (je staat op '${branch ?? '?'}').`);
+  }
+
+  const vies = uitvoerVan('git', ['status', '--porcelain'], repoDir);
+  if (vies !== '') {
+    git(['status', '--short'], repoDir);
+    throw new GebruikersFout('Werkmap is niet schoon. Commit of stash je wijzigingen eerst.');
+  }
+
+  kop('Kwaliteitspoort voor de release');
+  verify();
+
+  kop(`Versie verhogen (${soort})`);
+  const { commando, basisArgumenten } = pakketbeheerder();
+  run(commando, [...basisArgumenten, 'version', soort, '--no-git-tag-version'], { cwd: repoDir });
+
+  const versie = leesVersie(repoDir);
+  const tag = `v${versie}`;
+  if (uitvoerVan('git', ['tag', '--list', tag], repoDir) === tag) {
+    throw new GebruikersFout(`Tag ${tag} bestaat al.`);
+  }
+
+  git(['add', 'package.json'], repoDir);
+  git(['commit', '-q', '-m', `release: ${tag}`], repoDir);
+  git(['tag', '-a', tag, '-m', `Release ${tag}`], repoDir);
+  ok(`Release ${tag} aangemaakt`);
+
+  if (uitvoerVan('git', ['remote', 'get-url', 'origin'], repoDir) !== undefined) {
+    kop('Naar origin pushen');
+    git(['push', '-q', 'origin', 'main'], repoDir);
+    git(['push', '-q', 'origin', tag], repoDir);
+    ok(`main en ${tag} gepusht`);
+  } else {
+    waarschuwing("Geen remote 'origin'; alleen lokaal getagd.");
+  }
+
+  process.stdout.write(
+    `\nPromoveren met:\n  factory promote acc ${tag}\n  factory promote prod ${tag}\n`,
+  );
+}

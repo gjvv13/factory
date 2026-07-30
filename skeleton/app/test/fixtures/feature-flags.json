@@ -1,0 +1,12 @@
+[
+  {
+    "key": "ping",
+    "enabled": true,
+    "description": "Het ping-commando antwoordt met pong."
+  },
+  {
+    "key": "whatsapp-channel",
+    "enabled": false,
+    "description": "WhatsApp-kanaal (slice 1). Staat standaard uit."
+  }
+]

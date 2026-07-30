@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Snelle poort vóór elke commit in de factory zelf.
+# De factory kan zichzelf niet als dependency hebben, dus roept hier haar
+# eigen gebouwde CLI aan. Overslaan kan met: git commit --no-verify
+
+set -euo pipefail
+
+if ! command -v node >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent >/dev/null 2>&1 || true
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+corepack pnpm run build
+node dist/cli.js verify --pre-commit

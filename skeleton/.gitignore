@@ -1,0 +1,14 @@
+node_modules/
+dist/
+data/*.sqlite
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
+.tmp/
+logs/
+coverage/
+pacts/
+.whatsapp-session/
+*.local.env
+environments/*.secrets.env
+.DS_Store

@@ -1,0 +1,6 @@
+[
+  { "channel": "http", "handle": "+31600000001", "displayName": "Testgebruiker Een" },
+  { "channel": "http", "handle": "+31600000002", "displayName": "Testgebruiker Twee" },
+  { "channel": "fake", "handle": "tester", "displayName": "Unittester" },
+  { "channel": "cli", "handle": "local-terminal", "displayName": "Terminal" }
+]
