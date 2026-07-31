@@ -129,9 +129,9 @@ productie tot de round-trip op het echte nummer bevestigd is.
 - **Doel:** de assistent kan een tekstbericht via de Cloud API versturen, met een
   vastgelegd contract — een geteste bouwsteen, nog niet in een live pad.
 - **Acceptatiecriteria:**
-  - [ ] `http-client` heeft een `postJson` met dezelfde time-out- en foutafhandeling als `getJson`.
-  - [ ] `whatsapp-cloud-client.sendText(to, text)` doet de juiste Graph-call (URL, bearer, body).
-  - [ ] Een Pact-contract legt `POST /{phoneNumberId}/messages` vast, inclusief het `401`-gedrag bij een ongeldig token.
+  - [x] `http-client` heeft een `postJson` met dezelfde time-out- en foutafhandeling als `getJson`.
+  - [x] `whatsapp-cloud-client.sendText(to, text)` doet de juiste Graph-call (URL, bearer, body).
+  - [x] Een Pact-contract legt `POST /{phoneNumberId}/messages` vast, inclusief het `401`-gedrag bij een ongeldig token.
 - **Tests:** unit: `postJson` en het opbouwen van de Cloud-request · contract: Pact tegen `whatsapp-cloud-api` · e2e: n.v.t. (geen gebruikersgedrag in deze slice)
 - **Testdata:** geen nieuwe fixtures.
 - **Flag:** geen.
@@ -141,10 +141,10 @@ productie tot de round-trip op het echte nummer bevestigd is.
 - **Doel:** een bericht dat via de Cloud-webhook binnenkomt wordt gemachtigd,
   gerouteerd en beantwoord — end-to-end werkend in dev/acc, achter de flag.
 - **Acceptatiecriteria:**
-  - [ ] `GET /channels/whatsapp/webhook` beantwoordt de verificatie alleen bij een kloppend `verify_token`.
-  - [ ] `POST` weigert een payload met een ongeldige `X-Hub-Signature-256` (`403`).
-  - [ ] Een geldig `text`-bericht van een gemachtigd nummer levert `pong` op via de cloud-client; met de flag uit wordt het gelogd maar niet beantwoord.
-  - [ ] Status-events (afgeleverd/gelezen) worden met `200` genegeerd.
+  - [x] `GET /channels/whatsapp/webhook` beantwoordt de verificatie alleen bij een kloppend `verify_token`.
+  - [x] `POST` weigert een payload met een ongeldige `X-Hub-Signature-256` (`403`).
+  - [x] Een geldig `text`-bericht van een gemachtigd nummer levert `pong` op via de cloud-client; met de flag uit wordt het gelogd maar niet beantwoord.
+  - [x] Status-events (afgeleverd/gelezen) worden met `200` genegeerd.
 - **Tests:** unit: `whatsapp-inbound` (authz/flag/route/antwoord met een fake `send`), handtekeningcontrole, payload-Zod (bericht + status-event) · contract: hergebruikt slice 1 · e2e: start de app met `CHANNEL=whatsapp-cloud`, POST een ondertekende voorbeeld-payload, en controleer dat de cloud-client (naar een lokale stub) wordt aangeroepen
 - **Testdata:** een voorbeeld-webhook-payload (bericht en status-event) in `app/test/fixtures/`.
 - **Flag:** `whatsapp-channel` (hergebruik).
@@ -155,7 +155,7 @@ productie tot de round-trip op het echte nummer bevestigd is.
 - **Acceptatiecriteria:**
   - [ ] Het assistent-nummer is bij de Cloud API geregistreerd en de publieke webhook (Cloudflare Tunnel) staat; secrets in `prod.secrets.env`.
   - [ ] Prod draait met `CHANNEL=whatsapp-cloud`; een echt bericht op het nummer krijgt `pong` met de flag aan.
-  - [ ] `whatsapp-web-client.ts` en de herverbind-/heartbeat-/QR-machinerie zijn verwijderd, net als de deps `whatsapp-web.js`, `qrcode-terminal` en de puppeteer-config; `pnpm verify` is groen.
+  - [x] `whatsapp-web-client.ts` en de herverbind-/heartbeat-/QR-machinerie zijn verwijderd, net als de deps `whatsapp-web.js`, `qrcode-terminal` en de puppeteer-config; `pnpm verify` is groen.
   - [ ] De beheer-console toont het kanaal `whatsapp-cloud` zonder verbindingsstatus.
 - **Tests:** unit: aangepast/verwijderd met het oude kanaal · contract: ongewijzigd · e2e: bestaande WhatsApp-e2e omgezet naar de webhook-vorm
 - **Testdata:** de linked-device-fixtures/afhankelijkheden vervallen.
