@@ -91,14 +91,20 @@ export async function promote(omgevingArgument, tagArgument) {
     }
     kop('Omgeving herstarten');
     mkdirSync(path.join(repoDir, 'logs'), { recursive: true });
+    const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
+    // Een bestaand proces verwijderen we eerst, en starten daarna vers uit de
+    // ecosystem. Bewust geen `pm2 restart --update-env`: dat herleest de
+    // ecosystem-env niet, maar neemt de env van deze CLI-aanroep over. Verandert
+    // een waarde tussen twee deploys (bijv. CHANNEL van 'whatsapp' naar
+    // 'whatsapp-cloud'), dan blijft het draaiende proces de oude waarde houden en
+    // faalt de gezondheidscheck bij strengere config-validatie. Alleen een verse
+    // start van ecosystem.config.cjs evalueert dat bestand opnieuw en leest zo de
+    // gewijzigde environments/<omgeving>.env(.secrets) in.
     const bestaat = run('pm2', ['describe', pm2Naam], { capture: true, toleranter: true }).code === 0;
     if (bestaat) {
-        run('pm2', ['restart', pm2Naam, '--update-env'], { capture: true });
+        run('pm2', ['delete', pm2Naam], { capture: true });
     }
-    else {
-        const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
-        run('pm2', ['start', ecosystem, '--only', pm2Naam], { capture: true });
-    }
+    run('pm2', ['start', ecosystem, '--only', pm2Naam], { capture: true });
     run('pm2', ['save'], { capture: true, toleranter: true });
     kop(`Controleren of ${omgeving} leeft`);
     const antwoord = await wachtOpGezond(`http://127.0.0.1:${String(poort)}/health`, 30);
