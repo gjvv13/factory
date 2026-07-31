@@ -153,8 +153,8 @@ productie tot de round-trip op het echte nummer bevestigd is.
 
 - **Doel:** prod draait op de Cloud API; het gekoppelde-apparaat-pad is weg.
 - **Acceptatiecriteria:**
-  - [ ] Het assistent-nummer is bij de Cloud API geregistreerd en de publieke webhook (Cloudflare Tunnel) staat; secrets in `prod.secrets.env`.
-  - [ ] Prod draait met `CHANNEL=whatsapp-cloud`; een echt bericht op het nummer krijgt `pong` met de flag aan.
+  - [x] De publieke webhook (ngrok, vast domein, als LaunchAgent-service) staat en de secrets zitten in `prod.secrets.env`. Live gezet op de **lichte route** (Meta test-nummer + geverifieerde ontvangers), niet het eigen nummer — dat blijft de latere zware route (Business Verification + publiceren).
+  - [x] Prod draait met `CHANNEL=whatsapp-cloud`; een echt WhatsApp-bericht krijgt `pong` met de flag aan (bewezen op prod, 2026-07-31).
   - [x] `whatsapp-web-client.ts` en de herverbind-/heartbeat-/QR-machinerie zijn verwijderd, net als de deps `whatsapp-web.js`, `qrcode-terminal` en de puppeteer-config; `pnpm verify` is groen.
   - [ ] De beheer-console toont het kanaal `whatsapp-cloud` zonder verbindingsstatus.
 - **Tests:** unit: aangepast/verwijderd met het oude kanaal · contract: ongewijzigd · e2e: bestaande WhatsApp-e2e omgezet naar de webhook-vorm
