@@ -154,13 +154,13 @@ vangt het contract dat.
 - **Doel:** er is een draaiende `beheer`-app die in één pagina de health van alle
   geregistreerde applicaties en omgevingen toont.
 - **Acceptatiecriteria:**
-  - [ ] `factory nieuw beheer` is uitgevoerd en de app is getrimd tot de
+  - [x] `factory nieuw beheer` is uitgevoerd en de app is getrimd tot de
         fundament-lagen (geen chat-onderdelen meer); `pnpm verify` is groen.
-  - [ ] Het register (`apps.json`) wordt met Zod gevalideerd; een ongeldig register
+  - [x] Het register (`apps.json`) wordt met Zod gevalideerd; een ongeldig register
         laat de app hard falen bij het opstarten.
-  - [ ] `GET /api/overview` geeft per app × omgeving de health terug, met
+  - [x] `GET /api/overview` geeft per app × omgeving de health terug, met
         onbereikbare omgevingen als status "onbereikbaar".
-  - [ ] `GET /` toont die informatie als leesbare tabel in de browser.
+  - [x] `GET /` toont die informatie als leesbare tabel in de browser.
 - **Tests:** unit: `registry` (register → doelen) en `overview-service`
   (aggregeren + onbereikbaarheid afvangen) met een fake admin-client · contract:
   Pact voor `GET /health` tegen de factory-app-admin-API · e2e: start het console
