@@ -156,7 +156,7 @@ productie tot de round-trip op het echte nummer bevestigd is.
   - [x] De publieke webhook (ngrok, vast domein, als LaunchAgent-service) staat en de secrets zitten in `prod.secrets.env`. Live gezet op de **lichte route** (Meta test-nummer + geverifieerde ontvangers), niet het eigen nummer — dat blijft de latere zware route (Business Verification + publiceren).
   - [x] Prod draait met `CHANNEL=whatsapp-cloud`; een echt WhatsApp-bericht krijgt `pong` met de flag aan (bewezen op prod, 2026-07-31).
   - [x] `whatsapp-web-client.ts` en de herverbind-/heartbeat-/QR-machinerie zijn verwijderd, net als de deps `whatsapp-web.js`, `qrcode-terminal` en de puppeteer-config; `pnpm verify` is groen.
-  - [ ] De beheer-console toont het kanaal `whatsapp-cloud` zonder verbindingsstatus.
+  - [x] De beheer-console toont het kanaal `whatsapp-cloud` zonder verbindingsstatus.
 - **Tests:** unit: aangepast/verwijderd met het oude kanaal · contract: ongewijzigd · e2e: bestaande WhatsApp-e2e omgezet naar de webhook-vorm
 - **Testdata:** de linked-device-fixtures/afhankelijkheden vervallen.
 - **Flag:** `whatsapp-channel` (aan zetten zodra de round-trip op prod klopt).
