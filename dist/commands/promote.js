@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
-import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan } from '../shell.js';
+import { bevestig, GebruikersFout, git, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, } from '../shell.js';
 async function wachtOpGezond(url, seconden) {
     let laatsteFout = 'onbekend';
     for (let poging = 0; poging < seconden; poging += 1) {
@@ -30,16 +30,17 @@ function omgevingsVariabelen(appDir, werkmap, omgeving) {
         FACTORY_ENV: omgeving,
     };
 }
-/**
- * Zet een release-tag neer op acc of prod en herstart die omgeving.
- * De omgevingen zijn losse clones die altijd op een tag staan, nooit op een
- * branch, zodat werk in de repo een draaiende omgeving niet raakt.
- */
-export async function promote(omgevingArgument, tagArgument) {
+export async function promote(omgevingArgument, tagArgument, opties = {}) {
     if (omgevingArgument !== 'acc' && omgevingArgument !== 'prod') {
         throw new GebruikersFout('Gebruik: factory promote <acc|prod> [tag]');
     }
     const omgeving = omgevingArgument;
+    // Prod vraagt bevestiging. Kan die niet gesteld worden (geen terminal) en is er
+    // ook geen --ja, dan stoppen we meteen, vóór er iets aan de omgeving gebeurt.
+    const vraagtBevestiging = omgeving === 'prod' && opties.ja !== true;
+    if (vraagtBevestiging && !isInteractief()) {
+        throw new GebruikersFout('Prod omzetten vraagt bevestiging. Draai je dit niet-interactief (CI), geef dan --ja mee.');
+    }
     const config = vereisAppConfig();
     const repoDir = config.appDir;
     const tag = tagArgument ??
@@ -88,6 +89,9 @@ export async function promote(omgevingArgument, tagArgument) {
             cwd: werkmap,
             env: omgevingsVariabelen(repoDir, werkmap, omgeving),
         });
+    }
+    if (vraagtBevestiging && !(await bevestig(`Prod omzetten naar ${tag}?`))) {
+        throw new GebruikersFout('Afgebroken: prod is niet omgezet.');
     }
     kop('Omgeving herstarten');
     mkdirSync(path.join(repoDir, 'logs'), { recursive: true });

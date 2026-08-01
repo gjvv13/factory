@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { promote } from '../src/commands/promote.js';
+import * as shell from '../src/shell.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
 
@@ -55,7 +56,7 @@ describe('promote', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
     stelUitvoerderIn(uitvoerder);
 
-    await promote('prod', 'v1.0.0');
+    await promote('prod', 'v1.0.0', { ja: true });
 
     const checkout = eersteIndex(
       aanroepen,
@@ -103,11 +104,72 @@ describe('promote', () => {
     );
     stelUitvoerderIn(uitvoerder);
 
-    await expect(promote('prod', 'v1.0.0')).rejects.toThrow(/install/);
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/install/);
     // Na de gefaalde install worden build, migrate en pm2 niet meer aangeroepen.
     expect(aanroepen.some((a) => a.argumenten.includes('build'))).toBe(false);
     expect(aanroepen.some((a) => a.argumenten.includes('migrate'))).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('vraagt bevestiging voor prod en breekt af bij nee', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'isInteractief').mockReturnValue(true);
+    const bevestigSpy = vi.spyOn(shell, 'bevestig').mockResolvedValue(false);
+
+    await expect(promote('prod', 'v1.0.0')).rejects.toThrow(/afgebroken/i);
+    expect(bevestigSpy).toHaveBeenCalled();
+    // Bij nee is er niets omgezet: pm2 is niet aangeraakt.
+    expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
+  });
+
+  it('zet prod wel om na een bevestigend antwoord', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'isInteractief').mockReturnValue(true);
+    vi.spyOn(shell, 'bevestig').mockResolvedValue(true);
+
+    await promote('prod', 'v1.0.0');
+
+    expect(aanroepen.some((a) => a.commando === 'pm2' && a.argumenten[0] === 'start')).toBe(true);
+  });
+
+  it('slaat de vraag over met --ja', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    const bevestigSpy = vi.spyOn(shell, 'bevestig');
+
+    await promote('prod', 'v1.0.0', { ja: true });
+
+    expect(bevestigSpy).not.toHaveBeenCalled();
+  });
+
+  it('breekt niet-interactief zonder --ja meteen af, vóór er iets aan de omgeving gebeurt', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'isInteractief').mockReturnValue(false);
+
+    await expect(promote('prod', 'v1.0.0')).rejects.toThrow(/--ja/);
+    // Fail-fast: er is niet eens uitgecheckt.
+    expect(aanroepen.some((a) => a.commando === 'git' && a.argumenten.includes('checkout'))).toBe(
+      false,
+    );
+    expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
+  });
+
+  it('vraagt niets voor acc', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    const bevestigSpy = vi.spyOn(shell, 'bevestig');
+
+    await promote('acc', 'v1.0.0');
+
+    expect(bevestigSpy).not.toHaveBeenCalled();
   });
 });

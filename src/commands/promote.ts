@@ -8,7 +8,17 @@ import {
   type AppConfig,
   type Omgeving,
 } from '../app-config.js';
-import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan } from '../shell.js';
+import {
+  bevestig,
+  GebruikersFout,
+  git,
+  isInteractief,
+  kop,
+  ok,
+  pakketbeheerder,
+  run,
+  uitvoerVan,
+} from '../shell.js';
 
 async function wachtOpGezond(url: string, seconden: number): Promise<string> {
   let laatsteFout = 'onbekend';
@@ -48,14 +58,30 @@ function omgevingsVariabelen(
  * De omgevingen zijn losse clones die altijd op een tag staan, nooit op een
  * branch, zodat werk in de repo een draaiende omgeving niet raakt.
  */
+export interface PromoteOpties {
+  /** Slaat de bevestigingsvraag voor prod over; nodig om niet-interactief (CI) te promoveren. */
+  readonly ja?: boolean;
+}
+
 export async function promote(
   omgevingArgument: string | undefined,
   tagArgument: string | undefined,
+  opties: PromoteOpties = {},
 ): Promise<void> {
   if (omgevingArgument !== 'acc' && omgevingArgument !== 'prod') {
     throw new GebruikersFout('Gebruik: factory promote <acc|prod> [tag]');
   }
   const omgeving: Omgeving = omgevingArgument;
+
+  // Prod vraagt bevestiging. Kan die niet gesteld worden (geen terminal) en is er
+  // ook geen --ja, dan stoppen we meteen, vóór er iets aan de omgeving gebeurt.
+  const vraagtBevestiging = omgeving === 'prod' && opties.ja !== true;
+  if (vraagtBevestiging && !isInteractief()) {
+    throw new GebruikersFout(
+      'Prod omzetten vraagt bevestiging. Draai je dit niet-interactief (CI), geef dan --ja mee.',
+    );
+  }
+
   const config: AppConfig = vereisAppConfig();
   const repoDir = config.appDir;
 
@@ -117,6 +143,10 @@ export async function promote(
       cwd: werkmap,
       env: omgevingsVariabelen(repoDir, werkmap, omgeving),
     });
+  }
+
+  if (vraagtBevestiging && !(await bevestig(`Prod omzetten naar ${tag}?`))) {
+    throw new GebruikersFout('Afgebroken: prod is niet omgezet.');
   }
 
   kop('Omgeving herstarten');

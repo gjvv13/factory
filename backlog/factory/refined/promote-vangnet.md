@@ -101,10 +101,10 @@ Geen — dit is CLI-gedrag, geen applicatiefunctie.
 - **Doel:** prod vraagt bevestiging; `--ja` slaat over; niet-interactief zonder
   `--ja` breekt netjes af.
 - **Acceptatiecriteria:**
-  - [ ] `promote prod` zonder `--ja` in een tty vraagt "[j/N]" en stopt bij nee.
-  - [ ] `--ja` slaat de prompt over.
-  - [ ] Niet-interactief zonder `--ja` → `GebruikersFout` met heldere melding.
-  - [ ] `promote acc` vraagt niets.
+  - [x] `promote prod` zonder `--ja` in een tty vraagt "[j/N]" en stopt bij nee.
+  - [x] `--ja` slaat de prompt over.
+  - [x] Niet-interactief zonder `--ja` → `GebruikersFout` met heldere melding.
+  - [x] `promote acc` vraagt niets.
 - **Tests:** unit: `bevestig()` en de vlagverwerking met een gemockte tty/stdin ·
   contract: n.v.t. · e2e: n.v.t.
 - **Flag:** geen

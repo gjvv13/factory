@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline/promises';
 export function kop(tekst) {
     process.stdout.write(`\n\x1b[1m==> ${tekst}\x1b[0m\n`);
 }
@@ -78,5 +79,27 @@ export function pakketbeheerder() {
 export function draaiScript(script, cwd) {
     const { commando, basisArgumenten } = pakketbeheerder();
     run(commando, [...basisArgumenten, 'run', script], { cwd });
+}
+/** Of er een terminal aan stdin hangt, zodat we de gebruiker iets kunnen vragen. */
+export function isInteractief() {
+    return process.stdin.isTTY;
+}
+/**
+ * Stelt een ja/nee-vraag en geeft true bij 'j' of 'ja' (hoofdletterongevoelig);
+ * al het andere, ook enter, is nee. De streams zijn injecteerbaar zodat de vraag
+ * getest kan worden zonder een echte terminal.
+ */
+export async function bevestig(vraag, io = {}) {
+    const rl = createInterface({
+        input: io.input ?? process.stdin,
+        output: io.output ?? process.stdout,
+    });
+    try {
+        const antwoord = await rl.question(`${vraag} [j/N] `);
+        return /^ja?$/i.test(antwoord.trim());
+    }
+    finally {
+        rl.close();
+    }
 }
 //# sourceMappingURL=shell.js.map

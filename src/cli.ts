@@ -12,7 +12,7 @@ const HULP = `factory — pipeline van idee tot productie
 
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
-  factory promote <acc|prod> [tag]       release-tag uitrollen en de omgeving herstarten
+  factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory env <status|start|stop|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
@@ -32,7 +32,7 @@ async function main(argumenten: string[]): Promise<void> {
       release(positioneel[0]);
       return;
     case 'promote':
-      await promote(positioneel[0], positioneel[1]);
+      await promote(positioneel[0], positioneel[1], { ja: vlaggen.has('--ja') });
       return;
     case 'env':
       await env(positioneel[0], positioneel[1]);
