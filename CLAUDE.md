@@ -49,17 +49,19 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 | Stap          | Commando                             | Waar             |
 | ------------- | ------------------------------------ | ---------------- |
 | 1. Backlog    | `/idee <beschrijving>`               | hier             |
-| 2. Refinement | `/refine <app> <id>`                 | hier             |
-| 3. Bouwen     | `/bouw <id> <slice>`                 | in de applicatie |
+| 2. Refinement | `/refine <issue#>`                   | hier             |
+| 3. Bouwen     | `/bouw <issue#> <slice>`             | in de applicatie |
 | 4. Testen     | `pnpm verify`                        | in de applicatie |
 | 5. Releasen   | `pnpm release [patch\|minor\|major]` | in de applicatie |
 | 6. Promoveren | `pnpm promote acc\|prod [tag]`       | in de applicatie |
 
 `/status` geeft het overzicht over de backlog en alle applicaties.
 
-De **backlog staat centraal** in deze repo, met een map per applicatie plus een
-map `factory/` voor verbeteringen aan de pipeline zelf. Groomen doe je hier,
-bouwen doe je in de applicatie. Zo zit je altijd in de repo die je verandert.
+De **backlog is één set GitHub Issues** in `gjvv13/factory`, met een label
+`app:<naam>` per applicatie en `status:idea|refined|done` per fase — zie
+[`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in de applicatie.
+De oude bestand-backlog in `backlog/` is hiernaar gemigreerd en kan opgeruimd
+worden (samen met de `backlog`-verwijzing in elke `factory.json`).
 
 ## Een applicatie koppelen
 
