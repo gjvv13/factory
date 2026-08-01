@@ -39,6 +39,9 @@ describe('promote', () => {
       ok: true,
       text: () => Promise.resolve('{"status":"ok"}'),
     } as unknown as Response);
+    // Pre-swap health: standaard komt de nieuwe versie gezond op, zonder echt te spawnen.
+    vi.spyOn(shell, 'vrijePoort').mockResolvedValue(59999);
+    vi.spyOn(shell, 'isGezondNaStart').mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -109,6 +112,19 @@ describe('promote', () => {
     expect(aanroepen.some((a) => a.argumenten.includes('build'))).toBe(false);
     expect(aanroepen.some((a) => a.argumenten.includes('migrate'))).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('breekt af als de nieuwe versie vooraf niet gezond wordt, zonder de omgeving aan te raken', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'isGezondNaStart').mockResolvedValue(false);
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/niet gezond/i);
+    // De pre-swap health zit vóór de swap: pm2 wordt niet aangeraakt.
+    expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
+    // De definitieve (post-swap) health draait dan ook niet.
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

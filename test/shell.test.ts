@@ -1,6 +1,13 @@
 import { Readable, Writable } from 'node:stream';
-import { describe, expect, it } from 'vitest';
-import { bevestig } from '../src/shell.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  bevestig,
+  herstelStarter,
+  isGezondNaStart,
+  stelStarterIn,
+  vrijePoort,
+} from '../src/shell.js';
+import type { ProcesHandle } from '../src/shell.js';
 
 /** Een schrijfstroom die alles weggooit, zodat de vraag nergens heen hoeft. */
 function leegKanaal(): Writable {
@@ -34,5 +41,53 @@ describe('bevestig', () => {
 
   it('geeft false bij een leeg antwoord (enter)', async () => {
     expect(await vraag('\n')).toBe(false);
+  });
+});
+
+describe('vrijePoort', () => {
+  it('geeft een bruikbare poort op de loopback terug', async () => {
+    const poort = await vrijePoort();
+    expect(poort).toBeGreaterThan(0);
+    expect(poort).toBeLessThan(65536);
+  });
+});
+
+describe('isGezondNaStart', () => {
+  afterEach(() => {
+    herstelStarter();
+  });
+
+  /** Zet een nep-starter neer die niet echt spawnt en onthoudt of hij is gestopt. */
+  function nepStarter(): { gestopt: () => boolean } {
+    let gestopt = false;
+    const handle: ProcesHandle = {
+      kill: () => {
+        gestopt = true;
+      },
+    };
+    stelStarterIn(() => handle);
+    return { gestopt: () => gestopt };
+  }
+
+  const opstart = { commando: 'node', argumenten: ['dist/main.js'], cwd: '/tmp', env: {} };
+
+  it('geeft true zodra de health-URL gezond antwoordt en stopt het proces', async () => {
+    const { gestopt } = nepStarter();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true } as unknown as Response);
+
+    const gezond = await isGezondNaStart(opstart, 'http://127.0.0.1:1/health', 5);
+
+    expect(gezond).toBe(true);
+    expect(gestopt()).toBe(true);
+  });
+
+  it('geeft false als het niet gezond wordt binnen de tijd, en stopt het proces', async () => {
+    const { gestopt } = nepStarter();
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
+
+    const gezond = await isGezondNaStart(opstart, 'http://127.0.0.1:1/health', 1);
+
+    expect(gezond).toBe(false);
+    expect(gestopt()).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
-import { bevestig, GebruikersFout, git, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, } from '../shell.js';
+import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, } from '../shell.js';
 async function wachtOpGezond(url, seconden) {
     let laatsteFout = 'onbekend';
     for (let poging = 0; poging < seconden; poging += 1) {
@@ -93,6 +93,25 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
             env: omgevingsVariabelen(repoDir, werkmap, omgeving),
         });
     }
+    // Pre-swap: start de nieuwe versie kort op een vrije poort en controleer dat hij
+    // gezond opkomt vóór we het draaiende proces aanraken. Vangt opstart- en
+    // config-fouten (bijv. strengere validatie) af terwijl de omgeving nog draait.
+    kop('Controle vooraf op een tijdelijke poort');
+    const controlePoort = await vrijePoort();
+    const voorafGezond = await isGezondNaStart({
+        commando: 'node',
+        argumenten: ['dist/main.js'],
+        cwd: werkmap,
+        env: {
+            ...omgevingsVariabelen(repoDir, werkmap, omgeving),
+            PORT: String(controlePoort),
+            HOST: '127.0.0.1',
+        },
+    }, `http://127.0.0.1:${String(controlePoort)}/health`, 15);
+    if (!voorafGezond) {
+        throw new GebruikersFout(`De nieuwe versie werd niet gezond op een tijdelijke poort; ${omgeving} is niet aangeraakt.`);
+    }
+    ok('nieuwe versie komt gezond op');
     if (vraagtBevestiging && !(await bevestig(`Prod omzetten naar ${tag}?`))) {
         throw new GebruikersFout('Afgebroken: prod is niet omgezet.');
     }

@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:net';
 import { createInterface } from 'node:readline/promises';
 export function kop(tekst) {
     process.stdout.write(`\n\x1b[1m==> ${tekst}\x1b[0m\n`);
@@ -100,6 +101,71 @@ export async function bevestig(vraag, io = {}) {
     }
     finally {
         rl.close();
+    }
+}
+const spawnStarter = (commando, argumenten, options) => {
+    const kind = spawn(commando, argumenten, {
+        cwd: options.cwd,
+        env: options.env,
+        stdio: 'ignore',
+    });
+    return {
+        kill: () => {
+            kind.kill();
+        },
+    };
+};
+let huidigeStarter = spawnStarter;
+/** Vervangt de proces-starter. Alleen bedoeld voor tests. */
+export function stelStarterIn(starter) {
+    huidigeStarter = starter;
+}
+/** Herstelt de echte proces-starter na een test. */
+export function herstelStarter() {
+    huidigeStarter = spawnStarter;
+}
+/** Vraagt het besturingssysteem om een vrije poort op de loopback. */
+export function vrijePoort() {
+    return new Promise((resolve, reject) => {
+        const server = createServer();
+        server.on('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const adres = server.address();
+            const poort = typeof adres === 'object' && adres !== null ? adres.port : 0;
+            server.close(() => {
+                resolve(poort);
+            });
+        });
+    });
+}
+/**
+ * Start een commando, wacht tot de health-URL gezond antwoordt, en stopt het
+ * proces daarna weer. Geeft terug of het binnen de tijd gezond werd. Zo kan een
+ * nieuwe versie gecontroleerd worden vóórdat een draaiende omgeving wordt
+ * aangeraakt.
+ */
+export async function isGezondNaStart(opstart, healthUrl, seconden) {
+    const proces = huidigeStarter(opstart.commando, opstart.argumenten, {
+        cwd: opstart.cwd,
+        env: opstart.env,
+    });
+    try {
+        for (let poging = 0; poging < seconden; poging += 1) {
+            try {
+                const antwoord = await fetch(healthUrl);
+                if (antwoord.ok) {
+                    return true;
+                }
+            }
+            catch {
+                // Nog niet opgekomen; volgende poging.
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        return false;
+    }
+    finally {
+        proces.kill();
     }
 }
 //# sourceMappingURL=shell.js.map
