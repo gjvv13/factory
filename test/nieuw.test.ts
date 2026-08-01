@@ -71,6 +71,14 @@ describe('nieuw', () => {
     expect(opnemer.aanroepen).toContainEqual(
       expect.objectContaining({ commando: 'git', argumenten: expect.arrayContaining(['init']) }),
     );
+
+    // Het app-label wordt in de backlog-repo aangemaakt zodat de app op het board past.
+    expect(opnemer.aanroepen).toContainEqual(
+      expect.objectContaining({
+        commando: 'gh',
+        argumenten: expect.arrayContaining(['label', 'create', 'app:proefapp']),
+      }),
+    );
   });
 
   it('kiest het volgende poortblok als het eerste al bezet is', () => {

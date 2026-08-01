@@ -16,7 +16,7 @@ code-repo houdt.
 Elk issue draagt twee soorten labels:
 
 - **`app:<naam>`** — bij welke applicatie het hoort: `app:assistant`, `app:beheer`,
-  `app:factory`. (Nieuwe app → nieuw `app:`-label.)
+  `app:factory`. (Een nieuwe app krijgt zijn `app:`-label automatisch van `factory nieuw`.)
 - **`status:<fase>`** — waar het in de pijplijn zit: `status:idea` (ruw),
   `status:refined` (uitgewerkt, klaar om te bouwen), `status:done` (afgerond).
 

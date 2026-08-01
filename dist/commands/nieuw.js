@@ -2,11 +2,15 @@ import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'no
 import path from 'node:path';
 import { APP_CONFIG_BESTAND, leesAppConfig } from '../app-config.js';
 import { factoryPakketDir, skeletonDir } from '../paths.js';
-import { GebruikersFout, git, kop, ok, run } from '../shell.js';
+import { GebruikersFout, git, kop, ok, run, waarschuwing } from '../shell.js';
 import { syncNaarApp } from './sync.js';
 /** Eerste poort van een blok; prod = basis, dev = basis + 1, acc = basis + 2. */
 const EERSTE_BLOK = 3000;
 const BLOKGROOTTE = 10;
+/** De repo waar de backlog-issues (en dus de app-labels) leven. */
+const BACKLOG_REPO = 'gjvv13/factory';
+/** Standaardkleur voor een nieuw app:<naam>-label. */
+const APP_LABEL_KLEUR = 'bfd4f2';
 const TEKSTEXTENSIES = new Set([
     '.ts',
     '.js',
@@ -78,6 +82,32 @@ function factoryVersie() {
         : undefined;
     return typeof versie === 'string' ? versie : '1.0.0';
 }
+/**
+ * Maakt het `app:<naam>`-label aan in de backlog-repo, zodat een nieuw item
+ * meteen op het board past. Best-effort: een ontbrekende of uitgelogde gh mag
+ * het aanmaken van de applicatie niet breken.
+ */
+function maakBacklogLabel(naam) {
+    kop('Backlog-label aanmaken');
+    try {
+        run('gh', [
+            'label',
+            'create',
+            `app:${naam}`,
+            '-R',
+            BACKLOG_REPO,
+            '--color',
+            APP_LABEL_KLEUR,
+            '--description',
+            `Applicatie: ${naam}`,
+            '--force',
+        ], { capture: true });
+        ok(`Label app:${naam} aangemaakt in ${BACKLOG_REPO}`);
+    }
+    catch {
+        waarschuwing(`Kon label app:${naam} niet aanmaken in ${BACKLOG_REPO}; maak het handmatig aan (is gh ingelogd?).`);
+    }
+}
 /** Zet een nieuwe applicatie op basis van het skeleton, met een eigen poortblok. */
 export function nieuw(naam, opties = {}) {
     if (naam === undefined || !/^[a-z][a-z0-9-]*$/.test(naam)) {
@@ -116,6 +146,7 @@ export function nieuw(naam, opties = {}) {
     run('git', ['init', '-q', appDir]);
     git(['symbolic-ref', 'HEAD', 'refs/heads/main'], appDir);
     syncNaarApp(appDir);
+    maakBacklogLabel(naam);
     ok(`'${naam}' staat klaar op poorten ${String(poorten.dev)} (dev), ${String(poorten.acc)} (acc), ${String(poorten.prod)} (prod)`);
     process.stdout.write(['', 'Volgende stappen:', `  cd ../${naam}`, '  pnpm install', '  pnpm verify', ''].join('\n'));
 }
