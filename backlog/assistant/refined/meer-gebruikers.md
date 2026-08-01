@@ -203,11 +203,11 @@ legt request/response van uitgaande HTTP vast, en dit is dat niet).
 - **Doel:** commando's kunnen een minimumrol eisen; een gebruiker ziet en gebruikt
   alleen wat bij zijn rol past.
 - **Acceptatiecriteria:**
-  - [ ] `Command` kent een optionele `requiredRole`; de router toont en routeert
+  - [x] `Command` kent een optionele `requiredRole`; de router toont en routeert
         een rol-commando alleen voor een gebruiker met voldoende rol.
-  - [ ] Een member die een owner-commando stuurt krijgt `UNKNOWN_COMMAND_REPLY`;
+  - [x] Een member die een owner-commando stuurt krijgt `UNKNOWN_COMMAND_REPLY`;
         het commando staat ook niet in zijn `help`.
-  - [ ] Het voorbeeldcommando `gebruikers` (owner-only, achter flag `gebruikers`)
+  - [x] Het voorbeeldcommando `gebruikers` (owner-only, achter flag `gebruikers`)
         toont de huishoudleden met naam en rol (geen nummers).
 - **Tests:** unit: router-rolhandhaving (owner ziet/gebruikt; member geweigerd;
   `help` filtert op rol) · `gebruikers`-commando · contract: n.v.t. · e2e: via
