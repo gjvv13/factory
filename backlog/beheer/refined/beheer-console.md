@@ -175,11 +175,11 @@ vangt het contract dat.
 - **Doel:** je kunt de feature flags van elke geregistreerde app-omgeving zien en
   omzetten vanuit het console.
 - **Acceptatiecriteria:**
-  - [ ] `GET /api/apps/:app/:omgeving/flags` toont de flags van die omgeving.
-  - [ ] `PUT /api/apps/:app/:omgeving/flags/:key` zet een flag om via de admin-API
+  - [x] `GET /api/apps/:app/:omgeving/flags` toont de flags van die omgeving.
+  - [x] `PUT /api/apps/:app/:omgeving/flags/:key` zet een flag om via de admin-API
         van de dóél-app; de wijziging is daar meteen actief.
-  - [ ] De consolepagina toont per omgeving de flags met een schakelaar.
-  - [ ] Alles achter `beheer-flags`; staat die uit, dan bestaat de functie niet.
+  - [x] De consolepagina toont per omgeving de flags met een schakelaar.
+  - [x] Alles achter `beheer-flags`; staat die uit, dan bestaat de functie niet.
 - **Tests:** unit: `flag-beheer` (lezen/zetten) met een fake admin-client ·
   contract: Pact voor `GET /admin/flags` en `PUT /admin/flags/:key` · e2e: register
   naar de eigen `/admin/flags` (uit het skeleton), zet een eigen flag om via het
