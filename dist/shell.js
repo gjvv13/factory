@@ -18,11 +18,7 @@ export class GebruikersFout extends Error {
         this.name = 'GebruikersFout';
     }
 }
-/**
- * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet
- * interactief en mag nooit op invoer blijven wachten.
- */
-export function run(commando, argumenten, options = {}) {
+const spawnUitvoerder = (commando, argumenten, options) => {
     const resultaat = spawnSync(commando, argumenten, {
         cwd: options.cwd,
         env: options.env ?? process.env,
@@ -30,13 +26,32 @@ export function run(commando, argumenten, options = {}) {
         encoding: 'utf8',
     });
     if (resultaat.error !== undefined) {
-        throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${resultaat.error.message}`);
+        return { code: 1, stdout: '', startfout: resultaat.error.message };
     }
-    const code = resultaat.status ?? 1;
-    if (code !== 0 && options.toleranter !== true) {
-        throw new GebruikersFout(`'${commando} ${argumenten.join(' ')}' faalde met code ${String(code)}`);
+    return { code: resultaat.status ?? 1, stdout: resultaat.stdout };
+};
+let huidigeUitvoerder = spawnUitvoerder;
+/** Vervangt de proces-uitvoerder. Alleen bedoeld voor tests. */
+export function stelUitvoerderIn(uitvoerder) {
+    huidigeUitvoerder = uitvoerder;
+}
+/** Herstelt de echte proces-uitvoerder na een test. */
+export function herstelUitvoerder() {
+    huidigeUitvoerder = spawnUitvoerder;
+}
+/**
+ * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet
+ * interactief en mag nooit op invoer blijven wachten.
+ */
+export function run(commando, argumenten, options = {}) {
+    const uitkomst = huidigeUitvoerder(commando, argumenten, options);
+    if (uitkomst.startfout !== undefined) {
+        throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
     }
-    return { code, stdout: resultaat.stdout };
+    if (uitkomst.code !== 0 && options.toleranter !== true) {
+        throw new GebruikersFout(`'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`);
+    }
+    return { code: uitkomst.code, stdout: uitkomst.stdout };
 }
 export function git(argumenten, cwd, options = {}) {
     return run('git', argumenten, { ...options, cwd });

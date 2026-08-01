@@ -70,10 +70,10 @@ Geen.
 - **Doel:** `shell.ts` is af te vangen in tests; `nieuw` en `sync` (puur
   bestands-/tekstwerk) zijn gedekt.
 - **Acceptatiecriteria:**
-  - [ ] Commando's roepen externe processen via één injecteerbaar punt aan.
-  - [ ] `nieuw`: tokenvervanging, poortallocatie en botsing zijn getest (draai in
+  - [x] Commando's roepen externe processen via één injecteerbaar punt aan.
+  - [x] `nieuw`: tokenvervanging, poortallocatie en botsing zijn getest (draai in
         een tijdelijke map).
-  - [ ] `sync`: kopieert de vier soorten, meldt wijzigingen, faalt buiten een app.
+  - [x] `sync`: kopieert de vier soorten, meldt wijzigingen, faalt buiten een app.
 - **Tests:** unit: sync/nieuw met gemockte shell · integratie: `nieuw` in een
   temp-map · e2e: n.v.t.
 - **Flag:** geen

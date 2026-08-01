@@ -38,28 +38,65 @@ export interface RunResult {
   readonly stdout: string;
 }
 
+/** Ruwe uitkomst van een proces, vóór interpretatie door run(). */
+export interface ProcesUitkomst {
+  readonly code: number;
+  readonly stdout: string;
+  /** Gezet als het proces niet gestart kon worden (commando niet gevonden e.d.). */
+  readonly startfout?: string;
+}
+
 /**
- * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet
- * interactief en mag nooit op invoer blijven wachten.
+ * Voert één extern proces uit. Dit is het enige punt waar de CLI de buitenwereld
+ * raakt. Tests vervangen het via stelUitvoerderIn(), zodat een commando getest kan
+ * worden zonder echt git, pnpm of pm2 aan te roepen.
  */
-export function run(commando: string, argumenten: string[], options: RunOptions = {}): RunResult {
+export type Uitvoerder = (
+  commando: string,
+  argumenten: string[],
+  options: RunOptions,
+) => ProcesUitkomst;
+
+const spawnUitvoerder: Uitvoerder = (commando, argumenten, options) => {
   const resultaat = spawnSync(commando, argumenten, {
     cwd: options.cwd,
     env: options.env ?? process.env,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'inherit', 'inherit'],
     encoding: 'utf8',
   });
-
   if (resultaat.error !== undefined) {
-    throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${resultaat.error.message}`);
+    return { code: 1, stdout: '', startfout: resultaat.error.message };
   }
-  const code = resultaat.status ?? 1;
-  if (code !== 0 && options.toleranter !== true) {
+  return { code: resultaat.status ?? 1, stdout: resultaat.stdout };
+};
+
+let huidigeUitvoerder: Uitvoerder = spawnUitvoerder;
+
+/** Vervangt de proces-uitvoerder. Alleen bedoeld voor tests. */
+export function stelUitvoerderIn(uitvoerder: Uitvoerder): void {
+  huidigeUitvoerder = uitvoerder;
+}
+
+/** Herstelt de echte proces-uitvoerder na een test. */
+export function herstelUitvoerder(): void {
+  huidigeUitvoerder = spawnUitvoerder;
+}
+
+/**
+ * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet
+ * interactief en mag nooit op invoer blijven wachten.
+ */
+export function run(commando: string, argumenten: string[], options: RunOptions = {}): RunResult {
+  const uitkomst = huidigeUitvoerder(commando, argumenten, options);
+  if (uitkomst.startfout !== undefined) {
+    throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
+  }
+  if (uitkomst.code !== 0 && options.toleranter !== true) {
     throw new GebruikersFout(
-      `'${commando} ${argumenten.join(' ')}' faalde met code ${String(code)}`,
+      `'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`,
     );
   }
-  return { code, stdout: resultaat.stdout };
+  return { code: uitkomst.code, stdout: uitkomst.stdout };
 }
 
 export function git(argumenten: string[], cwd: string, options: RunOptions = {}): RunResult {
