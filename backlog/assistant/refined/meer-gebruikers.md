@@ -181,14 +181,14 @@ legt request/response van uitgaande HTTP vast, en dit is dat niet).
   een naam, begroet bij die naam, en geeft de identiteit door aan elk commando.
   Machtiging loopt voortaan via de gebruikerslijst.
 - **Acceptatiecriteria:**
-  - [ ] Er is een `users`-tabel; in prod gevuld vanuit `WHATSAPP_USERS`
+  - [x] Er is een `users`-tabel; in prod gevuld vanuit `WHATSAPP_USERS`
         (bootstrap bij opstart), in dev/test uit `users.json`.
-  - [ ] Een afzender met een gebruiker wordt afgehandeld; een afzender zonder
+  - [x] Een afzender met een gebruiker wordt afgehandeld; een afzender zonder
         gebruiker krijgt geen enkel antwoord (stil genegeerd, zoals nu).
-  - [ ] `hallo` groet bij de naam uit de gebruiker (`Hallo <naam>!`); op http/cli
+  - [x] `hallo` groet bij de naam uit de gebruiker (`Hallo <naam>!`); op http/cli
         valt het terug op de `contacts`-tabel.
-  - [ ] Elk commando kan de afzender-identiteit lezen via `context.user`.
-  - [ ] Met lege `WHATSAPP_USERS` gedraagt prod zich als vandaag (terugval op
+  - [x] Elk commando kan de afzender-identiteit lezen via `context.user`.
+  - [x] Met lege `WHATSAPP_USERS` gedraagt prod zich als vandaag (terugval op
         `WHATSAPP_ALLOWLIST`).
 - **Tests:** unit: `users` (find/normalisatie, bootstrap-upsert idempotent) ·
   `whatsapp-inbound` tegen fake repo (bekende gebruiker → afgehandeld + begroet;
