@@ -42,6 +42,8 @@ describe('promote', () => {
     // Pre-swap health: standaard komt de nieuwe versie gezond op, zonder echt te spawnen.
     vi.spyOn(shell, 'vrijePoort').mockResolvedValue(59999);
     vi.spyOn(shell, 'isGezondNaStart').mockResolvedValue(true);
+    // Post-swap health: standaard is de omgeving na de swap gezond.
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok"}');
   });
 
   afterEach(() => {
@@ -86,8 +88,8 @@ describe('promote', () => {
     expect(migrate).toBeLessThan(start);
     // Prod wordt niet geseed.
     expect(aanroepen.some((a) => a.argumenten.includes('seed'))).toBe(false);
-    // De gezondheidscheck draait op de prod-poort.
-    expect(fetchSpy).toHaveBeenCalledWith('http://127.0.0.1:3000/health');
+    // De post-swap gezondheidscheck draait op de prod-poort.
+    expect(shell.wachtOpGezond).toHaveBeenCalledWith('http://127.0.0.1:3000/health', 30);
   });
 
   it('seedt wel op acceptatie', async () => {
@@ -187,5 +189,54 @@ describe('promote', () => {
     await promote('acc', 'v1.0.0');
 
     expect(bevestigSpy).not.toHaveBeenCalled();
+  });
+
+  it('rolt terug naar de vorige tag als de nieuwe versie na de swap niet gezond wordt', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { stdout: 'v0.3.0' } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond')
+      .mockResolvedValueOnce(undefined) // nieuwe versie: niet gezond
+      .mockResolvedValueOnce('{"status":"ok"}'); // na rollback: weer gezond
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(
+      /draait weer op v0\.3\.0/i,
+    );
+    // De vorige tag is opnieuw uitgecheckt.
+    expect(aanroepen).toContainEqual(
+      expect.objectContaining({
+        commando: 'git',
+        argumenten: expect.arrayContaining(['checkout', 'v0.3.0']),
+      }),
+    );
+    // pm2 start is twee keer gebeurd: de nieuwe versie en daarna de teruggerolde.
+    expect(
+      aanroepen.filter((a) => a.commando === 'pm2' && a.argumenten[0] === 'start').length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('breekt af zonder rollback als er geen vorige versie is', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { code: 1 } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue(undefined);
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/geen vorige versie/i);
+  });
+
+  it('stopt hard als de rollback zelf niet gezond wordt', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { stdout: 'v0.3.0' } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    // Zowel de nieuwe versie als de teruggerolde blijven ongezond.
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue(undefined);
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/handmatig ingrijpen/i);
   });
 });

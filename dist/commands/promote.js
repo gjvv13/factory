@@ -1,23 +1,20 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
-import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, } from '../shell.js';
-async function wachtOpGezond(url, seconden) {
-    let laatsteFout = 'onbekend';
-    for (let poging = 0; poging < seconden; poging += 1) {
-        try {
-            const antwoord = await fetch(url);
-            if (antwoord.ok) {
-                return await antwoord.text();
-            }
-            laatsteFout = `status ${String(antwoord.status)}`;
-        }
-        catch (error) {
-            laatsteFout = error instanceof Error ? error.message : String(error);
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
+/**
+ * Verwijdert een bestaand pm2-proces en start het vers uit de ecosystem. Bewust
+ * geen `pm2 restart --update-env`: dat herleest de ecosystem-env niet maar neemt de
+ * env van deze CLI-aanroep over. Alleen een verse start leest de gewijzigde
+ * environments/<omgeving>.env(.secrets) opnieuw in.
+ */
+function herstartOmgeving(ecosystem, pm2Naam) {
+    const bestaat = run('pm2', ['describe', pm2Naam], { capture: true, toleranter: true }).code === 0;
+    if (bestaat) {
+        run('pm2', ['delete', pm2Naam], { capture: true });
     }
-    throw new GebruikersFout(`Werd niet gezond binnen ${String(seconden)}s: ${laatsteFout}`);
+    run('pm2', ['start', ecosystem, '--only', pm2Naam], { capture: true });
+    run('pm2', ['save'], { capture: true, toleranter: true });
 }
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
     // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
@@ -63,6 +60,10 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
         mkdirSync(werkmap, { recursive: true });
         run('git', ['init', '-q', werkmap]);
     }
+    // Onthoud welke tag er nu draait, vóór we de nieuwe uitchecken. Bij een falende
+    // deploy rollen we hierop terug. Undefined bij een eerste deploy: dan is er niets
+    // om op terug te vallen.
+    const vorigeTag = uitvoerVan('git', ['describe', '--tags'], werkmap);
     kop('Tag uitchecken');
     const remotes = (uitvoerVan('git', ['remote'], werkmap) ?? '').split('\n').filter(Boolean);
     git(['remote', remotes.includes('origin') ? 'set-url' : 'add', 'origin', repoDir], werkmap);
@@ -118,22 +119,32 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     kop('Omgeving herstarten');
     mkdirSync(path.join(repoDir, 'logs'), { recursive: true });
     const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
-    // Een bestaand proces verwijderen we eerst, en starten daarna vers uit de
-    // ecosystem. Bewust geen `pm2 restart --update-env`: dat herleest de
-    // ecosystem-env niet, maar neemt de env van deze CLI-aanroep over. Verandert
-    // een waarde tussen twee deploys (bijv. CHANNEL van 'whatsapp' naar
-    // 'whatsapp-cloud'), dan blijft het draaiende proces de oude waarde houden en
-    // faalt de gezondheidscheck bij strengere config-validatie. Alleen een verse
-    // start van ecosystem.config.cjs evalueert dat bestand opnieuw en leest zo de
-    // gewijzigde environments/<omgeving>.env(.secrets) in.
-    const bestaat = run('pm2', ['describe', pm2Naam], { capture: true, toleranter: true }).code === 0;
-    if (bestaat) {
-        run('pm2', ['delete', pm2Naam], { capture: true });
-    }
-    run('pm2', ['start', ecosystem, '--only', pm2Naam], { capture: true });
-    run('pm2', ['save'], { capture: true, toleranter: true });
+    herstartOmgeving(ecosystem, pm2Naam);
+    const healthUrl = `http://127.0.0.1:${String(poort)}/health`;
     kop(`Controleren of ${omgeving} leeft`);
-    const antwoord = await wachtOpGezond(`http://127.0.0.1:${String(poort)}/health`, 30);
-    ok(`${omgeving} is gezond: ${antwoord}`);
+    const gezondheid = await wachtOpGezond(healthUrl, 30);
+    if (gezondheid !== undefined) {
+        ok(`${omgeving} is gezond: ${gezondheid}`);
+        return;
+    }
+    // Post-swap health faalt: de nieuwe versie draait maar komt niet gezond op. Rol
+    // het proces terug naar de vorige tag. Migraties draaien we niet terug — het
+    // oude proces draait dus tegen een mogelijk nieuwer schema; dat melden we.
+    if (vorigeTag === undefined) {
+        throw new GebruikersFout(`${tag} werd niet gezond en er is geen vorige versie om naar terug te rollen; ${omgeving} draait mogelijk niet. Handmatig ingrijpen nodig.`);
+    }
+    waarschuwing(`Terugrollen naar ${vorigeTag}`);
+    git(['checkout', '-q', '--detach', vorigeTag], werkmap);
+    git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'], werkmap);
+    run(commando, [...basisArgumenten, 'install', '--frozen-lockfile', '--prod=false'], {
+        cwd: werkmap,
+        capture: true,
+    });
+    run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
+    herstartOmgeving(ecosystem, pm2Naam);
+    if ((await wachtOpGezond(healthUrl, 30)) === undefined) {
+        throw new GebruikersFout(`Terugrollen naar ${vorigeTag} lukte niet; ${omgeving} is niet gezond. Handmatig ingrijpen nodig.`);
+    }
+    throw new GebruikersFout(`Afgebroken: ${tag} werd niet gezond. ${omgeving} draait weer op ${vorigeTag}. Let op: migraties zijn niet teruggedraaid.`);
 }
 //# sourceMappingURL=promote.js.map

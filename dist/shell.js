@@ -168,4 +168,24 @@ export async function isGezondNaStart(opstart, healthUrl, seconden) {
         proces.kill();
     }
 }
+/**
+ * Poll een health-URL tot hij gezond antwoordt. Geeft de responstekst terug, of
+ * undefined als het binnen de tijd niet lukt. Throwt niet, zodat de aanroeper zelf
+ * kan beslissen wat een falende gezondheid betekent (bijv. terugrollen).
+ */
+export async function wachtOpGezond(url, seconden) {
+    for (let poging = 0; poging < seconden; poging += 1) {
+        try {
+            const antwoord = await fetch(url);
+            if (antwoord.ok) {
+                return await antwoord.text();
+            }
+        }
+        catch {
+            // Nog niet op; volgende poging.
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    return undefined;
+}
 //# sourceMappingURL=shell.js.map

@@ -6,6 +6,7 @@ import {
   isGezondNaStart,
   stelStarterIn,
   vrijePoort,
+  wachtOpGezond,
 } from '../src/shell.js';
 import type { ProcesHandle } from '../src/shell.js';
 
@@ -89,5 +90,22 @@ describe('isGezondNaStart', () => {
 
     expect(gezond).toBe(false);
     expect(gestopt()).toBe(true);
+  });
+});
+
+describe('wachtOpGezond', () => {
+  it('geeft de responstekst terug zodra de URL gezond antwoordt', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('gezond'),
+    } as unknown as Response);
+
+    expect(await wachtOpGezond('http://127.0.0.1:1/health', 5)).toBe('gezond');
+  });
+
+  it('geeft undefined als het niet gezond wordt binnen de tijd', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
+
+    expect(await wachtOpGezond('http://127.0.0.1:1/health', 1)).toBeUndefined();
   });
 });
