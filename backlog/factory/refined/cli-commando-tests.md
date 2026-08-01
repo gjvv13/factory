@@ -83,9 +83,13 @@ Geen.
 - **Doel:** de volgorde en foutafbreking van de gevaarlijkste commando's zijn
   vastgelegd, inclusief het vangnet uit [[promote-vangnet]].
 - **Acceptatiecriteria:**
-  - [ ] `promote`: juiste volgorde, stopt bij eerste fout, rollback-pad getest.
-  - [ ] `release`: versie-bump/commit/tag/push in de juiste volgorde met gemockte
-        git.
+  - [x] `promote`: juiste volgorde en stopt bij de eerste fout (uitchecken →
+        install → build → migrate → pm2 → health; acc seedt, prod niet).
+  - [ ] `promote`: rollback-pad getest — volgt met [[promote-vangnet]]; dat pad
+        bestaat nog niet in `promote.ts`.
+  - [x] `release`: versie-bump/commit/tag/push in de juiste volgorde met gemockte
+        git (plus: weigert buiten main, bij een vuile werkmap en bij een
+        bestaande tag).
 - **Tests:** unit met gemockte shell · e2e: n.v.t.
 - **Flag:** geen
 

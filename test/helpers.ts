@@ -13,20 +13,28 @@ export interface Opnemer {
 }
 
 /**
+ * Bepaalt de uitkomst van één opgenomen aanroep. Wat niet wordt teruggegeven valt
+ * terug op slagen (code 0, lege uitvoer). Zo kan een test bijvoorbeeld de branch
+ * `main` teruggeven of één specifiek commando laten falen.
+ */
+export type UitkomstBepaler = (aanroep: ProcesAanroep, index: number) => Partial<ProcesUitkomst>;
+
+/**
  * Een proces-uitvoerder die niets uitvoert maar elke aanroep onthoudt. Zo kan een
  * test controleren welke externe commando's (git, pnpm, pm2) een functie zou
  * draaien, zonder de buitenwereld aan te raken. Standaard slaagt elke aanroep;
- * geef een eigen uitkomst mee om een fout te simuleren.
+ * geef een bepaler mee om per aanroep een uitvoer of een fout te sturen.
  */
-export function maakUitvoerderOpnemer(uitkomst: Partial<ProcesUitkomst> = {}): Opnemer {
+export function maakUitvoerderOpnemer(bepaal?: UitkomstBepaler): Opnemer {
   const aanroepen: ProcesAanroep[] = [];
   const uitvoerder: Uitvoerder = (commando, argumenten, options: RunOptions) => {
-    aanroepen.push({
+    const aanroep: ProcesAanroep = {
       commando,
       argumenten,
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
-    });
-    return { code: 0, stdout: '', ...uitkomst };
+    };
+    aanroepen.push(aanroep);
+    return { code: 0, stdout: '', ...(bepaal?.(aanroep, aanroepen.length - 1) ?? {}) };
   };
   return { uitvoerder, aanroepen };
 }
