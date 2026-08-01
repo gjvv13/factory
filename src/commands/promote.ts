@@ -117,7 +117,13 @@ export async function promote(
   git(['remote', remotes.includes('origin') ? 'set-url' : 'add', 'origin', repoDir], werkmap);
   git(['fetch', '-q', '--tags', 'origin'], werkmap);
   git(['checkout', '-q', '--detach', tag], werkmap);
-  git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules'], werkmap);
+  // `*.secrets.env` wordt uitgesloten: dat bestand hoort niet in git (tokens,
+  // sleutels) en staat alleen in de werkmap. Zonder deze uitsluiting wist elke
+  // promote de secrets, waarna een verse start de omgeving niet meer kan opbouwen.
+  git(
+    ['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'],
+    werkmap,
+  );
   ok(uitvoerVan('git', ['describe', '--tags'], werkmap) ?? tag);
 
   const { commando, basisArgumenten } = pakketbeheerder();
