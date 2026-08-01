@@ -18,7 +18,6 @@ const appConfigSchema = z.object({
     prod: z.number().int().min(1).max(65535),
   }),
   envRoot: z.string().min(1),
-  backlog: z.string().min(1),
 });
 
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
@@ -28,8 +27,6 @@ export interface AppConfig extends AppConfigBestand {
   readonly appDir: string;
   /** Absoluut pad naar de map met de acc- en prod-clones. */
   readonly envRootPad: string;
-  /** Absoluut pad naar de backlogmap van deze applicatie. */
-  readonly backlogPad: string;
 }
 
 export const APP_CONFIG_BESTAND = 'factory.json';
@@ -68,7 +65,6 @@ export function leesAppConfig(appDir: string): AppConfig {
     ...config,
     appDir,
     envRootPad: absoluut(appDir, config.envRoot),
-    backlogPad: absoluut(appDir, config.backlog),
   };
 }
 

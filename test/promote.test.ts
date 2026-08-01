@@ -17,7 +17,6 @@ function maakApp(): string {
       naam: 'proefapp',
       poorten: { dev: 3001, acc: 3002, prod: 3000 },
       envRoot: path.join(werkruimte, 'envs'),
-      backlog: '../factory/backlog/proefapp',
     }),
   );
   return appDir;

@@ -5,7 +5,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 
 ```
 ~/Documents/Software/
-├── factory/      deze repo: proces, backlog, CLI, gedeelde configuratie
+├── factory/      deze repo: proces, CLI, gedeelde configuratie
 └── assistant/    eerste applicatie (WhatsApp-backend)
 ```
 
@@ -60,8 +60,6 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 De **backlog is één set GitHub Issues** in `gjvv13/factory`, met een label
 `app:<naam>` per applicatie en `status:idea|refined|done` per fase — zie
 [`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in de applicatie.
-De oude bestand-backlog in `backlog/` is hiernaar gemigreerd en kan opgeruimd
-worden (samen met de `backlog`-verwijzing in elke `factory.json`).
 
 ## Een applicatie koppelen
 
@@ -72,8 +70,7 @@ en de factory als devDependency op een tag.
 {
   "naam": "assistant",
   "poorten": { "dev": 3001, "acc": 3002, "prod": 3000 },
-  "envRoot": "~/AppEnvs/assistant",
-  "backlog": "../factory/backlog/assistant"
+  "envRoot": "~/AppEnvs/assistant"
 }
 ```
 

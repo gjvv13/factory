@@ -8,14 +8,15 @@ en de backlog staan daar; hier staat alleen de code van deze applicatie.
 | Stap               | Commando                             | Waar         |
 | ------------------ | ------------------------------------ | ------------ |
 | Idee vastleggen    | `/idee`                              | factory-repo |
-| Refinen tot slices | `/refine <id>`                       | factory-repo |
-| Slice bouwen       | `/bouw <id> <slice>`                 | hier         |
+| Refinen tot slices | `/refine <issue#>`                   | factory-repo |
+| Slice bouwen       | `/bouw <issue#> <slice>`             | hier         |
 | Poort draaien      | `pnpm verify`                        | hier         |
 | Releasen           | `pnpm release [patch\|minor\|major]` | hier         |
 | Uitrollen          | `pnpm promote acc\|prod [tag]`       | hier         |
 
-De backlog van deze applicatie staat in de factory-repo onder
-`backlog/{{APP_NAAM}}/`. Het pad staat in `factory.json`.
+De backlog van alle applicaties is één set GitHub Issues in `gjvv13/factory`, met
+het label `app:{{APP_NAAM}}` voor deze applicatie — zie
+[`WORKFLOW.md`](../factory/WORKFLOW.md).
 
 ## Omgevingen
 

@@ -22,7 +22,6 @@ const geldig = {
   naam: 'assistant',
   poorten: { dev: 3001, acc: 3002, prod: 3000 },
   envRoot: '~/AppEnvs/assistant',
-  backlog: '../factory/backlog/assistant',
 };
 
 describe('app-config', () => {
@@ -32,8 +31,6 @@ describe('app-config', () => {
 
     expect(config.naam).toBe('assistant');
     expect(config.envRootPad).toBe(path.join(os.homedir(), 'AppEnvs', 'assistant'));
-    expect(path.isAbsolute(config.backlogPad)).toBe(true);
-    expect(config.backlogPad.endsWith(path.join('factory', 'backlog', 'assistant'))).toBe(true);
   });
 
   it('weigert een naam met hoofdletters of spaties', () => {

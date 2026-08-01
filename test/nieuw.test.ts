@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,15 +7,14 @@ import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type Opnemer } from './helpers.js';
 
 /**
- * Bouwt een tijdelijke werkruimte met een nep-factory-repo: lege skeleton- en
- * backlog-mappen, genoeg om vereisFactoryRepo tevreden te stellen. De echte
+ * Bouwt een tijdelijke werkruimte met een nep-factory-repo: een lege
+ * skeleton-map, genoeg om vereisFactoryRepo tevreden te stellen. De echte
  * token-vervanging draait daarna tegen het echte skeleton uit het pakket.
  */
 function maakWerkruimte(): { factoryRepo: string; werkruimte: string } {
   const werkruimte = mkdtempSync(path.join(os.tmpdir(), 'factory-nieuw-'));
   const factoryRepo = path.join(werkruimte, 'factory');
   mkdirSync(path.join(factoryRepo, 'skeleton'), { recursive: true });
-  mkdirSync(path.join(factoryRepo, 'backlog'), { recursive: true });
   return { factoryRepo, werkruimte };
 }
 
@@ -28,7 +27,6 @@ function schrijfZusterApp(werkruimte: string, naam: string, prodPoort: number): 
       naam,
       poorten: { dev: prodPoort + 1, acc: prodPoort + 2, prod: prodPoort },
       envRoot: `~/AppEnvs/${naam}`,
-      backlog: `../factory/backlog/${naam}`,
     }),
   );
 }
@@ -68,11 +66,6 @@ describe('nieuw', () => {
     expect(pakket).toContain('"name": "proefapp"');
     expect(pakket).not.toContain('{{APP_NAAM}}');
     expect(pakket).not.toContain('{{FACTORY_DEP}}');
-
-    // De backlogmappen worden in de factory aangemaakt.
-    for (const map of ['ideas', 'refined', 'done']) {
-      expect(existsSync(path.join(factoryRepo, 'backlog', 'proefapp', map, '.gitkeep'))).toBe(true);
-    }
 
     // De repo wordt geïnitialiseerd via de nep-uitvoerder; er is geen echte git nodig.
     expect(opnemer.aanroepen).toContainEqual(

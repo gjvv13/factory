@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { APP_CONFIG_BESTAND, leesAppConfig } from '../app-config.js';
 import { factoryPakketDir, skeletonDir } from '../paths.js';
@@ -24,9 +24,9 @@ const TEKSTEXTENSIES = new Set([
 
 function vereisFactoryRepo(): string {
   const repoDir = process.cwd();
-  if (!existsSync(path.join(repoDir, 'skeleton')) || !existsSync(path.join(repoDir, 'backlog'))) {
+  if (!existsSync(path.join(repoDir, 'skeleton'))) {
     throw new GebruikersFout(
-      'factory nieuw hoort in de factory-repo te draaien: daar staan het skeleton en de backlog.',
+      'factory nieuw hoort in de factory-repo te draaien: daar staat het skeleton.',
     );
   }
   return repoDir;
@@ -136,19 +136,11 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
         naam,
         poorten: { dev: poorten.dev, acc: poorten.acc, prod: poorten.prod },
         envRoot: `~/AppEnvs/${naam}`,
-        backlog: `../factory/backlog/${naam}`,
       },
       null,
       2,
     )}\n`,
   );
-
-  kop('Backlogmappen aanmaken in de factory');
-  for (const map of ['ideas', 'refined', 'done']) {
-    const pad = path.join(factoryRepo, 'backlog', naam, map);
-    mkdirSync(pad, { recursive: true });
-    writeFileSync(path.join(pad, '.gitkeep'), '');
-  }
 
   kop('Repository initialiseren');
   run('git', ['init', '-q', appDir]);

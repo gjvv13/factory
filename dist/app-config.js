@@ -15,7 +15,6 @@ const appConfigSchema = z.object({
         prod: z.number().int().min(1).max(65535),
     }),
     envRoot: z.string().min(1),
-    backlog: z.string().min(1),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {
@@ -50,7 +49,6 @@ export function leesAppConfig(appDir) {
         ...config,
         appDir,
         envRootPad: absoluut(appDir, config.envRoot),
-        backlogPad: absoluut(appDir, config.backlog),
     };
 }
 /**
