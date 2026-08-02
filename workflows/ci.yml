@@ -30,6 +30,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # De app-kopieën van de gesyncte factory-bestanden (slash commands, skills,
+      # git hook, CI-workflow) moeten gelijk zijn aan de gebruikte factory-versie.
+      # Faalt dit, draai dan lokaal `factory sync` en commit het verschil.
+      - name: Sync-drift controleren
+        run: pnpm exec factory sync --check
+
       # Dezelfde poort als lokaal: factory verify draait deze stappen in deze volgorde.
       - run: pnpm exec factory verify
 
