@@ -11,7 +11,7 @@ import process from 'node:process';
  * @param {object} [opties]
  * @param {string[]} [opties.include] Welke bron gemeten wordt (default de app-bron).
  */
-export function coverageOptie(naam, { include = ['app/src/**'] } = {}) {
+export function coverageOptie(naam, { include = ['app/src/**/*.ts'] } = {}) {
   if (!process.env.FACTORY_COVERAGE) {
     return {};
   }

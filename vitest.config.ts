@@ -7,6 +7,6 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     environment: 'node',
     restoreMocks: true,
-    ...coverageOptie('unit', { include: ['src/**'] }),
+    ...coverageOptie('unit', { include: ['src/**/*.ts'] }),
   },
 });
