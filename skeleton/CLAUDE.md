@@ -15,8 +15,8 @@ en de backlog staan daar; hier staat alleen de code van deze applicatie.
 | Uitrollen          | `pnpm promote acc\|prod [tag]`       | hier         |
 
 De backlog van alle applicaties is één set GitHub Issues in `gjvv13/factory`, met
-het label `app:{{APP_NAAM}}` voor deze applicatie — zie
-[`WORKFLOW.md`](../factory/WORKFLOW.md).
+het `App`-veld op `{{APP_NAAM}}` voor deze applicatie (een kolom op het board, geen
+label) — zie [`WORKFLOW.md`](../factory/WORKFLOW.md).
 
 ## Omgevingen
 
