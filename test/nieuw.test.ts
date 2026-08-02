@@ -67,6 +67,12 @@ describe('nieuw', () => {
     expect(pakket).not.toContain('{{APP_NAAM}}');
     expect(pakket).not.toContain('{{FACTORY_DEP}}');
 
+    // De README uit het skeleton wordt meegekopieerd en zijn placeholders ingevuld.
+    const readme = readFileSync(path.join(appDir, 'README.md'), 'utf8');
+    expect(readme).toContain('# proefapp');
+    expect(readme).not.toContain('{{APP_NAAM}}');
+    expect(readme).not.toContain('{{PORT_DEV}}');
+
     // De repo wordt geïnitialiseerd via de nep-uitvoerder; er is geen echte git nodig.
     expect(opnemer.aanroepen).toContainEqual(
       expect.objectContaining({ commando: 'git', argumenten: expect.arrayContaining(['init']) }),
