@@ -127,5 +127,6 @@ is dode code met extra stappen.
 ## Commits
 
 Kleine commits met een zin die zegt wat er verandert en waarom, in de
-gebiedende wijs: `voeg ping-commando toe achter feature flag`. Elke commit
-gaat door de pre-commit poort; `--no-verify` alleen als je weet waarom.
+gebiedende wijs: `voeg een time-out toe aan de mail-client omdat een trage host
+anders alles blokkeert`. Elke commit gaat door de pre-commit poort; `--no-verify`
+alleen als je weet waarom.
