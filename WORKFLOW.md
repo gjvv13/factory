@@ -31,6 +31,13 @@ board. Je **dagelijkse werk-lijst** is een gefilterde issue-weergave zónder epi
 - Alleen bugs: `is:issue is:open label:type:bug`
 - Alleen de epics: `is:issue is:open label:type:epic`
 
+### Eerst zoeken, dan aanmaken
+
+Voordat je een nieuw issue aanmaakt, controleer je of het al bestaat — open óf
+gesloten: `gh issue list -R gjvv13/factory --search "<kernwoorden>" --state all`.
+Bestaat het al, vul dan dat issue aan in plaats van een duplicaat te maken. Zo
+blijft de backlog één-op-één met het werk.
+
 ### Beslissingen horen in de epic, niet op de lijst
 
 Een nog-te-nemen beslissing wordt **geen los issue**. Zet 'm als een
