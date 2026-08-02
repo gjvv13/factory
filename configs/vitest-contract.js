@@ -1,3 +1,5 @@
+import { coverageOptie } from './coverage.js';
+
 /**
  * Vitest-preset voor contract tests. Pact start per test een mockserver op,
  * dus bestanden draaien niet parallel: dat zou poortconflicten geven.
@@ -15,6 +17,7 @@ export function contractTestConfig(overrides = {}) {
       environment: 'node',
       fileParallelism: false,
       testTimeout: 30_000,
+      ...coverageOptie('contract'),
       ...overrides,
     },
   };

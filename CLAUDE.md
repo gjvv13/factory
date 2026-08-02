@@ -72,9 +72,16 @@ en de factory als devDependency op een tag.
 {
   "naam": "assistant",
   "poorten": { "dev": 3001, "acc": 3002, "prod": 3000 },
-  "envRoot": "~/AppEnvs/assistant"
+  "envRoot": "~/AppEnvs/assistant",
+  "dekkingsMinimum": 80
 }
 ```
+
+`dekkingsMinimum` (0–100) is optioneel: staat het er, dan meet de volledige
+`factory verify` de testdekking en faalt de poort als het totaal eronder zakt.
+Ontbreekt het, dan wordt dekking wel gemeten en getoond maar niet afgedwongen —
+zo staat een app niet meteen rood. Coverage draait alleen bij de volledige poort,
+niet in `--snel`/`--pre-commit`.
 
 ```json
 "devDependencies": { "factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }

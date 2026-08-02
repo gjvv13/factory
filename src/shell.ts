@@ -131,9 +131,12 @@ export function pakketbeheerder(): { commando: string; basisArgumenten: string[]
     : { commando: 'corepack', basisArgumenten: ['pnpm'] };
 }
 
-export function draaiScript(script: string, cwd: string): void {
+export function draaiScript(script: string, cwd: string, env?: NodeJS.ProcessEnv): void {
   const { commando, basisArgumenten } = pakketbeheerder();
-  run(commando, [...basisArgumenten, 'run', script], { cwd });
+  run(commando, [...basisArgumenten, 'run', script], {
+    cwd,
+    ...(env === undefined ? {} : { env }),
+  });
 }
 
 /** Of er een terminal aan stdin hangt, zodat we de gebruiker iets kunnen vragen. */

@@ -1,3 +1,5 @@
+import { coverageOptie } from './coverage.js';
+
 /**
  * Vitest-preset voor unit tests: snel, in-memory, geen netwerk.
  *
@@ -13,6 +15,7 @@ export function unitTestConfig(overrides = {}) {
       include: ['app/test/unit/**/*.test.ts'],
       environment: 'node',
       restoreMocks: true,
+      ...coverageOptie('unit'),
       ...overrides,
     },
   };
