@@ -77,9 +77,12 @@ export function pakketbeheerder() {
         ? { commando: 'pnpm', basisArgumenten: [] }
         : { commando: 'corepack', basisArgumenten: ['pnpm'] };
 }
-export function draaiScript(script, cwd) {
+export function draaiScript(script, cwd, env) {
     const { commando, basisArgumenten } = pakketbeheerder();
-    run(commando, [...basisArgumenten, 'run', script], { cwd });
+    run(commando, [...basisArgumenten, 'run', script], {
+        cwd,
+        ...(env === undefined ? {} : { env }),
+    });
 }
 /** Of er een terminal aan stdin hangt, zodat we de gebruiker iets kunnen vragen. */
 export function isInteractief() {
