@@ -4,8 +4,8 @@ description: >-
   De coding guidelines van de software factory. Gebruik deze skill bij het
   schrijven, nakijken of herstructureren van code in een factory-applicatie (een
   TypeScript-backend met een app/src-map, Fastify, Drizzle en Vitest). Trigger
-  op het toevoegen of wijzigen van een commando, kanaal, route, migratie, client
-  of test, op het bouwen van een slice, en op vragen als "waar hoort dit thuis",
+  op het toevoegen of wijzigen van een route, service, commando, kanaal, migratie,
+  client of test, op het bouwen van een slice, en op vragen als "waar hoort dit thuis",
   "hoe test ik dit" of "klopt dit met onze afspraken". Pas de skill ook toe
   zonder dat erom gevraagd wordt zodra er code voor de applicatie ontstaat.
 ---
@@ -32,11 +32,15 @@ channels/  clients/  http/      ← buitenkant: praten met de wereld
              db/                 ← opslag
 ```
 
-- **`core/`** bevat de beslissingen: welk commando doet wat, wat wordt geantwoord.
+- **`core/`** bevat de domeinlogica en de beslissingen: wat er met de invoer gebeurt
+  en wat er teruggaat. Bij een app die berichten verwerkt is dat "welk commando doet
+  wat"; bij een console zijn het services (een overzicht opbouwen, een flag omzetten).
   Deze laag doet geen netwerk-I/O, kent geen Fastify en leest geen omgevingsvariabelen.
-- **`channels/`** zijn dunne adapters. Ze zetten iets van buiten (HTTP, terminal,
-  later WhatsApp) om in een `InboundMessage` en geven dat aan `MessageService`.
-  Zit er logica in een adapter, dan hoort die in `core/`.
+- **`channels/`** is de laag voor apps die inkomende berichten verwerken: dunne
+  adapters die iets van buiten (HTTP, terminal, later WhatsApp) omzetten in een
+  `InboundMessage` en aan de `MessageService` in `core/` geven. Een app zonder
+  inkomende berichten (een console, een tool) heeft deze laag niet. Zit er logica in
+  een adapter, dan hoort die in `core/`.
 - **`http/`** valideert invoer, roept `core/` aan en maakt een respons. Niets meer.
 - **`db/`** bevat schema, migraties en het inlezen van testdata. Queries staan in
   repositories in `core/`, zodat de rest van de code geen SQL of Drizzle ziet.
@@ -115,12 +119,14 @@ naam herhaalt. Wel commentaar bij een keuze die een lezer zou willen aanvechten.
 ## Feature flags
 
 Nieuwe functionaliteit die je nog niet vertrouwt gaat achter een flag, standaard
-uit in productie. Een commando met `flagKey` bestaat niet als de flag uit staat.
+uit in productie. Wat een `flagKey` draagt — een commando, een route — bestaat niet
+zolang de flag uit staat: het valt ook uit `help` of de API weg.
 Ruim een flag op zodra de functie definitief is — een flag die niemand meer omzet
 is dode code met extra stappen.
 
 ## Commits
 
 Kleine commits met een zin die zegt wat er verandert en waarom, in de
-gebiedende wijs: `voeg ping-commando toe achter feature flag`. Elke commit
-gaat door de pre-commit poort; `--no-verify` alleen als je weet waarom.
+gebiedende wijs: `voeg een time-out toe aan de mail-client omdat een trage host
+anders alles blokkeert`. Elke commit gaat door de pre-commit poort; `--no-verify`
+alleen als je weet waarom.
