@@ -14,8 +14,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      # Majors op node24: oudere majors worden door de runner geforceerd
-      # omgezet en geven een deprecatiewaarschuwing.
+      # De action-majors (checkout, setup-node, upload-artifact) staan bewust op
+      # de nieuwste major: die draaien op de node24-runtime van de runner, terwijl
+      # oudere majors geforceerd worden omgezet en een deprecatiewaarschuwing geven.
+      # Dit gaat om de runtime van de acties zelf — de project-node is 22 (zie
+      # .nvmrc, hieronder via node-version-file gelezen).
       - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6

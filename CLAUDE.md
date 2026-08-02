@@ -114,4 +114,17 @@ release. Door de gebouwde CLI mee te leveren is het pakket direct bruikbaar.
 De pre-commit hook bouwt en stageert `dist/`, zodat de build nooit uit de pas
 loopt met de bron.
 
-TypeScript staat op 6.0.x: typescript-eslint ondersteunt TS 7 nog niet.
+### Bewuste versie-pins
+
+De toolchain loopt bewust op de nieuwste majors — scherp, maar dicht bij de
+ecosysteem-standaard. Elke pin heeft een expliciete opheffingsvoorwaarde, zodat
+een latere bump een duidelijke trigger heeft in plaats van giswerk:
+
+- **TypeScript op 6.0.x** (`typescript: 6.0.3`, peer `>=6 <7`) — typescript-eslint
+  ondersteunt TS 7 nog niet. Optrekken zodra typescript-eslint TS 7 steunt.
+- **ESLint 10**, **@types/node 26**, **vitest 4** — telkens de nieuwste major.
+  Optrekken naar de volgende major mag zodra de bijbehorende plugins en presets
+  (typescript-eslint, de vitest-configs) die major steunen.
+- **Node 22** (`.nvmrc`, `engines.node >=22`) — de project-node. Los daarvan
+  draaien de GitHub Action-majors op de node24-runtime van de runner; die staan
+  daarom op de nieuwste major (zie de comment in `workflows/ci.yml`).
