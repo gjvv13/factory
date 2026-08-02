@@ -15,6 +15,9 @@ const appConfigSchema = z.object({
         prod: z.number().int().min(1).max(65535),
     }),
     envRoot: z.string().min(1),
+    // Paden (relatief aan de app-map) die `factory sync --check` bewust niet als
+    // drift meldt. Zonder deze sleutel in het schema zou Zod hem stil strippen.
+    syncNegeer: z.array(z.string()).optional(),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {

@@ -15,7 +15,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory env <status|start|stop|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
-  factory sync                           slash commands en git hook gelijkzetten
+  factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
 `;
 async function main(argumenten) {
     const [commando, ...rest] = argumenten;
@@ -41,7 +41,7 @@ async function main(argumenten) {
             nieuw(positioneel[0], { link: vlaggen.has('--link') });
             return;
         case 'sync':
-            sync();
+            sync({ check: vlaggen.has('--check') });
             return;
         case undefined:
         case 'help':
