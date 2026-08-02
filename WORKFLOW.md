@@ -11,12 +11,17 @@ binnen). Grooming hoort centraal; bouwen hoort in de applicatie. Door de backlog
 in de factory-issues te zetten, blijft er één overzicht terwijl elke app zijn eigen
 code-repo houdt.
 
+## Applicatie: het App-veld
+
+Bij welke applicatie een issue hoort, staat in het **`App`-veld** van het board —
+een aparte kolom, geen label. De opties zijn `assistant`, `beheer`, `factory`; een
+nieuwe app krijgt zijn optie automatisch van `factory nieuw`. Zo blijft de
+Labels-kolom schoon en groepeer je het board in één oogopslag per applicatie.
+
 ## Labels
 
-Elk issue draagt drie soorten labels:
+Naast het App-veld draagt elk issue twee soorten labels:
 
-- **`app:<naam>`** — bij welke applicatie het hoort: `app:assistant`, `app:beheer`,
-  `app:factory`. (Een nieuwe app krijgt zijn `app:`-label automatisch van `factory nieuw`.)
 - **`status:<fase>`** — waar het in de pijplijn zit: `status:idea` (ruw),
   `status:refined` (uitgewerkt, klaar om te bouwen), `status:done` (afgerond).
 - **`type:<soort>`** — wat voor werk het is: `type:epic` (grote, meerdere-slices
@@ -47,21 +52,21 @@ blijft de issue-lijst schoon en staat de keuze bij het onderwerp.
 ## Board
 
 Eén board bundelt alles: **"Backlog — alle applicaties"**
-(https://github.com/users/gjvv13/projects/2). Filter op `app:` voor één applicatie,
-`status:` voor een fase, of `type:` voor epics vs. klein werk.
+(https://github.com/users/gjvv13/projects/2). Groepeer of filter op het `App`-veld
+voor één applicatie, `status:` voor een fase, of `type:` voor epics vs. klein werk.
 
 ## De pijplijn
 
-| Stap          | Commando                 | Waar             | Wat er met het issue gebeurt                                      |
-| ------------- | ------------------------ | ---------------- | ----------------------------------------------------------------- |
-| 1. Idee       | `/idee <beschrijving>`   | factory          | Nieuw issue, labels `app:<naam>` + `type:<soort>` + `status:idea` |
-| 2. Refinement | `/refine <issue#>`       | factory          | Body uitgewerkt; label `status:idea` → `status:refined`           |
-| 3. Bouwen     | `/bouw <issue#> <slice>` | in de applicatie | Slice bouwen; acceptatiecriteria afvinken in het issue            |
-| 4. Testen     | `pnpm verify`            | in de applicatie | —                                                                 |
-| 5. Releasen   | `pnpm release`           | in de applicatie | —                                                                 |
-| 6. Promoveren | `pnpm promote`           | in de applicatie | Bij afronding: `status:refined` → `status:done`, issue sluiten    |
+| Stap          | Commando                 | Waar             | Wat er met het issue gebeurt                                          |
+| ------------- | ------------------------ | ---------------- | --------------------------------------------------------------------- |
+| 1. Idee       | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + labels `type:<soort>` + `status:idea` |
+| 2. Refinement | `/refine <issue#>`       | factory          | Body uitgewerkt; label `status:idea` → `status:refined`               |
+| 3. Bouwen     | `/bouw <issue#> <slice>` | in de applicatie | Slice bouwen; acceptatiecriteria afvinken in het issue                |
+| 4. Testen     | `pnpm verify`            | in de applicatie | —                                                                     |
+| 5. Releasen   | `pnpm release`           | in de applicatie | —                                                                     |
+| 6. Promoveren | `pnpm promote`           | in de applicatie | Bij afronding: `status:refined` → `status:done`, issue sluiten        |
 
-`/status` geeft het overzicht via `gh issue list` (per `app:` en `status:`).
+`/status` geeft het overzicht via het board (per `App`-veld en `status:`).
 
 ## Grooming vs. bouwen
 

@@ -8,8 +8,10 @@ De backlog is één set GitHub Issues in `gjvv13/factory`; zie `WORKFLOW.md`.
 
 Doe dit zo:
 
-1. Lees het issue: `gh issue view <nummer> -R gjvv13/factory`. Bepaal uit het
-   `app:`-label welke applicatie het betreft. Lees `templates/refinement.md`. De
+1. Lees het issue: `gh issue view <nummer> -R gjvv13/factory`. Welke applicatie het
+   betreft staat in het `App`-veld op het board, niet in een label; vind het item met
+   `gh project item-list 2 --owner gjvv13 --format json --limit 100` en lees daar het
+   `App`-veld van dit issuenummer. Lees `templates/refinement.md`. De
    coding-guidelines-skill (`skills/coding-guidelines/SKILL.md`) beschrijft de
    lagen waarin je de technische architectuur straks indeelt; houd die aan.
 2. Verken de code van de applicatie voordat je iets ontwerpt. Die staat naast deze

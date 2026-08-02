@@ -72,11 +72,12 @@ describe('nieuw', () => {
       expect.objectContaining({ commando: 'git', argumenten: expect.arrayContaining(['init']) }),
     );
 
-    // Het app-label wordt in de backlog-repo aangemaakt zodat de app op het board past.
+    // De applicatie wordt als optie op het App-veld van het board gezet (via de
+    // GraphQL-API), zodat een nieuw issue meteen in de juiste kolom valt.
     expect(opnemer.aanroepen).toContainEqual(
       expect.objectContaining({
         commando: 'gh',
-        argumenten: expect.arrayContaining(['label', 'create', 'app:proefapp']),
+        argumenten: expect.arrayContaining(['api', 'graphql']),
       }),
     );
   });

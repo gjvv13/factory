@@ -9,10 +9,13 @@ import { syncNaarApp } from './sync.js';
 const EERSTE_BLOK = 3000;
 const BLOKGROOTTE = 10;
 
-/** De repo waar de backlog-issues (en dus de app-labels) leven. */
-const BACKLOG_REPO = 'gjvv13/factory';
-/** Standaardkleur voor een nieuw app:<naam>-label. */
-const APP_LABEL_KLEUR = 'bfd4f2';
+/** De gebruiker en het nummer van het backlog-board waar de App-kolom op leeft. */
+const BACKLOG_OWNER = 'gjvv13';
+const BACKLOG_PROJECT = 2;
+/** De naam van het single-select-veld dat per issue de applicatie aangeeft. */
+const APP_VELD = 'App';
+/** Kleuren voor nieuwe App-opties; doorlopen op volgorde van aanmaken. */
+const APP_OPTIE_KLEUREN = ['BLUE', 'GREEN', 'PURPLE', 'ORANGE', 'PINK', 'YELLOW', 'RED'];
 
 const TEKSTEXTENSIES = new Set([
   '.ts',
@@ -91,34 +94,59 @@ function factoryVersie(): string {
   return typeof versie === 'string' ? versie : '1.0.0';
 }
 
+interface AppOptie {
+  readonly id: string;
+  readonly name: string;
+  readonly color: string;
+}
+
 /**
- * Maakt het `app:<naam>`-label aan in de backlog-repo, zodat een nieuw item
- * meteen op het board past. Best-effort: een ontbrekende of uitgelogde gh mag
- * het aanmaken van de applicatie niet breken.
+ * Voegt de applicatie toe als optie aan het App-veld van het backlog-board, zodat
+ * een nieuw item meteen in de juiste kolom valt. De Projects-API kent alleen een
+ * "vervang alle opties"-mutatie, dus we lezen eerst de bestaande opties en sturen
+ * ze mét hun id terug — zo blijven de toewijzingen van bestaande issues intact.
+ * Best-effort: een ontbrekende of uitgelogde gh mag het aanmaken niet breken.
  */
-function maakBacklogLabel(naam: string): void {
-  kop('Backlog-label aanmaken');
+function voegAppOptieToe(naam: string): void {
+  kop('App-optie op het board aanmaken');
   try {
-    run(
-      'gh',
-      [
-        'label',
-        'create',
-        `app:${naam}`,
-        '-R',
-        BACKLOG_REPO,
-        '--color',
-        APP_LABEL_KLEUR,
-        '--description',
-        `Applicatie: ${naam}`,
-        '--force',
-      ],
-      { capture: true },
-    );
-    ok(`Label app:${naam} aangemaakt in ${BACKLOG_REPO}`);
+    const leesQuery =
+      `query { user(login: "${BACKLOG_OWNER}") ` +
+      `{ projectV2(number: ${String(BACKLOG_PROJECT)}) ` +
+      `{ field(name: "${APP_VELD}") { ... on ProjectV2SingleSelectField ` +
+      `{ id options { id name color } } } } } }`;
+    const gelezen = run('gh', ['api', 'graphql', '-f', `query=${leesQuery}`], {
+      capture: true,
+    }).stdout;
+    const veld = (
+      JSON.parse(gelezen) as {
+        data?: { user?: { projectV2?: { field?: { id?: string; options?: AppOptie[] } } } };
+      }
+    ).data?.user?.projectV2?.field;
+    if (veld?.id === undefined || veld.options === undefined) {
+      throw new GebruikersFout(`App-veld niet gevonden op project ${String(BACKLOG_PROJECT)}.`);
+    }
+    if (veld.options.some((optie) => optie.name === naam)) {
+      ok(`App-optie '${naam}' bestond al op het board`);
+      return;
+    }
+    const kleur = APP_OPTIE_KLEUREN[veld.options.length % APP_OPTIE_KLEUREN.length] ?? 'GRAY';
+    const opties = [
+      ...veld.options.map(
+        (optie) => `{id:"${optie.id}",name:"${optie.name}",color:${optie.color},description:""}`,
+      ),
+      `{name:"${naam}",color:${kleur},description:""}`,
+    ].join(',');
+    const mutatie =
+      `mutation { updateProjectV2Field(input:{fieldId:"${veld.id}",` +
+      `singleSelectOptions:[${opties}]}) ` +
+      `{ projectV2Field { ... on ProjectV2SingleSelectField { id } } } }`;
+    run('gh', ['api', 'graphql', '-f', `query=${mutatie}`], { capture: true });
+    ok(`App-optie '${naam}' toegevoegd aan het board`);
   } catch {
     waarschuwing(
-      `Kon label app:${naam} niet aanmaken in ${BACKLOG_REPO}; maak het handmatig aan (is gh ingelogd?).`,
+      `Kon de App-optie '${naam}' niet aanmaken op project ${String(BACKLOG_PROJECT)}; ` +
+        `voeg 'm handmatig toe aan het App-veld (is gh ingelogd met project-scope?).`,
     );
   }
 }
@@ -184,7 +212,7 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
   git(['symbolic-ref', 'HEAD', 'refs/heads/main'], appDir);
   syncNaarApp(appDir);
 
-  maakBacklogLabel(naam);
+  voegAppOptieToe(naam);
 
   ok(
     `'${naam}' staat klaar op poorten ${String(poorten.dev)} (dev), ${String(poorten.acc)} (acc), ${String(poorten.prod)} (prod)`,

@@ -58,9 +58,10 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 
 `/status` geeft het overzicht over de backlog en alle applicaties.
 
-De **backlog is één set GitHub Issues** in `gjvv13/factory`, met een label
-`app:<naam>` per applicatie en `status:idea|refined|done` per fase — zie
-[`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in de applicatie.
+De **backlog is één set GitHub Issues** in `gjvv13/factory`, met het `App`-veld
+(een kolom op het board) per applicatie en het label `status:idea|refined|done`
+per fase — zie [`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in
+de applicatie.
 
 ## Een applicatie koppelen
 
