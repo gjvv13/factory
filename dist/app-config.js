@@ -15,6 +15,8 @@ const appConfigSchema = z.object({
         prod: z.number().int().min(1).max(65535),
     }),
     envRoot: z.string().min(1),
+    /** Optionele ondergrens (0–100) waaronder `factory verify` faalt op te weinig dekking. */
+    dekkingsMinimum: z.number().min(0).max(100).optional(),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {

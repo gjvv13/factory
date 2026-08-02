@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { verify } from '../src/commands/verify.js';
+import { beoordeelDekking, verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
@@ -44,5 +44,23 @@ describe('verify — coverage', () => {
     const aanroepen = vangAanroepen();
     verify({ preCommit: true });
     expect(aanroepen.find((a) => a.script === 'test:unit')?.coverage).toBe(false);
+  });
+});
+
+describe('beoordeelDekking', () => {
+  it('geeft geen oordeel zonder ingestelde drempel', () => {
+    expect(beoordeelDekking([72], undefined)).toBeUndefined();
+  });
+
+  it('geeft geen oordeel zonder metingen', () => {
+    expect(beoordeelDekking([], 80)).toBeUndefined();
+  });
+
+  it('faalt als het totaal onder de drempel zakt', () => {
+    expect(beoordeelDekking([71, 60], 80)).toEqual({ totaal: 71, faalt: true });
+  });
+
+  it('slaagt als het totaal de drempel haalt', () => {
+    expect(beoordeelDekking([72, 90], 80)).toEqual({ totaal: 90, faalt: false });
   });
 });

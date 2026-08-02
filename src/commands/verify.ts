@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { draaiScript, kop, ok, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -75,6 +76,32 @@ function leesDekking(repoDir: string, naam: string): number | undefined {
   return typeof pct === 'number' ? pct : undefined;
 }
 
+/** De ingestelde dekkingsdrempel uit factory.json, of undefined als die er niet is. */
+function leesDekkingsMinimum(repoDir: string): number | undefined {
+  const appDir = zoekAppDir(repoDir);
+  if (appDir === undefined) {
+    return undefined;
+  }
+  return leesAppConfig(appDir).dekkingsMinimum;
+}
+
+/**
+ * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is de hoogste
+ * dekking over de gemeten testsoorten: een veilige ondergrens voor de werkelijke
+ * gecombineerde dekking (die alleen met een echte merge exact te bepalen is —
+ * bewust uitgesteld). Zonder drempel of zonder metingen geven we geen oordeel.
+ */
+export function beoordeelDekking(
+  dekkingen: readonly number[],
+  minimum: number | undefined,
+): { totaal: number; faalt: boolean } | undefined {
+  if (minimum === undefined || dekkingen.length === 0) {
+    return undefined;
+  }
+  const totaal = Math.max(...dekkingen);
+  return { totaal, faalt: totaal < minimum };
+}
+
 export interface VerifyOpties {
   /** Slaat de e2e-tests over: handig tijdens ontwikkelen. */
   readonly snel?: boolean;
@@ -97,6 +124,7 @@ export function verify(opties: VerifyOpties = {}): void {
 
   let gedraaid = 0;
   const overgeslagen: string[] = [];
+  const dekkingen: number[] = [];
 
   for (const stap of STAPPEN) {
     if (!aanwezig.has(stap.script)) {
@@ -121,6 +149,7 @@ export function verify(opties: VerifyOpties = {}): void {
     if (dekkingNaam !== undefined) {
       const pct = leesDekking(repoDir, dekkingNaam);
       if (pct !== undefined) {
+        dekkingen.push(pct);
         process.stdout.write(`  dekking: ${String(pct)}%\n`);
       }
     }
@@ -131,6 +160,20 @@ export function verify(opties: VerifyOpties = {}): void {
     throw new GebruikersFout(
       'Geen enkele poortstap gevonden in package.json (verwacht bijvoorbeeld lint of test:unit).',
     );
+  }
+
+  if (metCoverage) {
+    const minimum = leesDekkingsMinimum(repoDir);
+    const oordeel = beoordeelDekking(dekkingen, minimum);
+    if (oordeel !== undefined && minimum !== undefined) {
+      kop('Dekkingsdrempel');
+      if (oordeel.faalt) {
+        throw new GebruikersFout(
+          `Te weinig dekking: totaal ${String(oordeel.totaal)}% < drempel ${String(minimum)}% (dekkingsMinimum in factory.json).`,
+        );
+      }
+      process.stdout.write(`  totaal ${String(oordeel.totaal)}% ≥ ${String(minimum)}%\n`);
+    }
   }
 
   for (const titel of overgeslagen) {
