@@ -61,14 +61,30 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
   vertrouwen we types; op de grens vertrouwen we niets.
 - Exporteer types met `export type` en importeer ze met `import type`.
 
-## Namen
+## Naamgeving
 
 - Bestanden en mappen: `kebab-case.ts`.
-- Nederlandse termen in dingen die de gebruiker ziet (antwoorden, scripts,
-  foutmeldingen, documentatie). Engelse termen in code-identifiers, omdat die
-  bij de taal en de bibliotheken passen. Consistent binnen een bestand.
+- Nederlands voor alles wat de gebruiker ziet — antwoorden, scripts,
+  foutmeldingen, documentatie — en voor comments en JSDoc.
+- **Identifiers: Engels als standaard, Nederlands voor zuivere domeinbegrippen.**
+  De code praat grotendeels de taal van het vak en de bibliotheken; Nederlands
+  reserveren we voor begrippen uit het probleemdomein zelf.
+  - **Engels** — structuur, techniek, patronen en alles wat een externe API,
+    bibliotheek, HTTP of SQL dicteert: `MessageService`, `CommandRouter`,
+    `HttpClient`, `Repository`, `InboundMessage`, `FeatureFlag`.
+  - **Nederlands** — begrippen uit het gezinsdomein die geen gangbare technische
+    tegenhanger hebben: `boodschap`, `boodschappenlijst`, `herinnering`,
+    `gezinslid`, `kandidaat`.
+  - **Letterlijk overgenomen extern → Engels**, ook als het domein-achtig klinkt:
+    veldnamen uit een externe API, HTTP-headers, kolomnamen die een bibliotheek
+    bepaalt.
+  - **Twijfel je of iets domein of techniek is, sluit dan aan bij de omringende
+    code.** In de praktijk is dat Engels; blijf in elk geval consistent binnen
+    één bestand.
 - Functies die iets teruggeven heten naar wat ze teruggeven (`readVersion`),
   functies die iets doen naar de handeling (`recordInbound`).
+- Bestaande namen ruim je mee op wanneer je een bestand tóch aanraakt — geen
+  aparte hernoemronde.
 
 ## Fouten
 
