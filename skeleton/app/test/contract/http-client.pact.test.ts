@@ -4,12 +4,17 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createHttpClient, HttpRequestError } from '../../src/clients/http-client.js';
 
 /**
- * Contract tests voor uitgaande verbindingen.
+ * VOORBEELD — vervang dit door het contract van je eigen uitgaande koppeling.
  *
- * Er is nog geen echte externe koppeling, dus dit contract legt het gedrag van
- * onze HTTP-client vast tegen een Pact-mockprovider: welke requests we sturen en
- * hoe we op antwoorden reageren. Zodra er een echte externe dienst bijkomt,
- * wordt `provider` hieronder die dienst en verandert er niets aan de opzet.
+ * Zolang je app nog geen echte externe dienst aanroept, legt dit contract het
+ * gedrag van de HTTP-client vast tegen een Pact-mockprovider: welke requests we
+ * sturen en hoe we op antwoorden reageren. Het draait mee in `pnpm verify` zodat
+ * het patroon meteen werkt.
+ *
+ * Zodra er een echte koppeling bijkomt: zet `consumer` op je app en `provider` op
+ * de echte dienst, schrijf de interacties van díe koppeling, en verwijder deze
+ * placeholder — anders kleurt een contract op een niet-bestaande provider groen
+ * en geeft het vals vertrouwen. De opzet eronder verandert niet.
  */
 const provider = new PactV3({
   consumer: 'factory-backend',
