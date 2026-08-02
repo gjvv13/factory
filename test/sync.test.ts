@@ -1,14 +1,30 @@
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { sync, syncNaarApp } from '../src/commands/sync.js';
+import { sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
 
 function maakAppMap(): string {
   return mkdtempSync(path.join(os.tmpdir(), 'factory-sync-'));
 }
+
+/** Schrijft een geldige factory.json zodat sync() de app en zijn config vindt. */
+function schrijfAppConfig(appDir: string, extra: Record<string, unknown> = {}): void {
+  writeFileSync(
+    path.join(appDir, 'factory.json'),
+    JSON.stringify({
+      naam: 'proefapp',
+      poorten: { dev: 3001, acc: 3002, prod: 3000 },
+      envRoot: '~/AppEnvs/proefapp',
+      ...extra,
+    }),
+  );
+}
+
+const BOUW = path.join('.claude', 'commands', 'bouw.md');
+const OVERBODIG = path.join('.claude', 'commands', 'oud-commando.md');
 
 describe('sync', () => {
   let aanroepen: ProcesAanroep[];
@@ -62,6 +78,86 @@ describe('sync', () => {
       expect(() => {
         sync();
       }).toThrow(/applicatiemap/);
+    } finally {
+      process.chdir(oorspronkelijk);
+    }
+  });
+
+  it('ziet direct na een sync alles als gelijk, zonder iets te schrijven', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+
+    const verschillen = syncVerschillen(app);
+
+    expect(verschillen.every((verschil) => verschil.status === 'gelijk')).toBe(true);
+    expect(verschillen.some((verschil) => verschil.pad === BOUW)).toBe(true);
+  });
+
+  it('signaleert een afwijkend en een overbodig bestand', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    // Een gesynct bestand dat lokaal is gewijzigd, en een dat de factory niet kent.
+    writeFileSync(path.join(app, BOUW), 'lokaal gewijzigd');
+    writeFileSync(path.join(app, OVERBODIG), 'weg hiermee');
+
+    const perPad = new Map(syncVerschillen(app).map((verschil) => [verschil.pad, verschil.status]));
+
+    expect(perPad.get(BOUW)).toBe('afwijkend');
+    expect(perPad.get(OVERBODIG)).toBe('overbodig');
+  });
+
+  it('respecteert de negeerlijst bij het bepalen van verschillen', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    writeFileSync(path.join(app, OVERBODIG), 'bewuste afwijking');
+
+    const verschillen = syncVerschillen(app, [OVERBODIG]);
+
+    expect(verschillen.some((verschil) => verschil.pad === OVERBODIG)).toBe(false);
+  });
+
+  it('sync --check eindigt zonder fout als alles gelijk is', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    schrijfAppConfig(app);
+    const oorspronkelijk = process.cwd();
+    process.chdir(app);
+    try {
+      expect(() => {
+        sync({ check: true });
+      }).not.toThrow();
+    } finally {
+      process.chdir(oorspronkelijk);
+    }
+  });
+
+  it('sync --check faalt met een niet-nul exit bij drift', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    schrijfAppConfig(app);
+    writeFileSync(path.join(app, BOUW), 'lokaal gewijzigd');
+    const oorspronkelijk = process.cwd();
+    process.chdir(app);
+    try {
+      expect(() => {
+        sync({ check: true });
+      }).toThrow(/verschil/);
+    } finally {
+      process.chdir(oorspronkelijk);
+    }
+  });
+
+  it('sync --check negeert paden uit syncNegeer in factory.json', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    writeFileSync(path.join(app, BOUW), 'lokaal gewijzigd');
+    schrijfAppConfig(app, { syncNegeer: [BOUW] });
+    const oorspronkelijk = process.cwd();
+    process.chdir(app);
+    try {
+      expect(() => {
+        sync({ check: true });
+      }).not.toThrow();
     } finally {
       process.chdir(oorspronkelijk);
     }
