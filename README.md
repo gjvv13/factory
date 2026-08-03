@@ -43,8 +43,8 @@ Groomen (idee, refine) doe je hier; bouwen doe je in de applicatie-repo.
 ## Eén backlog voor alles
 
 De backlog van álle applicaties is **één set GitHub Issues** in `gjvv13/factory`,
-met per issue een `app:<naam>`-label (welke app), een `status:`-label (fase) en
-een `type:`-label (epic, task of bug). De grote brokken (epics) volg je op het
+met per issue het `App`-veld (een kolom op het board, geen label; welke app), een
+`status:`-label (fase) en een `type:`-label (epic, task of bug). De grote brokken (epics) volg je op het
 board, je dagelijkse lijst zijn de bugs en klusjes. De volledige werkwijze staat
 in [`WORKFLOW.md`](WORKFLOW.md).
 
@@ -76,8 +76,9 @@ factory nieuw <naam>
 ```
 
 Dit maakt een nieuwe repo uit het skelet met een werkende backend, drie
-omgevingen en een compleet testfundament, kent een vrij poortblok toe en maakt
-het `app:<naam>`-label op de backlog aan. Daarna: koppelen via `factory.json` en
+omgevingen en een compleet testfundament, kent een vrij poortblok toe en voegt de
+app toe als optie in het `App`-veld op de backlog (een kolom op het board, geen
+label). Daarna: koppelen via `factory.json` en
 de factory als devDependency op een tag, precies zoals `assistant` en `beheer`
 dat doen.
 
