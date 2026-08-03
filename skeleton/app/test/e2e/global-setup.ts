@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
+import { e2eCoverageEnv, schrijfE2eDekking } from 'factory/e2e-coverage';
 import type { TestProject } from 'vitest/node';
 
 declare module 'vitest' {
@@ -52,10 +53,29 @@ async function waitForHealth(baseUrl: string, child: ChildProcess): Promise<void
 }
 
 /**
+ * Wacht tot het serverproces echt gestopt is, zodat Node de v8-coverage heeft
+ * weggeschreven voordat we die inlezen. Met een ruime bovengrens: een hangende
+ * server mag de teardown niet blokkeren.
+ */
+async function wachtOpExit(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 10_000);
+    timer.unref();
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/**
  * Start één echte applicatie-instantie op een vrije poort met een lege database.
  * De e2e-tests praten er via HTTP mee, precies zoals een kanaal dat zou doen.
  */
-export default async function setup(project: TestProject): Promise<() => void> {
+export default async function setup(project: TestProject): Promise<() => Promise<void>> {
   const rootDir = process.cwd();
   const workDir = path.join(rootDir, '.tmp', 'e2e');
   rmSync(workDir, { recursive: true, force: true });
@@ -69,6 +89,10 @@ export default async function setup(project: TestProject): Promise<() => void> {
     cwd: rootDir,
     env: {
       ...process.env,
+      // Bij een coverage-poort meet Node de server-executie via NODE_V8_COVERAGE;
+      // na afsluiten zet de teardown die om naar coverage/e2e/. Ná process.env zodat
+      // onze meetmap wint van een eventueel geërfde waarde.
+      ...e2eCoverageEnv(rootDir),
       FACTORY_ENV: 'test',
       HOST: '127.0.0.1',
       PORT: String(port),
@@ -88,7 +112,9 @@ export default async function setup(project: TestProject): Promise<() => void> {
   project.provide('baseUrl', baseUrl);
   project.provide('databaseFile', databaseFile);
 
-  return () => {
+  return async () => {
     child.kill('SIGTERM');
+    await wachtOpExit(child);
+    await schrijfE2eDekking(rootDir);
   };
 }

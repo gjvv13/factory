@@ -80,12 +80,12 @@ describe('de vitest-presets richten de meting op hun eigen laag', () => {
     expect(coverageVan(contractTestConfig())?.include).toEqual(['app/src/clients/**/*.ts']);
   });
 
-  it('e2e meet de hele app-bron', () => {
-    expect(coverageVan(e2eTestConfig())?.include).toEqual(['app/src/**/*.ts']);
+  it('e2e zet geen vitest-coverage: die komt server-afgeleid via c8 (factory/e2e-coverage)', () => {
+    expect(coverageVan(e2eTestConfig())).toBeUndefined();
   });
 
-  it('elke preset erft de standaard-exclude', () => {
-    for (const config of [unitTestConfig(), contractTestConfig(), e2eTestConfig()]) {
+  it('de metende presets erven de standaard-exclude', () => {
+    for (const config of [unitTestConfig(), contractTestConfig()]) {
       expect(coverageVan(config)?.exclude).toEqual(STANDAARD_EXCLUDE);
     }
   });
