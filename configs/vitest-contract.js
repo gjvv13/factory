@@ -17,7 +17,8 @@ export function contractTestConfig(overrides = {}) {
       environment: 'node',
       fileParallelism: false,
       testTimeout: 30_000,
-      ...coverageOptie('contract'),
+      // Contract dekt de clients: de adapters die met externe diensten praten.
+      ...coverageOptie('contract', { include: ['app/src/clients/**/*.ts'] }),
       ...overrides,
     },
   };
