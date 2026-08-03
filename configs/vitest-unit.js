@@ -15,7 +15,11 @@ export function unitTestConfig(overrides = {}) {
       include: ['app/test/unit/**/*.test.ts'],
       environment: 'node',
       restoreMocks: true,
-      ...coverageOptie('unit'),
+      // Unit dekt de domeinlogica: core, feature flags en de config. Adapters
+      // (clients/http/channels) en bootstrap horen bij contract/e2e, niet hier.
+      ...coverageOptie('unit', {
+        include: ['app/src/core/**/*.ts', 'app/src/flags/**/*.ts', 'app/src/config.ts'],
+      }),
       ...overrides,
     },
   };

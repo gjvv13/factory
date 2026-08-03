@@ -3,7 +3,10 @@
   "compilerOptions": {
     "noEmit": false,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    // Declaraties meebouwen: apps importeren factory/e2e-coverage uit dist en hebben
+    // daar types voor nodig (de rest van dist is de CLI, die alleen wordt uitgevoerd).
+    "declaration": true
   },
   "include": ["src/**/*.ts"]
 }
