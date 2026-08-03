@@ -71,6 +71,12 @@ pnpm verify          # alles, in de volgorde van de poort
 pnpm verify --snel   # zonder e2e, tijdens ontwikkelen
 ```
 
+De volledige poort meet ook testdekking (unit + contract + e2e, samengevoegd tot
+één cijfer). Staat er een `dekkingsMinimum` in `factory.json`, dan faalt `pnpm
+verify` — en dus `pnpm release` — als de gecombineerde dekking eronder zakt.
+`--snel` en de pre-commit hook slaan coverage over, dus lokaal ontwikkelen blijft
+snel; de poort bijt bij release en in CI.
+
 Testdata staat in `app/test/fixtures/` en wordt vóór elke test opnieuw ingelezen.
 Een test mag nooit afhangen van wat een vorige test achterliet. Handmatig
 verversen: `pnpm seed` (geblokkeerd op prod).

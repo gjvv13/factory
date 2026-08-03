@@ -17,7 +17,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | Commando                                   | Wat het doet                                                                  |
 | ------------------------------------------ | ----------------------------------------------------------------------------- |
 | `factory verify [--snel]`                  | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build              |
-| `factory release [patch\|minor\|major]`    | Verify, versie verhogen, committen, taggen, pushen                            |
+| `factory release [patch\|minor\|major]`    | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen      |
 | `factory promote <acc\|prod> [tag]`        | Tag uitrollen, migreren, herstarten, gezondheid controleren                   |
 | `factory env <status\|start\|stop\|logs>`  | Omgevingen bedienen via pm2                                                   |
 | `factory flag <omgeving> [naam] [on\|off]` | Feature flags omzetten zonder deploy                                          |
@@ -77,11 +77,28 @@ en de factory als devDependency op een tag.
 }
 ```
 
-`dekkingsMinimum` (0–100) is optioneel: staat het er, dan meet de volledige
-`factory verify` de testdekking en faalt de poort als het totaal eronder zakt.
-Ontbreekt het, dan wordt dekking wel gemeten en getoond maar niet afgedwongen —
-zo staat een app niet meteen rood. Coverage draait alleen bij de volledige poort,
-niet in `--snel`/`--pre-commit`.
+`dekkingsMinimum` (0–100) is optioneel en maakt van testdekking een poort: staat
+het er, dan faalt de volledige `factory verify` — en daarmee `factory release` —
+als het **gecombineerde** dekkingscijfer eronder zakt. Ontbreekt de sleutel, dan
+wordt dekking wel gemeten en getoond maar niet afgedwongen, zodat een app niet
+meteen rood staat. Coverage draait alleen bij de volledige poort, niet in
+`--snel`/`--pre-commit`.
+
+Het cijfer is de **merge** van de testsoorten, niet de hoogste losse soort. Elke
+soort meet zijn eigen laag — unit de domeinlogica (`core/`, `flags/`, `config.ts`),
+contract de `clients/`, e2e de hele app — en `verify` voegt de per-soort-maps
+samen tot één rapport in `coverage/combined/` waar de drempel tegen getoetst wordt.
+De per-soort-rapporten (`coverage/<soort>/`) blijven bestaan, zodat de beheer-tool
+ze los kan tonen. De e2e-server draait als apart proces en wordt via
+`NODE_V8_COVERAGE` gemeten; de e2e-`global-setup` zet die ruwe coverage met c8 om
+naar `coverage/e2e/` (`factory/e2e-coverage`).
+
+Zo staat de poort bij het **release-moment**: `factory release` draait de volledige
+verify, dus er ontstaat geen tag onder de drempel, en `factory promote prod` rolt
+alleen bestaande tags uit — code onder de drempel bereikt de productie dus niet.
+De drempel geldt tegen het gemergede cijfer, dus zet 'm iets onder de huidige
+gecombineerde dekking: hoog genoeg om regressies te vangen, met lucht voor een
+legitieme dip.
 
 ```json
 "devDependencies": { "factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }
