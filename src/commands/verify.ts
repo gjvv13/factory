@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
+import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
 import { draaiScript, kop, ok, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -86,19 +87,23 @@ function leesDekkingsMinimum(repoDir: string): number | undefined {
 }
 
 /**
- * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is de hoogste
- * dekking over de gemeten testsoorten: een veilige ondergrens voor de werkelijke
- * gecombineerde dekking (die alleen met een echte merge exact te bepalen is —
- * bewust uitgesteld). Zonder drempel of zonder metingen geven we geen oordeel.
+ * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
+ * gemergede cijfer (de echte gecombineerde dekking); ontbreekt dat, dan valt hij terug op
+ * de hoogste losse soort — een veilige ondergrens. Zonder drempel, of zonder enige meting,
+ * geven we geen oordeel.
  */
 export function beoordeelDekking(
   dekkingen: readonly number[],
   minimum: number | undefined,
+  gecombineerd?: number,
 ): { totaal: number; faalt: boolean } | undefined {
-  if (minimum === undefined || dekkingen.length === 0) {
+  if (minimum === undefined) {
     return undefined;
   }
-  const totaal = Math.max(...dekkingen);
+  const totaal = gecombineerd ?? (dekkingen.length > 0 ? Math.max(...dekkingen) : undefined);
+  if (totaal === undefined) {
+    return undefined;
+  }
   return { totaal, faalt: totaal < minimum };
 }
 
@@ -163,8 +168,11 @@ export function verify(opties: VerifyOpties = {}): void {
   }
 
   if (metCoverage) {
+    // Voeg de per-soort istanbul-maps samen tot één gecombineerd cijfer; dat is de
+    // eerlijke basis voor de drempel (i.p.v. de hoogste losse soort).
+    const gecombineerd = schrijfGecombineerdeDekking(repoDir);
     const minimum = leesDekkingsMinimum(repoDir);
-    const oordeel = beoordeelDekking(dekkingen, minimum);
+    const oordeel = beoordeelDekking(dekkingen, minimum, gecombineerd);
     if (oordeel !== undefined && minimum !== undefined) {
       kop('Dekkingsdrempel');
       if (oordeel.faalt) {
@@ -173,6 +181,9 @@ export function verify(opties: VerifyOpties = {}): void {
         );
       }
       process.stdout.write(`  totaal ${String(oordeel.totaal)}% ≥ ${String(minimum)}%\n`);
+    } else if (gecombineerd !== undefined) {
+      kop('Gecombineerde dekking');
+      process.stdout.write(`  totaal ${String(gecombineerd)}%\n`);
     }
   }
 

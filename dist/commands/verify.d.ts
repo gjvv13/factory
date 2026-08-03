@@ -1,10 +1,10 @@
 /**
- * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is de hoogste
- * dekking over de gemeten testsoorten: een veilige ondergrens voor de werkelijke
- * gecombineerde dekking (die alleen met een echte merge exact te bepalen is —
- * bewust uitgesteld). Zonder drempel of zonder metingen geven we geen oordeel.
+ * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
+ * gemergede cijfer (de echte gecombineerde dekking); ontbreekt dat, dan valt hij terug op
+ * de hoogste losse soort — een veilige ondergrens. Zonder drempel, of zonder enige meting,
+ * geven we geen oordeel.
  */
-export declare function beoordeelDekking(dekkingen: readonly number[], minimum: number | undefined): {
+export declare function beoordeelDekking(dekkingen: readonly number[], minimum: number | undefined, gecombineerd?: number): {
     totaal: number;
     faalt: boolean;
 } | undefined;

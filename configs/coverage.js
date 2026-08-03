@@ -31,7 +31,9 @@ export function coverageOptie(naam, { include = ['app/src/**/*.ts'], exclude = [
     coverage: {
       enabled: true,
       provider: 'v8',
-      reporter: ['json-summary', 'text-summary'],
+      // json-summary voor het per-soort-cijfer, text-summary voor de terminal, en json
+      // (coverage-final.json) als istanbul-map die de merge samenvoegt.
+      reporter: ['json-summary', 'text-summary', 'json'],
       reportsDirectory: `coverage/${naam}`,
       include,
       exclude: [...STANDAARD_EXCLUDE, ...exclude],

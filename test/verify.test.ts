@@ -63,4 +63,17 @@ describe('beoordeelDekking', () => {
   it('slaagt als het totaal de drempel haalt', () => {
     expect(beoordeelDekking([72, 90], 80)).toEqual({ totaal: 90, faalt: false });
   });
+
+  it('gebruikt het gemergede totaal als dat er is, in plaats van de hoogste soort', () => {
+    // De losse soorten halen 95%, maar de echte gecombineerde dekking is 60%: die telt.
+    expect(beoordeelDekking([95, 40], 80, 60)).toEqual({ totaal: 60, faalt: true });
+  });
+
+  it('valt terug op de hoogste soort als er geen merge-cijfer is', () => {
+    expect(beoordeelDekking([72, 90], 80, undefined)).toEqual({ totaal: 90, faalt: false });
+  });
+
+  it('geeft geen oordeel zonder metingen én zonder merge-cijfer', () => {
+    expect(beoordeelDekking([], 80, undefined)).toBeUndefined();
+  });
 });
