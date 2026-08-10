@@ -1,5 +1,13 @@
 name: ci
 
+# Bewust een hand-onderhouden variant van de app-template `workflows/ci.yml`.
+# De factory synct zichzelf niet (geen factory.json) en gebruikt `/bouw` niet,
+# dus de sync-drift-stap uit de template hoort hier niet thuis; deze CI draait
+# alleen de eigen poort via `node dist/cli.js verify`. Wijzig je de template
+# (nieuwe stap of action-bump), werk dan dit bestand met de hand bij — niets
+# bewaakt de divergentie. Bump-plekken: actions/checkout, actions/setup-node,
+# pnpm/action-setup (majors op node24, zie het commentaar hieronder).
+
 on:
   push:
     branches: [main]
