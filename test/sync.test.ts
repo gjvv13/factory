@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
@@ -30,6 +30,11 @@ describe('sync', () => {
   let aanroepen: ProcesAanroep[];
 
   beforeEach(() => {
+    // controleer() en sync() schrijven hun voortgang naar stdout; in `factory
+    // verify` lekt die drift-listing (bewust opgewekt door de tests hieronder)
+    // tussen de vitest-output en lijkt op een echte fout. Onderdrukken zoals de
+    // andere commandotests dat doen.
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     const opnemer = maakUitvoerderOpnemer();
     aanroepen = opnemer.aanroepen;
     stelUitvoerderIn(opnemer.uitvoerder);
