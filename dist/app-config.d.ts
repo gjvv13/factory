@@ -11,6 +11,12 @@ declare const appConfigSchema: z.ZodObject<{
     envRoot: z.ZodString;
     syncNegeer: z.ZodOptional<z.ZodArray<z.ZodString>>;
     dekkingsMinimum: z.ZodOptional<z.ZodNumber>;
+    dekkingsRatchet: z.ZodDefault<z.ZodEnum<{
+        uit: "uit";
+        waarschuw: "waarschuw";
+        blokkeer: "blokkeer";
+    }>>;
+    dekkingsTolerantie: z.ZodDefault<z.ZodNumber>;
 }, z.core.$strip>;
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
 export interface AppConfig extends AppConfigBestand {

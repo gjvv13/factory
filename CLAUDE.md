@@ -73,7 +73,8 @@ en de factory als devDependency op een tag.
   "naam": "assistant",
   "poorten": { "dev": 3001, "acc": 3002, "prod": 3000 },
   "envRoot": "~/AppEnvs/assistant",
-  "dekkingsMinimum": 80
+  "dekkingsMinimum": 80,
+  "dekkingsRatchet": "waarschuw"
 }
 ```
 
@@ -83,6 +84,22 @@ als het **gecombineerde** dekkingscijfer eronder zakt. Ontbreekt de sleutel, dan
 wordt dekking wel gemeten en getoond maar niet afgedwongen, zodat een app niet
 meteen rood staat. Coverage draait alleen bij de volledige poort, niet in
 `--snel`/`--pre-commit`.
+
+**De dekkings-ratchet** vult die vaste bodem aan met een bewegende lat. Een vaste
+`dekkingsMinimum` vóórkomt geen daling — hij bepáált de eindbestemming ervan: de
+dekking zakt tot precies de drempel en blijft daar. De ratchet legt het hoogste
+niveau dat de app ooit haalde vast in `dekking-basislijn.json` (in versiebeheer)
+en vergelijkt elke volledige verify daarmee, over alle vier de metrics (lines,
+statements, functions, branches — niet alleen regels). Zakt een metric verder dan
+`dekkingsTolerantie` (default 0.5 procentpunt, tegen v8-ruis) onder de basislijn,
+dan is dat een regressie; stijgt hij erboven, dan schuift de lat mee omhoog en
+nooit omlaag. `dekkingsRatchet` bepaalt het gedrag: `waarschuw` (default) meldt een
+daling geel maar houdt de poort groen, `blokkeer` laat verify falen net als de
+bodem, `uit` legt de ratchet stil. De eerste volledige verify zonder basislijn is
+een bootstrap: hij legt het huidige niveau vast zonder te oordelen. `factory
+release` neemt een verhoogde basislijn mee in het release-commit; de pre-commit
+hook raakt hem niet, want die slaat coverage over. Advies: begin op `waarschuw`,
+en zet 'm op `blokkeer` zodra de meldingen kloppen en niet ruisen.
 
 Het cijfer is de **merge** van de testsoorten, niet de hoogste losse soort. Elke
 soort meet zijn eigen laag — unit de domeinlogica (`core/`, `flags/`, `config.ts`),

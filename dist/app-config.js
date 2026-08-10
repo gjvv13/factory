@@ -20,6 +20,19 @@ const appConfigSchema = z.object({
     syncNegeer: z.array(z.string()).optional(),
     /** Optionele ondergrens (0–100) waaronder `factory verify` faalt op te weinig dekking. */
     dekkingsMinimum: z.number().min(0).max(100).optional(),
+    /**
+     * Gedrag van de dekkings-ratchet: de bewegende lat die de dekking vergelijkt met het
+     * hoogste punt dat de app ooit haalde (vastgelegd in `dekking-basislijn.json`). `waarschuw`
+     * meldt een daling geel maar laat de poort groen; `blokkeer` laat `verify` falen; `uit` zet
+     * de ratchet stil. Default `waarschuw`: advies-eerst, zonder een app meteen rood te zetten.
+     */
+    dekkingsRatchet: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
+    /**
+     * Speling in procentpunten waarmee de ratchet rekent, tegen de kleine run-op-run-ruis van
+     * v8-coverage. Een daling kleiner dan dit telt niet als regressie; pas boven deze marge
+     * beweegt de basislijn omhoog. Default 0.5.
+     */
+    dekkingsTolerantie: z.number().min(0).max(5).default(0.5),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {

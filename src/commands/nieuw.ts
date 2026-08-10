@@ -201,6 +201,10 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
         naam,
         poorten: { dev: poorten.dev, acc: poorten.acc, prod: poorten.prod },
         envRoot: `~/AppEnvs/${naam}`,
+        // De dekkings-ratchet staat vanaf dag één aan (advies-eerst): de eerste volledige
+        // `factory verify` legt de basislijn vast en waarschuwt daarna bij een daling. Zet 'm
+        // op 'blokkeer' zodra de app stabiel dekt, of 'uit' om 'm stil te leggen.
+        dekkingsRatchet: 'waarschuw',
       },
       null,
       2,

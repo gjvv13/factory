@@ -27,12 +27,12 @@ const [distDir, appDir, welke] = process.argv.slice(2);
 const laad = (m) => import(pathToFileURL(path.join(distDir, m)).href);
 if (welke === 'merge') {
   const { schrijfGecombineerdeDekking } = await laad('coverage-merge.js');
-  const pct = schrijfGecombineerdeDekking(appDir);
-  if (typeof pct !== 'number') {
-    console.error('merge gaf geen getal terug: ' + String(pct));
+  const cijfers = schrijfGecombineerdeDekking(appDir);
+  if (typeof cijfers?.lines !== 'number') {
+    console.error('merge gaf geen cijfers terug: ' + String(cijfers));
     process.exit(1);
   }
-  console.log('OK ' + pct);
+  console.log('OK ' + cijfers.lines);
 } else {
   const { schrijfE2eDekking } = await laad('e2e-coverage.js');
   await schrijfE2eDekking(appDir);

@@ -43,7 +43,7 @@ describe('schrijfGecombineerdeDekking', () => {
     schrijfFinal(app, 'unit', finalVoor(bestand, [1, 0, 0]));
     schrijfFinal(app, 'e2e', finalVoor(bestand, [1, 1, 0]));
 
-    const pct = schrijfGecombineerdeDekking(app);
+    const cijfers = schrijfGecombineerdeDekking(app);
 
     // 2 van 3 regels gedekt na de merge (regel 1 door beide, niet dubbel geteld).
     const summary = JSON.parse(
@@ -51,7 +51,7 @@ describe('schrijfGecombineerdeDekking', () => {
     ) as { total: { lines: { total: number; covered: number; pct: number } } };
     expect(summary.total.lines.total).toBe(3);
     expect(summary.total.lines.covered).toBe(2);
-    expect(pct).toBeCloseTo(66.67, 1);
+    expect(cijfers?.lines).toBeCloseTo(66.67, 1);
   });
 
   it('schrijft een gecombineerd rapport op de vaste plek', () => {

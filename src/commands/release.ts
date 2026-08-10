@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
   git,
@@ -63,6 +64,11 @@ export function release(soortArgument: string | undefined): void {
   }
 
   git(['add', 'package.json'], repoDir);
+  // De volledige verify hierboven kan de dekkings-basislijn hebben verhoogd; neem die mee in
+  // het release-commit zodat de tag de bijgewerkte lat bevat. Normaal is-ie al eerder gecommit.
+  if (existsSync(path.join(repoDir, BASISLIJN_BESTAND))) {
+    git(['add', BASISLIJN_BESTAND], repoDir);
+  }
   git(['commit', '-q', '-m', `release: ${tag}`], repoDir);
   git(['tag', '-a', tag, '-m', `Release ${tag}`], repoDir);
   ok(`Release ${tag} aangemaakt`);
