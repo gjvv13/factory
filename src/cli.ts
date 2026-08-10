@@ -16,7 +16,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory env <status|start|stop|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
-  factory backup <acc|prod> [aantal]     consistente SQLite-backup + rotatie (standaard 7 generaties)
+  factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
 `;
@@ -42,12 +42,16 @@ async function main(argumenten: string[]): Promise<void> {
     case 'flag':
       await flag(positioneel[0], positioneel[1], positioneel[2]);
       return;
-    case 'backup':
-      backup(
-        positioneel[0],
-        positioneel[1] === undefined ? {} : { bewaar: Number(positioneel[1]) },
-      );
+    case 'backup': {
+      const offsite = [...vlaggen]
+        .find((vlag) => vlag.startsWith('--offsite='))
+        ?.slice('--offsite='.length);
+      backup(positioneel[0], {
+        ...(positioneel[1] === undefined ? {} : { bewaar: Number(positioneel[1]) }),
+        ...(offsite === undefined || offsite === '' ? {} : { offsiteDir: offsite }),
+      });
       return;
+    }
     case 'nieuw':
       nieuw(positioneel[0], { link: vlaggen.has('--link') });
       return;

@@ -144,6 +144,52 @@ describe('backup', () => {
     ]);
   });
 
+  it('kopieert de verse backup ook naar een aangesloten off-site map', () => {
+    const { appDir, backupsDir } = maakApp();
+    process.chdir(appDir);
+    stelUitvoerderIn(sqlite3Nep());
+    const werkruimte = path.dirname(appDir);
+    const schijf = path.join(werkruimte, 'schijf'); // 'aangesloten': bestaat al
+    mkdirSync(schijf, { recursive: true });
+    const offsiteDir = path.join(schijf, 'assistant-backups'); // leaf bestaat nog niet
+
+    backup('prod', { offsiteDir, nu: new Date('2026-08-10T03:30:00') });
+
+    expect(backups(backupsDir)).toEqual(['proefapp-prod-20260810-033000.sqlite']);
+    expect(backups(offsiteDir)).toEqual(['proefapp-prod-20260810-033000.sqlite']);
+  });
+
+  it('slaat de off-site kopie over als de schijf niet is aangesloten', () => {
+    const { appDir, backupsDir } = maakApp();
+    process.chdir(appDir);
+    stelUitvoerderIn(sqlite3Nep());
+    const werkruimte = path.dirname(appDir);
+    // De bovenliggende map bestaat niet → schijf niet aangesloten.
+    const offsiteDir = path.join(werkruimte, 'niet-aangesloten', 'assistant-backups');
+
+    backup('prod', { offsiteDir, nu: new Date('2026-08-10T03:30:00') });
+
+    // De lokale backup is er wel; de off-site map is niet aangemaakt (geen schaduwmap
+    // die het mount-pad zou verbergen).
+    expect(backups(backupsDir)).toHaveLength(1);
+    expect(existsSync(path.join(werkruimte, 'niet-aangesloten'))).toBe(false);
+  });
+
+  it('roteert ook de off-site map op het aantal generaties', () => {
+    const { appDir } = maakApp();
+    process.chdir(appDir);
+    stelUitvoerderIn(sqlite3Nep());
+    const offsiteDir = path.join(path.dirname(appDir), 'schijf', 'backups');
+    seedGeneraties(offsiteDir, ['20200101-000001', '20200101-000002']);
+
+    backup('prod', { offsiteDir, bewaar: 2, nu: new Date('2026-08-10T03:30:00') });
+
+    expect(backups(offsiteDir)).toEqual([
+      'proefapp-prod-20200101-000002.sqlite',
+      'proefapp-prod-20260810-033000.sqlite',
+    ]);
+  });
+
   it('weigert een onbekende omgeving', () => {
     stelUitvoerderIn(sqlite3Nep());
     expect(() => {
