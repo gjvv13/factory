@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { backup } from './commands/backup.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
 import { nieuw } from './commands/nieuw.js';
@@ -14,6 +15,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory env <status|start|stop|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
+  factory backup <acc|prod> [aantal]     consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
 `;
@@ -36,6 +38,9 @@ async function main(argumenten) {
             return;
         case 'flag':
             await flag(positioneel[0], positioneel[1], positioneel[2]);
+            return;
+        case 'backup':
+            backup(positioneel[0], positioneel[1] === undefined ? {} : { bewaar: Number(positioneel[1]) });
             return;
         case 'nieuw':
             nieuw(positioneel[0], { link: vlaggen.has('--link') });
