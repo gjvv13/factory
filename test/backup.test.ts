@@ -96,6 +96,12 @@ describe('backup', () => {
     // De .backup draait tegen precies het prod-databasebestand.
     const backupAanroep = aanroepen.find((a) => a.argumenten[1]?.startsWith('.backup'));
     expect(backupAanroep?.argumenten[0]).toBe(dbPad);
+    // De kopie wordt naar DELETE-journalmodus gezet (één zelfstandig bestand).
+    const doel = path.join(backupsDir, 'proefapp-prod-20260810-033000.sqlite');
+    expect(aanroepen).toContainEqual({
+      commando: 'sqlite3',
+      argumenten: [doel, 'PRAGMA journal_mode=DELETE'],
+    });
   });
 
   it('houdt standaard de nieuwste 7 generaties en ruimt de rest op', () => {

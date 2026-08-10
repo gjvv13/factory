@@ -76,12 +76,26 @@ export function backup(omgevingArgument: string | undefined, opties: BackupOptie
   // spatie in het pad geen probleem is (we draaien zonder shell).
   run('sqlite3', [dbPad, `.backup '${doel}'`]);
 
+  // De kopie erft de WAL-modus van een levende prod-db. Terugzetten naar DELETE maakt
+  // er één zelfstandig bestand van (checkpoint + geen -wal/-shm-zijbestanden ernaast),
+  // wat kopiëren, off-site zetten en terugzetten eenvoudig houdt.
+  run('sqlite3', [doel, 'PRAGMA journal_mode=DELETE'], { capture: true });
+
   // Bewijs meteen dat de kopie te openen is; een onleesbare backup is geen backup.
   const integriteit = uitvoerVan('sqlite3', [doel, 'PRAGMA integrity_check']);
   if (integriteit !== 'ok') {
     throw new GebruikersFout(
       `Backup gemaakt maar de integriteitscheck faalde: ${integriteit ?? 'geen antwoord'}`,
     );
+  }
+
+  // De DELETE-omzetting heeft de data al in het hoofdbestand samengevoegd; een los
+  // sqlite3-proces kan nog een lege -wal/-shm hebben laten liggen. Weg ermee, zodat de
+  // backup echt één bestand is.
+  for (const zijbestand of [`${doel}-wal`, `${doel}-shm`]) {
+    if (existsSync(zijbestand)) {
+      rmSync(zijbestand);
+    }
   }
   ok(`${doel} (integer)`);
 
