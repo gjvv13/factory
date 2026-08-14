@@ -45,10 +45,16 @@ jobs:
           ref: main
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
+        with:
+          # Per job een eigen pnpm-installatie. Twee runners op dezelfde mini draaien
+          # als dezelfde gebruiker en delen anders ~/setup-pnpm + de store; bij
+          # parallelle deploys slopen ze elkaar (ENOTEMPTY / verdwenen worker.js).
+          dest: ${{ runner.temp }}/pnpm
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
+          # op een blijvende self-hosted runner levert de Actions-cache weinig op.
       - run: pnpm install --frozen-lockfile
       - name: Git-identiteit voor de release-commit
         run: |
@@ -76,10 +82,16 @@ jobs:
           ref: main
           fetch-depth: 0
       - uses: pnpm/action-setup@v6
+        with:
+          # Per job een eigen pnpm-installatie. Twee runners op dezelfde mini draaien
+          # als dezelfde gebruiker en delen anders ~/setup-pnpm + de store; bij
+          # parallelle deploys slopen ze elkaar (ENOTEMPTY / verdwenen worker.js).
+          dest: ${{ runner.temp }}/pnpm
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
-          cache: pnpm
+          # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
+          # op een blijvende self-hosted runner levert de Actions-cache weinig op.
       - run: pnpm install --frozen-lockfile
       # De verse checkout mist de untracked *.secrets.env; prod heeft die wél nodig.
       # We schrijven ze uit het repo-secret vlak vóór de uitrol.
