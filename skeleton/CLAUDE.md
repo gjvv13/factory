@@ -21,11 +21,17 @@ label) — zie [`WORKFLOW.md`](../factory/WORKFLOW.md).
 ## Omgevingen
 
 Poorten en de plek van de acc- en prod-clones staan in `factory.json`.
-`pnpm env status` laat zien wat er draait; `pnpm env start|stop|logs <omgeving>`
+`pnpm env status` laat zien wat er draait; `pnpm env start|stop|reload|logs <omgeving>`
 bedient ze. Alle drie draaien onder pm2 en binden op `127.0.0.1`.
 
 Configuratie staat in `environments/<omgeving>.env`; waarden die niet in git
-horen komen in `environments/<omgeving>.secrets.env` (genegeerd door git).
+horen komen in `environments/<omgeving>.secrets.env` (genegeerd door git). Die
+bestanden staan in deze repo (de dev-clone), niet in de acc-/prod-clone: pm2 leest
+de env dáár vandaan. Wijzig je een waarde of secret, herlaad de omgeving dan met
+`pnpm env reload <omgeving>` — dat doet een verse start (`pm2 delete` + `start`),
+zodat de wijziging meegaat; een gewone `restart` houdt de oude env vast. `promote`
+en `reload` tonen na afloop welke sleutels geladen zijn, zodat een gemiste secret
+opvalt.
 
 ## Feature flags
 
