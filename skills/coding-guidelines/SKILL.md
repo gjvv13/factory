@@ -124,6 +124,32 @@ zolang de flag uit staat: het valt ook uit `help` of de API weg.
 Ruim een flag op zodra de functie definitief is — een flag die niemand meer omzet
 is dode code met extra stappen.
 
+## Natuurlijke taal (het brein)
+
+Alles wat de gebruiker kan, kan hij in **natuurlijke taal** — niet alleen via een
+exact commando. Elke gebruikersactie is bereikbaar via het brein (vrije tekst →
+intentie); een nieuwe actie zonder natuurlijke-taal-ingang is niet af. Dit geldt
+voor elke app en elke epic.
+
+Elke app heeft z'n **eigen** brein, maar volgens één patroon:
+
+- Een provider-neutrale poort in `core/` (tekst → intentie): het domein kent geen
+  SDK en geen sleutel.
+- Twee implementaties in `clients/`: een deterministische **keyword-stand-in**
+  (dev/e2e, geen sleutel nodig) en de echte **Claude-client** met structured
+  output. Alleen de gekozen provider wordt dynamisch geladen (config
+  `LLM_PROVIDER`), zodat de andere niet in geheugen of dekking komt.
+- De uitkomst is een **intentie met een zekerheid**: bij twijfel navragen in plaats
+  van gokken, bij te lage zekerheid niets doen.
+- Een intentie voert een **bestaande, deterministische** actie uit (het brein
+  synthetiseert een commando/aanroep) — zo blijven machtiging en validatie op één
+  plek en test je de actie los van het brein.
+- De **terugval is altijd deterministisch**: met het brein uit, zonder sleutel of
+  bij een onbereikbaar model mag de kernfunctie niet blokkeren.
+
+Nieuwe of nog niet vertrouwde brein-intenties gaan achter een flag, standaard uit
+in productie (zie _Feature flags_).
+
 ## Commits
 
 Kleine commits met een zin die zegt wat er verandert en waarom, in de
