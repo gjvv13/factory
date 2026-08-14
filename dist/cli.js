@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { backup } from './commands/backup.js';
+import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
 import { inleveren } from './commands/inleveren.js';
@@ -15,6 +16,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory inleveren [--titel=<titel>]    poort draaien, branch pushen, PR openen en in de merge-queue zetten
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
+  factory deploy <acc|prod>              uitrol-orchestratie voor de runner (acc: release + promote)
   factory env <status|start|stop|reload|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
@@ -41,6 +43,9 @@ async function main(argumenten) {
             return;
         case 'promote':
             await promote(positioneel[0], positioneel[1], { ja: vlaggen.has('--ja') });
+            return;
+        case 'deploy':
+            await deploy(positioneel[0]);
             return;
         case 'env':
             await env(positioneel[0], positioneel[1]);
