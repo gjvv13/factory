@@ -57,9 +57,12 @@ jobs:
       # release: verify + versie-bump + tag + push. promote acc: verse uitrol met
       # herladen env en zichtbare config. Acc heeft geen secrets nodig.
       - run: pnpm exec factory deploy acc
-      # Bepaalt na de release of prod via de goedkeurings-poort moet.
+      # Bepaalt na de release of prod via de goedkeurings-poort moet. De factory-
+      # binary rechtstreeks (niet via `pnpm exec`): pnpm print anders een ruis-regel
+      # ("Lockfile is up to date…") die de command-substitutie en daarmee
+      # $GITHUB_OUTPUT breekt. tail -n1 pakt puur de laatste regel (ja/nee).
       - id: migratie
-        run: echo "nieuw=$(pnpm exec factory heeft-migratie)" >> "$GITHUB_OUTPUT"
+        run: echo "nieuw=$(node_modules/.bin/factory heeft-migratie | tail -n1)" >> "$GITHUB_OUTPUT"
 
   prod:
     needs: acc
