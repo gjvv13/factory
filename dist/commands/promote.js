@@ -2,20 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
 import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
-/**
- * Verwijdert een bestaand pm2-proces en start het vers uit de ecosystem. Bewust
- * geen `pm2 restart --update-env`: dat herleest de ecosystem-env niet maar neemt de
- * env van deze CLI-aanroep over. Alleen een verse start leest de gewijzigde
- * environments/<omgeving>.env(.secrets) opnieuw in.
- */
-function herstartOmgeving(ecosystem, pm2Naam) {
-    const bestaat = run('pm2', ['describe', pm2Naam], { capture: true, toleranter: true }).code === 0;
-    if (bestaat) {
-        run('pm2', ['delete', pm2Naam], { capture: true });
-    }
-    run('pm2', ['start', ecosystem, '--only', pm2Naam], { capture: true });
-    run('pm2', ['save'], { capture: true, toleranter: true });
-}
+import { herstartOmgeving } from '../env-herstart.js';
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
     // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
     // juiste database draaien (bijv. DATABASE_FILE=data/prod.sqlite) en niet op de

@@ -7,7 +7,8 @@ import {
   vereisOmgeving,
   type AppConfig,
 } from '../app-config.js';
-import { GebruikersFout, ok, run, waarschuwing } from '../shell.js';
+import { herstartOmgeving } from '../env-herstart.js';
+import { GebruikersFout, kop, ok, run, waarschuwing } from '../shell.js';
 
 async function gezondheid(poort: number): Promise<string | undefined> {
   try {
@@ -70,12 +71,26 @@ export async function env(actie: string | undefined, omgevingArgument?: string):
       run('pm2', ['stop', pm2NaamVan(config, omgeving)]);
       return;
     }
+    case 'reload': {
+      // Verse delete+start, zodat een gewijzigde environments/<omgeving>.env(.secrets)
+      // altijd meegaat — hetzelfde als `promote` doet. Anders dan `start` (dat alleen
+      // vers is als het proces nog niet bestaat) herlaadt dit ook een draaiend proces.
+      const omgeving = vereisOmgeving(omgevingArgument);
+      const pm2Naam = pm2NaamVan(config, omgeving);
+      kop(`Omgeving ${omgeving} herstarten (${config.naam})`);
+      waarschuwing(
+        'reload herstart direct: korte downtime, geen swap of rollback. Gebruik promote voor een veilige swap.',
+      );
+      herstartOmgeving(ecosystemPad(config), pm2Naam);
+      ok(`${pm2Naam} vers herstart; controleer met: factory env status`);
+      return;
+    }
     case 'logs': {
       const omgeving = vereisOmgeving(omgevingArgument);
       run('pm2', ['logs', pm2NaamVan(config, omgeving)]);
       return;
     }
     default:
-      throw new GebruikersFout('Gebruik: factory env <status|start|stop|logs> [omgeving]');
+      throw new GebruikersFout('Gebruik: factory env <status|start|stop|reload|logs> [omgeving]');
   }
 }
