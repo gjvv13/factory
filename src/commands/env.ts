@@ -7,7 +7,7 @@ import {
   vereisOmgeving,
   type AppConfig,
 } from '../app-config.js';
-import { herstartOmgeving } from '../env-herstart.js';
+import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 import { GebruikersFout, kop, ok, run, waarschuwing } from '../shell.js';
 
 async function gezondheid(poort: number): Promise<string | undefined> {
@@ -82,6 +82,7 @@ export async function env(actie: string | undefined, omgevingArgument?: string):
         'reload herstart direct: korte downtime, geen swap of rollback. Gebruik promote voor een veilige swap.',
       );
       herstartOmgeving(ecosystemPad(config), pm2Naam);
+      toonGeladenConfig(config.appDir, omgeving);
       ok(`${pm2Naam} vers herstart; controleer met: factory env status`);
       return;
     }

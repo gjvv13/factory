@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
 import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
-import { herstartOmgeving } from '../env-herstart.js';
+import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
     // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
     // juiste database draaien (bijv. DATABASE_FILE=data/prod.sqlite) en niet op de
@@ -107,6 +107,7 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     mkdirSync(path.join(repoDir, 'logs'), { recursive: true });
     const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
     herstartOmgeving(ecosystem, pm2Naam);
+    toonGeladenConfig(repoDir, omgeving);
     const healthUrl = `http://127.0.0.1:${String(poort)}/health`;
     kop(`Controleren of ${omgeving} leeft`);
     const gezondheid = await wachtOpGezond(healthUrl, 30);

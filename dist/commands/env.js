@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { OMGEVINGEN, pm2NaamVan, vereisAppConfig, vereisOmgeving, } from '../app-config.js';
-import { herstartOmgeving } from '../env-herstart.js';
+import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 import { GebruikersFout, kop, ok, run, waarschuwing } from '../shell.js';
 async function gezondheid(poort) {
     try {
@@ -73,6 +73,7 @@ export async function env(actie, omgevingArgument) {
             kop(`Omgeving ${omgeving} herstarten (${config.naam})`);
             waarschuwing('reload herstart direct: korte downtime, geen swap of rollback. Gebruik promote voor een veilige swap.');
             herstartOmgeving(ecosystemPad(config), pm2Naam);
+            toonGeladenConfig(config.appDir, omgeving);
             ok(`${pm2Naam} vers herstart; controleer met: factory env status`);
             return;
         }

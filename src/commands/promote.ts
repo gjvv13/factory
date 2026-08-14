@@ -23,7 +23,7 @@ import {
   waarschuwing,
   wachtOpGezond,
 } from '../shell.js';
-import { herstartOmgeving } from '../env-herstart.js';
+import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 
 function omgevingsVariabelen(
   appDir: string,
@@ -178,6 +178,7 @@ export async function promote(
   mkdirSync(path.join(repoDir, 'logs'), { recursive: true });
   const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
   herstartOmgeving(ecosystem, pm2Naam);
+  toonGeladenConfig(repoDir, omgeving);
 
   const healthUrl = `http://127.0.0.1:${String(poort)}/health`;
   kop(`Controleren of ${omgeving} leeft`);
