@@ -25,6 +25,14 @@ ik:      <bericht>
 factory: <antwoord>
 ```
 
+### Natuurlijke taal
+
+Welke acties zijn via **natuurlijke taal** bereikbaar? Standaard: **alle** — elke
+gebruikersactie hoort een vrije-taal-ingang te hebben (zie het brein-patroon in
+`CODING_GUIDELINES.md`). Noem per actie een voorbeeldzin en de terugval als het
+brein het niet begrijpt. Is een actie bewust alléén een exact commando, motiveer
+dat dan onder _Wat het expliciet níet doet_.
+
 ### Regels en randgevallen
 
 - <regel of randgeval en het gewenste gedrag>
