@@ -94,9 +94,14 @@ jobs:
           # op een blijvende self-hosted runner levert de Actions-cache weinig op.
       - run: pnpm install --frozen-lockfile
       # De verse checkout mist de untracked *.secrets.env; prod heeft die wél nodig.
-      # We schrijven ze uit het repo-secret vlak vóór de uitrol.
+      # We schrijven ze uit het repo-secret vlak vóór de uitrol. De secret gaat via
+      # het env-blok, NIET direct als ${{ secrets.* }} in het run-commando: bij een
+      # waarde met quotes/JSON (bijv. USERS=[{...}]) zou de shell-string anders breken
+      # en de weggeschreven waarde corrupt raken.
       - name: Prod-secrets materialiseren
-        run: printf '%s' "${{ secrets.PROD_SECRETS_ENV }}" > environments/prod.secrets.env
+        env:
+          PROD_SECRETS_ENV: ${{ secrets.PROD_SECRETS_ENV }}
+        run: printf '%s' "$PROD_SECRETS_ENV" > environments/prod.secrets.env
       # deploy prod promoveert de bestaande (nieuwste) tag naar prod; geen nieuwe
       # release. Komt prod niet gezond op, dan geldt promote's proces-rollback.
       - run: pnpm exec factory deploy prod
