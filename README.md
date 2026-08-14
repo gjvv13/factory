@@ -52,15 +52,15 @@ in [`WORKFLOW.md`](WORKFLOW.md).
 
 Elke applicatie krijgt de `factory`-CLI mee als devDependency:
 
-| Commando                                   | Wat het doet                                                             |
-| ------------------------------------------ | ------------------------------------------------------------------------ |
-| `factory verify [--snel]`                  | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build         |
-| `factory release [patch\|minor\|major]`    | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen |
-| `factory promote <acc\|prod> [tag]`        | Tag uitrollen, migreren, herstarten, gezondheid controleren              |
-| `factory env <status\|start\|stop\|logs>`  | Omgevingen bedienen via pm2                                              |
-| `factory flag <omgeving> [naam] [on\|off]` | Feature flags omzetten zonder deploy                                     |
-| `factory nieuw <naam>`                     | Nieuwe applicatie uit het skelet, met een vrij poortblok                 |
-| `factory sync`                             | Slash commands, git hook en CI-workflow gelijkzetten aan deze repo       |
+| Commando                                          | Wat het doet                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| `factory verify [--snel]`                         | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build         |
+| `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen |
+| `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren              |
+| `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers     |
+| `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                     |
+| `factory nieuw <naam>`                            | Nieuwe applicatie uit het skelet, met een vrij poortblok                 |
+| `factory sync`                                    | Slash commands, git hook en CI-workflow gelijkzetten aan deze repo       |
 
 De volledige `factory verify` meet ook testdekking. Zet een app een
 `dekkingsMinimum` in zijn `factory.json`, dan is dat een **release-poort**: de

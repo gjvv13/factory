@@ -13,7 +13,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
-  factory env <status|start|stop|logs> [omgeving]
+  factory env <status|start|stop|reload|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
