@@ -14,6 +14,9 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  # De merge-queue toetst elke PR vóór de merge; zonder deze trigger draait de
+  # poort niet in de queue en blijft die wachten. `factory inleveren` gebruikt 'm.
+  merge_group:
 
 jobs:
   verify:

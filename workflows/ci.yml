@@ -9,6 +9,10 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  # De merge-queue toetst elke PR tegen main-plus-wat-al-in-de-queue-staat vóór
+  # de merge; zonder deze trigger draait de poort niet in de queue en blijft die
+  # eeuwig wachten. `factory inleveren` zet PR's in deze queue.
+  merge_group:
 
 jobs:
   verify:
