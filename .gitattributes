@@ -1,0 +1,15 @@
+# Gegenereerde bestanden niet regel-voor-regel mergen.
+#
+# `dist/` wordt bij elke commit door de pre-commit hook herbouwd en bij `release`
+# opnieuw gebouwd vóór de tag. Twee parallelle branches raken daardoor bijna altijd
+# dezelfde dist-bestanden, terwijl de inhoud een build-artefact is dat niets zegt.
+# Met `merge=ours` houdt een merge onze kant aan en corrigeert de eerstvolgende
+# build het weer — dus geen conflict op een artefact. Vereist eenmalig
+# `git config merge.ours.driver true` (waar gemerged wordt); zonder die config valt
+# git netjes terug op de gewone 3-way merge.
+dist/** merge=ours linguist-generated
+
+# De lockfile bewust NIET op merge=ours: dat zou een echte nieuwe dependency stil
+# kunnen droppen en `--frozen-lockfile` breken. rerere hergebruikt de resolutie;
+# de integratie-pijplijn (epic) reinstall't na een merge.
+pnpm-lock.yaml linguist-generated
