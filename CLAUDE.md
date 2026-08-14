@@ -132,6 +132,23 @@ Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
 daar de versie te bumpen. Slash commands en de git hook moeten fysiek in de
 app-repo staan; die haal je op met `factory sync`.
 
+## Auto-deploy naar acc en prod
+
+Heeft een app een `deploy.yml` (via `factory sync`) en een self-hosted runner met
+label `mini` op de mini, dan rolt elke merge naar `main` automatisch uit. De
+workflow draait `factory deploy acc` (nieuwe release-tag + promote acc) en daarna
+prod. Bevat de change een **nieuwe DB-migratie** (`factory heeft-migratie` kijkt
+naar toegevoegde bestanden onder `migrations/` t.o.v. de vorige tag), dan loopt prod
+via het GitHub-environment `prod` en wacht op één goedkeuring — migraties rollen niet
+automatisch terug. Zonder migratie gaat prod automatisch door.
+
+Prod draait als pm2 op `127.0.0.1`, dus de uitrol kan alleen op de mini (een
+GitHub-hosted runner komt er niet bij). De runner doet een verse checkout, waarin de
+untracked `*.secrets.env` ontbreken; prod-secrets komen daarom uit het repo-secret
+`PROD_SECRETS_ENV` (acc heeft geen secrets nodig). De runner zet je op met
+`scripts/setup-runner.sh`; verder heb je eenmalig het environment `prod` met een
+verplichte reviewer en dat secret nodig.
+
 Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash
 commands, de skills, de pre-commit hook en `.github/workflows/ci.yml`. Die staan
