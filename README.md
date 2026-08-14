@@ -57,6 +57,7 @@ Elke applicatie krijgt de `factory`-CLI mee als devDependency:
 | `factory verify [--snel]`                         | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build         |
 | `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen |
 | `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren              |
+| `factory deploy <acc\|prod>`                      | Uitrol-orchestratie voor de runner: `acc` = release + promote acc        |
 | `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers     |
 | `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                     |
 | `factory nieuw <naam>`                            | Nieuwe applicatie uit het skelet, met een vrij poortblok                 |

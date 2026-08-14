@@ -1,0 +1,62 @@
+name: deploy
+
+# Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
+# hier op met `factory sync`.
+#
+# Rolt elke merge naar main automatisch uit naar acc, op een self-hosted runner
+# op de mini. Prod draait als pm2 op 127.0.0.1 en is voor een GitHub-hosted runner
+# onbereikbaar, dus de uitrol moet op de mini gebeuren. De prod-stap (met de
+# migratie-poort) komt in een latere slice.
+#
+# Eenmalige setup in de app-repo:
+#   - een self-hosted runner op de mini met het label `mini`, met toegang tot de
+#     app-environments/secrets;
+#   - de runner/Actions in de bypass-lijst van de main-ruleset, want `factory
+#     release` pusht de versie-bump direct naar main (de merge-queue laat directe
+#     pushes anders niet toe).
+
+on:
+  push:
+    branches: [main]
+
+# Uitrollen blijft serieel: een nieuwe merge wacht op de lopende deploy in plaats
+# van hem af te breken (cancel-in-progress: false).
+concurrency:
+  group: deploy-acc
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  acc:
+    # De release-commit (versie-bump) is zelf een push naar main; sla die over,
+    # anders rolt de deploy zichzelf in een lus.
+    if: ${{ !startsWith(github.event.head_commit.message, 'release:') }}
+    runs-on: [self-hosted, mini]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # De branch, niet een detached SHA: `factory release` eist dat je op main
+          # staat. Volledige historie + tags voor release en promote.
+          ref: main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Git-identiteit voor de release-commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # release: verify + versie-bump + tag + push. promote acc: verse uitrol met
+      # herladen env en zichtbare config. Faalt dit, dan stopt de job rood en blijft
+      # prod ongemoeid.
+      - run: pnpm exec factory deploy acc
