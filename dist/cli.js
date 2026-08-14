@@ -9,6 +9,7 @@ import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { sync } from './commands/sync.js';
 import { verify } from './commands/verify.js';
+import { toonMigratieStatus } from './migratie.js';
 import { fout, GebruikersFout } from './shell.js';
 const HULP = `factory — pipeline van idee tot productie
 
@@ -17,6 +18,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory deploy <acc|prod>              uitrol-orchestratie voor de runner (acc: release + promote)
+  factory heeft-migratie                 print ja/nee: bevat deze release een nieuwe DB-migratie (voor de prod-poort)
   factory env <status|start|stop|reload|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
@@ -46,6 +48,9 @@ async function main(argumenten) {
             return;
         case 'deploy':
             await deploy(positioneel[0]);
+            return;
+        case 'heeft-migratie':
+            toonMigratieStatus();
             return;
         case 'env':
             await env(positioneel[0], positioneel[1]);

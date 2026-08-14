@@ -3,26 +3,29 @@ name: deploy
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Rolt elke merge naar main automatisch uit naar acc, op een self-hosted runner
-# op de mini. Prod draait als pm2 op 127.0.0.1 en is voor een GitHub-hosted runner
-# onbereikbaar, dus de uitrol moet op de mini gebeuren. De prod-stap (met de
-# migratie-poort) komt in een latere slice.
+# Rolt elke merge naar main automatisch uit: eerst naar acc, daarna naar prod.
+# Draait op een self-hosted runner op de mini (prod draait als pm2 op 127.0.0.1 en
+# is voor een GitHub-hosted runner onbereikbaar).
+#
+# De prod-poort: bevat de change een nieuwe DB-migratie, dan loopt prod via het
+# GitHub-environment `prod` en wacht op één goedkeuring (migraties rollen niet
+# automatisch terug). Zonder migratie gaat prod automatisch door.
 #
 # Eenmalige setup in de app-repo:
-#   - een self-hosted runner op de mini met het label `mini`, met toegang tot de
-#     app-environments/secrets;
-#   - de runner/Actions in de bypass-lijst van de main-ruleset, want `factory
-#     release` pusht de versie-bump direct naar main (de merge-queue laat directe
-#     pushes anders niet toe).
+#   - een self-hosted runner op de mini met het label `mini`, als je gebruiker
+#     (pm2 + ~/AppEnvs bereikbaar) — zie factory/scripts/setup-runner.sh;
+#   - een repo-secret `PROD_SECRETS_ENV` met de volledige inhoud van
+#     environments/prod.secrets.env (die staat niet in git; de verse checkout van de
+#     runner heeft 'm nodig om prod met secrets te starten);
+#   - een environment `prod` met verplichte reviewer(s), voor de migratie-poort.
 
 on:
   push:
     branches: [main]
 
-# Uitrollen blijft serieel: een nieuwe merge wacht op de lopende deploy in plaats
-# van hem af te breken (cancel-in-progress: false).
+# Uitrollen blijft serieel: een nieuwe merge wacht op de lopende deploy.
 concurrency:
-  group: deploy-acc
+  group: deploy
   cancel-in-progress: false
 
 permissions:
@@ -34,29 +37,51 @@ jobs:
     # anders rolt de deploy zichzelf in een lus.
     if: ${{ !startsWith(github.event.head_commit.message, 'release:') }}
     runs-on: [self-hosted, mini]
+    outputs:
+      migratie: ${{ steps.migratie.outputs.nieuw }}
     steps:
       - uses: actions/checkout@v7
         with:
-          # De branch, niet een detached SHA: `factory release` eist dat je op main
-          # staat. Volledige historie + tags voor release en promote.
           ref: main
           fetch-depth: 0
-
       - uses: pnpm/action-setup@v6
-
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
-
       - name: Git-identiteit voor de release-commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
       # release: verify + versie-bump + tag + push. promote acc: verse uitrol met
-      # herladen env en zichtbare config. Faalt dit, dan stopt de job rood en blijft
-      # prod ongemoeid.
+      # herladen env en zichtbare config. Acc heeft geen secrets nodig.
       - run: pnpm exec factory deploy acc
+      # Bepaalt na de release of prod via de goedkeurings-poort moet.
+      - id: migratie
+        run: echo "nieuw=$(pnpm exec factory heeft-migratie)" >> "$GITHUB_OUTPUT"
+
+  prod:
+    needs: acc
+    runs-on: [self-hosted, mini]
+    # Bij een nieuwe migratie via het environment `prod` (verplichte goedkeuring);
+    # anders geen environment, dus meteen door.
+    environment: ${{ needs.acc.outputs.migratie == 'ja' && 'prod' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # De verse checkout mist de untracked *.secrets.env; prod heeft die wél nodig.
+      # We schrijven ze uit het repo-secret vlak vóór de uitrol.
+      - name: Prod-secrets materialiseren
+        run: printf '%s' "${{ secrets.PROD_SECRETS_ENV }}" > environments/prod.secrets.env
+      # deploy prod promoveert de bestaande (nieuwste) tag naar prod; geen nieuwe
+      # release. Komt prod niet gezond op, dan geldt promote's proces-rollback.
+      - run: pnpm exec factory deploy prod
