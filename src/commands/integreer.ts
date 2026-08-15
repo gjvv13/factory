@@ -261,15 +261,71 @@ function factoryDep(appDir: string): string {
   return dep;
 }
 
+/**
+ * Zet de factory-git-dep (`git+https://…/factory.git#vX.Y.Z`) om in een codeload-
+ * tarball-URL + kale versie. We installeren globaal via de tarball en niet via de
+ * git-URL: `npm install -g git+https` symlinkt op npm 10 naar een cache-tmp die
+ * daarna wordt opgeruimd (dood symlink, geen werkende bin); de tarball kopieert wél.
+ */
+export function tarballVanDep(dep: string): { url: string; versie: string } {
+  const m = dep.match(/github\.com\/([^/]+)\/([^/#]+?)(?:\.git)?#(.+)$/);
+  const owner = m?.[1];
+  const repo = m?.[2];
+  const ref = m?.[3];
+  if (owner === undefined || repo === undefined || ref === undefined) {
+    throw new GebruikersFout(`Kan de factory-tarball niet afleiden uit '${dep}'.`);
+  }
+  return {
+    url: `https://codeload.github.com/${owner}/${repo}/tar.gz/refs/tags/${ref}`,
+    versie: ref.replace(/^v/, ''),
+  };
+}
+
+/** `a >= b`, per numeriek versie-onderdeel (vX.Y.Z). */
+export function minstensVersie(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/** Versie van de globaal geïnstalleerde factory, of undefined als er geen (werkende) staat. */
+function globaleFactoryVersie(): string | undefined {
+  const root = uitvoerVan('npm', ['root', '-g']);
+  if (root === undefined || root === '') return undefined;
+  try {
+    const pj: unknown = JSON.parse(
+      readFileSync(path.join(root, 'factory', 'package.json'), 'utf8'),
+    );
+    return typeof pj === 'object' && pj !== null && 'version' in pj
+      ? String((pj as { version?: unknown }).version)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function installeerLaunchAgent(config: AppConfig): void {
   kop(`LaunchAgent installeren voor ${config.naam}`);
   const repo = repoVan(config.appDir);
   const dep = factoryDep(config.appDir);
 
   // De LaunchAgent draait buiten ~/Documents (macOS TCC), dus factory globaal
-  // installeren op dezelfde tag als de app; bin én dist liggen dan buiten die map.
+  // installeren; bin én dist liggen dan buiten die map. Upgrade-only: staat er al
+  // een even nieuwe (of nieuwere) globale factory, dan slaan we de install over —
+  // zo downgradet een app met een oudere pin de gedeelde bin nooit.
   kop('Factory globaal installeren');
-  run('npm', ['install', '-g', dep], { capture: true });
+  const { url, versie } = tarballVanDep(dep);
+  const globaal = globaleFactoryVersie();
+  if (globaal !== undefined && minstensVersie(globaal, versie)) {
+    ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
+  } else {
+    run('npm', ['install', '-g', url], { capture: true });
+  }
   const prefix = uitvoerVan('npm', ['prefix', '-g'], config.appDir) ?? '/usr/local';
   const bin = path.join(prefix, 'bin', 'factory');
 
