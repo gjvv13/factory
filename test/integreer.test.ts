@@ -2,7 +2,7 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { bouwPlist, integreer } from '../src/commands/integreer.js';
+import { bouwPlist, integreer, minstensVersie, tarballVanDep } from '../src/commands/integreer.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
 
@@ -142,6 +142,26 @@ describe('integreer', () => {
       expect.arrayContaining(['--repo', 'gjvv13/assistant']),
     );
     expect(gh).toContainEqual(['pr', 'merge', '7', '--merge', '--repo', 'gjvv13/assistant']);
+  });
+});
+
+describe('tarballVanDep', () => {
+  it('leidt de codeload-tarball + kale versie af uit de git-dep', () => {
+    const { url, versie } = tarballVanDep('git+https://github.com/gjvv13/factory.git#v1.12.0');
+    expect(url).toBe('https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/v1.12.0');
+    expect(versie).toBe('1.12.0');
+  });
+
+  it('faalt begrijpelijk op een dep zonder tag', () => {
+    expect(() => tarballVanDep('git+https://github.com/gjvv13/factory.git')).toThrow();
+  });
+});
+
+describe('minstensVersie', () => {
+  it('vergelijkt numeriek, niet lexicaal', () => {
+    expect(minstensVersie('1.12.0', '1.10.5')).toBe(true); // 12 > 10, niet "1.1" < "1.5"
+    expect(minstensVersie('1.12.0', '1.12.0')).toBe(true); // gelijk telt als "minstens"
+    expect(minstensVersie('1.10.5', '1.12.0')).toBe(false);
   });
 });
 

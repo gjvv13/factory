@@ -19,6 +19,18 @@ export interface PlistOpzet {
  * zodat macOS TCC de launchd-agent niet blokkeert.
  */
 export declare function bouwPlist(opzet: PlistOpzet): string;
+/**
+ * Zet de factory-git-dep (`git+https://…/factory.git#vX.Y.Z`) om in een codeload-
+ * tarball-URL + kale versie. We installeren globaal via de tarball en niet via de
+ * git-URL: `npm install -g git+https` symlinkt op npm 10 naar een cache-tmp die
+ * daarna wordt opgeruimd (dood symlink, geen werkende bin); de tarball kopieert wél.
+ */
+export declare function tarballVanDep(dep: string): {
+    url: string;
+    versie: string;
+};
+/** `a >= b`, per numeriek versie-onderdeel (vX.Y.Z). */
+export declare function minstensVersie(a: string, b: string): boolean;
 export interface IntegreerOpties {
     /** Installeert de LaunchAgent die `integreer` periodiek draait. */
     readonly installeer?: boolean;
