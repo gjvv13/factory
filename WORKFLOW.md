@@ -68,6 +68,24 @@ voor één applicatie, `status:` voor een fase, of `type:` voor epics vs. klein 
 
 `/status` geeft het overzicht via het board (per `App`-veld en `status:`).
 
+## Als de pijplijn hapert
+
+Loopt er iets mis tussen "mijn code is af" en "het draait op prod" — verify/CI,
+`inleveren`, de integratie-wachtrij, `release`, `promote`, `deploy.yml`, de
+migratie-gate, env/secrets, de runners of de dekkings-ratchet — dan maak je daar
+**een issue voor in deze backlog**: App-veld `factory`, label `type:bug`. Ook als
+je een workaround vond; dan is het een bug mét bekende oplossing.
+
+Dit geldt vanuit **elke** app-chat, ook al ben je daar met een andere applicatie
+bezig. Zo'n storing raakt alle apps maar valt buiten de app waar je toevallig mee
+bezig bent — zonder deze afspraak verdwijnt hij in een chat-log.
+
+Niet bedoeld voor je eigen falende test of typefout: die repareer je gewoon.
+
+Zet in de body de letterlijke foutmelding, de aanleiding (welke app, welke
+versie), de workaround, en of andere apps het ook raken. Groomen mag vanuit de
+app-chat; bouwen hoort in de factory-chat.
+
 ## Grooming vs. bouwen
 
 Groomen (idee, refine) doe je in factory; bouwen doe je in de applicatie-repo.
