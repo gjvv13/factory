@@ -1,4 +1,4 @@
-import { coverageOptie } from './coverage.js';
+import { coverageOptie, LAAG_INCLUDE } from './coverage.js';
 
 /**
  * Vitest-preset voor contract tests. Pact start per test een mockserver op,
@@ -18,7 +18,7 @@ export function contractTestConfig(overrides = {}) {
       fileParallelism: false,
       testTimeout: 30_000,
       // Contract dekt de clients: de adapters die met externe diensten praten.
-      ...coverageOptie('contract', { include: ['app/src/clients/**/*.ts'] }),
+      ...coverageOptie('contract', { include: LAAG_INCLUDE.contract }),
       ...overrides,
     },
   };

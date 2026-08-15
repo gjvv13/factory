@@ -8,6 +8,18 @@ import process from 'node:process';
 const STANDAARD_EXCLUDE = ['app/src/main.ts', 'app/src/db/migrate.ts', 'app/src/db/seed.ts'];
 
 /**
+ * Welke bron elke vitest-soort meet, op één plek. Unit meet de domeinlogica, contract de
+ * clients. De e2e-meting (c8, de hele app) sluit exact deze paden uit — anders meet c8
+ * `core/` en `clients/` nóg een keer, met andere branch-locaties dan vitest, en telt de
+ * merge ze dubbel op branches (#69). `src/e2e-coverage.ts` herhaalt deze lijst bewust
+ * (TypeScript in het pakket vs. los JavaScript hier); een drift-guard-test houdt ze gelijk.
+ */
+export const LAAG_INCLUDE = {
+  unit: ['app/src/core/**/*.ts', 'app/src/flags/**/*.ts', 'app/src/config.ts'],
+  contract: ['app/src/clients/**/*.ts'],
+};
+
+/**
  * Coverage-optie voor Vitest, alleen actief als de omgevingsvariabele
  * `FACTORY_COVERAGE` gezet is. `factory verify` zet die bij een volledige poort en
  * laat 'm weg bij `--snel`/`--pre-commit`, zodat coverage lokaal snel overslaanbaar

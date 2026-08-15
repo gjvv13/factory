@@ -1,4 +1,12 @@
 /**
+ * De bronpaden die unit en contract al meten (`LAAG_INCLUDE` in `configs/coverage.js`).
+ * De e2e-meting draait op de héle app, dus zonder deze uitsluiting meet c8 `core/` en
+ * `clients/` nóg een keer — met andere branch-locaties dan vitest, waarop de merge ze
+ * dubbel telt (#69). Bewust hier herhaald, net als {@link STANDAARD_EXCLUDE} (TypeScript
+ * in het pakket vs. los JavaScript daar); de drift-guard-test houdt beide lijsten gelijk.
+ */
+export declare const LAAG_UITSLUITING: string[];
+/**
  * Env-toevoeging voor het e2e-serverproces: zet `NODE_V8_COVERAGE` zodat Node de ruwe
  * v8-coverage wegschrijft. Alleen bij een coverage-poort (`FACTORY_COVERAGE`), zodat een
  * gewone e2e-run niets extra's doet. Spreid dit ná `...process.env` in de child-env.
