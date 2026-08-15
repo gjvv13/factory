@@ -2,7 +2,7 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { integreer } from '../src/commands/integreer.js';
+import { bouwPlist, integreer } from '../src/commands/integreer.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
 
@@ -101,5 +101,54 @@ describe('integreer', () => {
 
     integreer();
     expect(ghArgs(aanroepen).length).toBe(0); // niets aangeraakt
+  });
+
+  it('werkt de hele wachtrij af in één run (lus tot leeg)', () => {
+    const gemergd: number[] = [];
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando !== 'gh') return {};
+      if (argumenten[1] === 'list') {
+        const rest = [5, 6]
+          .filter((n) => !gemergd.includes(n))
+          .map((n) => ({ number: n, createdAt: `2026-08-15T10:0${String(n)}:00Z` }));
+        return { stdout: JSON.stringify(rest) };
+      }
+      if (argumenten[1] === 'view') return { stdout: JSON.stringify(GROEN) };
+      if (argumenten[1] === 'merge') {
+        gemergd.push(Number(argumenten[2]));
+        return {};
+      }
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    integreer();
+    expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '5', '--merge']);
+    expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '6', '--merge']);
+  });
+});
+
+describe('bouwPlist', () => {
+  const config = {
+    naam: 'proefapp',
+    poorten: { dev: 1, acc: 2, prod: 3 },
+    envRoot: 'envs',
+    dekkingsRatchet: 'waarschuw' as const,
+    dekkingsTolerantie: 0.5,
+    integratie: 'lokaal' as const,
+    appDir: '/repo/proefapp',
+    envRootPad: '/repo/proefapp/envs',
+  };
+
+  it('bevat het label, het commando, de werkmap en een interval', () => {
+    const plist = bouwPlist(config);
+    expect(plist).toContain('<key>Label</key><string>nl.factory.integreer.proefapp</string>');
+    expect(plist).toContain('/repo/proefapp/node_modules/.bin/factory');
+    expect(plist).toContain('<string>integreer</string>');
+    expect(plist).toContain('<key>WorkingDirectory</key><string>/repo/proefapp</string>');
+    expect(plist).toContain('<key>StartInterval</key><integer>60</integer>');
+    // De shell-PATH wordt meegebakken zodat launchd node/gh/pnpm vindt.
+    expect(plist).toContain('<key>PATH</key>');
   });
 });
