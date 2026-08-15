@@ -16,7 +16,7 @@ const HULP = `factory — pipeline van idee tot productie
 
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
   factory inleveren [--titel=<titel>]    poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten
-  factory integreer                      werk de factory-wachtrij af (private apps zonder GitHub merge-queue)
+  factory integreer [--installeer|--verwijder]  werk de factory-wachtrij af (of zet de LaunchAgent op/weg)
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory deploy <acc|prod>              uitrol-orchestratie voor de runner (acc: release + promote)
@@ -43,7 +43,10 @@ async function main(argumenten) {
             return;
         }
         case 'integreer':
-            integreer();
+            integreer({
+                installeer: vlaggen.has('--installeer'),
+                verwijder: vlaggen.has('--verwijder'),
+            });
             return;
         case 'release':
             release(positioneel[0]);

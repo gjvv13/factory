@@ -166,8 +166,9 @@ af — oudste PR eerst. Het toetst elke PR via de bestaande CI-poort (de `ci.yml
 merget bij groen + mergeable; een rode poort of merge-conflict koppelt terug (label eraf +
 PR-comment) zonder de rij te blokkeren. Een mini-lock houdt het single-instance; `integreer`
 raakt de werkmap niet aan (alleen `gh`). Een merge triggert daarna de deploy-workflow, dus
-wachtrij en auto-deploy sluiten op elkaar aan. (Het periodiek draaien van `integreer` via een
-LaunchAgent komt in een volgende slice; nu draai je het met de hand.)
+wachtrij en auto-deploy sluiten op elkaar aan. `factory integreer --installeer` zet een
+LaunchAgent op de mini die de wachtrij elke minuut aftikt (`--verwijder` haalt 'm weg);
+zonder die LaunchAgent draai je `factory integreer` met de hand.
 
 Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash

@@ -1,6 +1,7 @@
-import { closeSync, openSync, rmSync, statSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { vereisAppConfig, type AppConfig } from '../app-config.js';
 import { kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 
 /** Het label waaraan de factory-wachtrij een in te leveren PR herkent. */
@@ -156,12 +157,90 @@ function verwerkOudste(repoDir: string, nummer: number): Uitkomst {
   return 'gemerged';
 }
 
+// --- LaunchAgent: `integreer` periodiek draaien op de mini --------------------
+const LAUNCH_PREFIX = 'nl.factory.integreer';
+/** Hoe vaak (in seconden) de wachtrij wordt afgetikt. */
+const INTERVAL_S = 60;
+
+function plistPad(naam: string): string {
+  return path.join(os.homedir(), 'Library', 'LaunchAgents', `${LAUNCH_PREFIX}.${naam}.plist`);
+}
+
+/** Bouwt de LaunchAgent-plist die `factory integreer` periodiek in de app-map draait. */
+export function bouwPlist(config: AppConfig): string {
+  const label = `${LAUNCH_PREFIX}.${config.naam}`;
+  const factoryBin = path.join(config.appDir, 'node_modules', '.bin', 'factory');
+  const logPad = path.join(config.appDir, 'logs', 'integreer.log');
+  // De PATH van de installerende shell meebakken: launchd start anders met een kale
+  // PATH en vindt node/gh/pnpm dan niet.
+  const pad = process.env.PATH ?? '/usr/bin:/bin';
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${factoryBin}</string>
+    <string>integreer</string>
+  </array>
+  <key>WorkingDirectory</key><string>${config.appDir}</string>
+  <key>StartInterval</key><integer>${String(INTERVAL_S)}</integer>
+  <key>RunAtLoad</key><true/>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>${pad}</string></dict>
+  <key>StandardOutPath</key><string>${logPad}</string>
+  <key>StandardErrorPath</key><string>${logPad}</string>
+</dict>
+</plist>
+`;
+}
+
+function installeerLaunchAgent(config: AppConfig): void {
+  kop(`LaunchAgent installeren voor ${config.naam}`);
+  mkdirSync(path.join(config.appDir, 'logs'), { recursive: true });
+  const pad = plistPad(config.naam);
+  mkdirSync(path.dirname(pad), { recursive: true });
+  writeFileSync(pad, bouwPlist(config));
+  // Idempotent: een oude versie eerst ontladen, dan vers laden.
+  run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+  run('launchctl', ['load', pad]);
+  ok(
+    `geladen; \`factory integreer\` draait elke ${String(INTERVAL_S)}s (log: ${path.join(config.appDir, 'logs', 'integreer.log')}).`,
+  );
+}
+
+function verwijderLaunchAgent(config: AppConfig): void {
+  kop(`LaunchAgent verwijderen voor ${config.naam}`);
+  const pad = plistPad(config.naam);
+  run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+  rmSync(pad, { force: true });
+  ok('verwijderd.');
+}
+
+export interface IntegreerOpties {
+  /** Installeert de LaunchAgent die `integreer` periodiek draait. */
+  readonly installeer?: boolean;
+  /** Verwijdert die LaunchAgent. */
+  readonly verwijder?: boolean;
+}
+
 /**
  * Werkt de factory-wachtrij af: neemt de oudste open `wachtrij`-PR, toetst hem via de
  * CI-poort en merget of koppelt terug — serieel, één tegelijk (mini-lock). Draait op
- * de mini; raakt de werkmap niet aan, alleen GitHub via `gh`.
+ * de mini; raakt de werkmap niet aan, alleen GitHub via `gh`. Met `--installeer` /
+ * `--verwijder` zet je de LaunchAgent op of weg die dit periodiek doet.
  */
-export function integreer(): void {
+export function integreer(opties: IntegreerOpties = {}): void {
+  if (opties.installeer === true) {
+    installeerLaunchAgent(vereisAppConfig());
+    return;
+  }
+  if (opties.verwijder === true) {
+    verwijderLaunchAgent(vereisAppConfig());
+    return;
+  }
+
   const repoDir = process.cwd();
   if (!neemLock()) {
     waarschuwing('Er draait al een integreer-run; deze wordt overgeslagen.');
