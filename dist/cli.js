@@ -4,6 +4,7 @@ import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
 import { inleveren } from './commands/inleveren.js';
+import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
@@ -14,7 +15,8 @@ import { fout, GebruikersFout } from './shell.js';
 const HULP = `factory — pipeline van idee tot productie
 
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
-  factory inleveren [--titel=<titel>]    poort draaien, branch pushen, PR openen en in de merge-queue zetten
+  factory inleveren [--titel=<titel>]    poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten
+  factory integreer                      werk de factory-wachtrij af (private apps zonder GitHub merge-queue)
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory deploy <acc|prod>              uitrol-orchestratie voor de runner (acc: release + promote)
@@ -40,6 +42,9 @@ async function main(argumenten) {
             inleveren(titel === undefined || titel === '' ? {} : { titel });
             return;
         }
+        case 'integreer':
+            integreer();
+            return;
         case 'release':
             release(positioneel[0]);
             return;

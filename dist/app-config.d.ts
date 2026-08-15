@@ -17,6 +17,10 @@ declare const appConfigSchema: z.ZodObject<{
         blokkeer: "blokkeer";
     }>>;
     dekkingsTolerantie: z.ZodDefault<z.ZodNumber>;
+    integratie: z.ZodDefault<z.ZodEnum<{
+        "merge-queue": "merge-queue";
+        lokaal: "lokaal";
+    }>>;
 }, z.core.$strip>;
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
 export interface AppConfig extends AppConfigBestand {

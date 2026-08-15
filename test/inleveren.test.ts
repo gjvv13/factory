@@ -21,6 +21,21 @@ function maakRepo(): string {
   return repo;
 }
 
+/** Temp-repo met een factory.json die de lokale wachtrij kiest. */
+function maakLokaleRepo(): string {
+  const repo = maakRepo();
+  writeFileSync(
+    path.join(repo, 'factory.json'),
+    JSON.stringify({
+      naam: 'proefapp',
+      poorten: { dev: 3001, acc: 3002, prod: 3000 },
+      envRoot: path.join(repo, 'envs'),
+      integratie: 'lokaal',
+    }),
+  );
+  return repo;
+}
+
 /** Standaard-bepaler voor de gelukkige weg: slice-branch, schone tree, geen bestaande PR. */
 const gelukkig: UitkomstBepaler = ({ commando, argumenten }) => {
   if (commando === 'git' && argumenten[0] === 'rev-parse') return { stdout: BRANCH };
@@ -160,5 +175,24 @@ describe('inleveren', () => {
     expect(create).toContain('--title');
     expect(create).toContain('Mijn slice');
     expect(create).not.toContain('--fill');
+  });
+
+  it('lokale wachtrij-route: labelt de PR i.p.v. auto-merge', () => {
+    process.chdir(maakLokaleRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    // Label (idempotent) aangemaakt en op de PR gezet; géén auto-merge.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[0] === 'label' && a[1] === 'create')).toBe(true);
+    expect(argsVan(aanroepen, 'gh')).toContainEqual([
+      'pr',
+      'edit',
+      PR_URL,
+      '--add-label',
+      'wachtrij',
+    ]);
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
   });
 });
