@@ -48,8 +48,18 @@ function geefLockVrij() {
         // Al weg — prima.
     }
 }
-function wachtrij(repoDir) {
-    const uit = uitvoerVan('gh', ['pr', 'list', '--state', 'open', '--label', WACHTRIJ_LABEL, '--json', 'number,createdAt'], repoDir);
+function wachtrij(repoDir, repoArg) {
+    const uit = uitvoerVan('gh', [
+        'pr',
+        'list',
+        '--state',
+        'open',
+        '--label',
+        WACHTRIJ_LABEL,
+        '--json',
+        'number,createdAt',
+        ...repoArg,
+    ], repoDir);
     if (uit === undefined || uit === '') {
         return [];
     }
@@ -58,20 +68,21 @@ function wachtrij(repoDir) {
         .map((r) => ({ nummer: r.number, createdAt: r.createdAt }))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
-function statusVan(repoDir, nummer) {
-    const uit = uitvoerVan('gh', ['pr', 'view', String(nummer), '--json', 'mergeable,statusCheckRollup'], repoDir);
+function statusVan(repoDir, nummer, repoArg) {
+    const uit = uitvoerVan('gh', ['pr', 'view', String(nummer), '--json', 'mergeable,statusCheckRollup', ...repoArg], repoDir);
     const data = JSON.parse(uit ?? '{}');
     return { mergeable: data.mergeable ?? 'UNKNOWN', checks: data.statusCheckRollup ?? [] };
 }
-function kickBack(repoDir, nummer, reden) {
+function kickBack(repoDir, nummer, reden, repoArg) {
     run('gh', [
         'pr',
         'comment',
         String(nummer),
         '--body',
         `Integratie gestopt: ${reden}. Uit de wachtrij gehaald — los op en lever opnieuw in met \`factory inleveren\`.`,
+        ...repoArg,
     ], { cwd: repoDir, toleranter: true });
-    run('gh', ['pr', 'edit', String(nummer), '--remove-label', WACHTRIJ_LABEL], {
+    run('gh', ['pr', 'edit', String(nummer), '--remove-label', WACHTRIJ_LABEL, ...repoArg], {
         cwd: repoDir,
         toleranter: true,
     });
@@ -82,32 +93,32 @@ function kickBack(repoDir, nummer, reden) {
  * mergen. Rood of een merge-conflict → kick-back (uit de rij, met uitleg). Poort nog
  * bezig → wachten tot de volgende run (we lopen niet vooruit op de FIFO-volgorde).
  */
-function verwerkOudste(repoDir, nummer) {
-    const { mergeable, checks } = statusVan(repoDir, nummer);
+function verwerkOudste(repoDir, nummer, repoArg) {
+    const { mergeable, checks } = statusVan(repoDir, nummer, repoArg);
     const gefaald = checks.some((c) => c.conclusion === 'FAILURE' ||
         c.conclusion === 'CANCELLED' ||
         c.conclusion === 'TIMED_OUT' ||
         c.conclusion === 'ACTION_REQUIRED');
     const draaitNog = checks.some((c) => c.status !== 'COMPLETED');
     if (gefaald) {
-        kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is rood');
+        kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is rood', repoArg);
         return 'kickback';
     }
     if (mergeable === 'CONFLICTING') {
-        kickBack(repoDir, nummer, 'merge-conflict met main');
+        kickBack(repoDir, nummer, 'merge-conflict met main', repoArg);
         return 'kickback';
     }
     if (draaitNog || mergeable === 'UNKNOWN') {
         return 'wacht';
     }
     // Groen + mergeable → mergen met een merge-commit (zoals de rest van het ecosysteem).
-    const merge = run('gh', ['pr', 'merge', String(nummer), '--merge'], {
+    const merge = run('gh', ['pr', 'merge', String(nummer), '--merge', ...repoArg], {
         cwd: repoDir,
         capture: true,
         toleranter: true,
     });
     if (merge.code !== 0) {
-        kickBack(repoDir, nummer, 'de merge mislukte');
+        kickBack(repoDir, nummer, 'de merge mislukte', repoArg);
         return 'kickback';
     }
     ok(`#${String(nummer)} geïntegreerd`);
@@ -183,6 +194,9 @@ export function integreer(opties = {}) {
         return;
     }
     const repoDir = process.cwd();
+    // Met --repo richten we gh expliciet en lezen we de repo-map niet (TCC-vrij); zonder
+    // --repo gebruikt gh de git-remote van de huidige map.
+    const repoArg = opties.repo === undefined ? [] : ['--repo', opties.repo];
     if (!neemLock()) {
         waarschuwing('Er draait al een integreer-run; deze wordt overgeslagen.');
         return;
@@ -191,7 +205,7 @@ export function integreer(opties = {}) {
         kop('Wachtrij verwerken');
         const gezien = new Set();
         for (;;) {
-            const rij = wachtrij(repoDir);
+            const rij = wachtrij(repoDir, repoArg);
             const oudste = rij[0];
             if (oudste === undefined) {
                 ok('Wachtrij is leeg.');
@@ -203,7 +217,7 @@ export function integreer(opties = {}) {
                 break;
             }
             gezien.add(oudste.nummer);
-            if (verwerkOudste(repoDir, oudste.nummer) === 'wacht') {
+            if (verwerkOudste(repoDir, oudste.nummer, repoArg) === 'wacht') {
                 ok(`#${String(oudste.nummer)}: poort draait nog — de wachtrij pauzeert tot de volgende run.`);
                 break;
             }

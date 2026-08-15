@@ -127,6 +127,22 @@ describe('integreer', () => {
     expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '5', '--merge']);
     expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '6', '--merge']);
   });
+
+  it('--repo: richt elke gh-aanroep op de opgegeven repo (TCC-vrij)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, GROEN));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer({ repo: 'gjvv13/assistant' });
+
+    const gh = ghArgs(aanroepen);
+    expect(gh.find((a) => a[1] === 'list')).toEqual(
+      expect.arrayContaining(['--repo', 'gjvv13/assistant']),
+    );
+    expect(gh.find((a) => a[1] === 'view')).toEqual(
+      expect.arrayContaining(['--repo', 'gjvv13/assistant']),
+    );
+    expect(gh).toContainEqual(['pr', 'merge', '7', '--merge', '--repo', 'gjvv13/assistant']);
+  });
 });
 
 describe('bouwPlist', () => {

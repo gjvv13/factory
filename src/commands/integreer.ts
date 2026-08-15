@@ -61,10 +61,20 @@ interface WachtrijItem {
   readonly createdAt: string;
 }
 
-function wachtrij(repoDir: string): WachtrijItem[] {
+function wachtrij(repoDir: string, repoArg: readonly string[]): WachtrijItem[] {
   const uit = uitvoerVan(
     'gh',
-    ['pr', 'list', '--state', 'open', '--label', WACHTRIJ_LABEL, '--json', 'number,createdAt'],
+    [
+      'pr',
+      'list',
+      '--state',
+      'open',
+      '--label',
+      WACHTRIJ_LABEL,
+      '--json',
+      'number,createdAt',
+      ...repoArg,
+    ],
     repoDir,
   );
   if (uit === undefined || uit === '') {
@@ -83,10 +93,10 @@ interface PrStatus {
   readonly checks: readonly { readonly status?: string; readonly conclusion?: string }[];
 }
 
-function statusVan(repoDir: string, nummer: number): PrStatus {
+function statusVan(repoDir: string, nummer: number, repoArg: readonly string[]): PrStatus {
   const uit = uitvoerVan(
     'gh',
-    ['pr', 'view', String(nummer), '--json', 'mergeable,statusCheckRollup'],
+    ['pr', 'view', String(nummer), '--json', 'mergeable,statusCheckRollup', ...repoArg],
     repoDir,
   );
   const data = JSON.parse(uit ?? '{}') as {
@@ -96,7 +106,12 @@ function statusVan(repoDir: string, nummer: number): PrStatus {
   return { mergeable: data.mergeable ?? 'UNKNOWN', checks: data.statusCheckRollup ?? [] };
 }
 
-function kickBack(repoDir: string, nummer: number, reden: string): void {
+function kickBack(
+  repoDir: string,
+  nummer: number,
+  reden: string,
+  repoArg: readonly string[],
+): void {
   run(
     'gh',
     [
@@ -105,10 +120,11 @@ function kickBack(repoDir: string, nummer: number, reden: string): void {
       String(nummer),
       '--body',
       `Integratie gestopt: ${reden}. Uit de wachtrij gehaald — los op en lever opnieuw in met \`factory inleveren\`.`,
+      ...repoArg,
     ],
     { cwd: repoDir, toleranter: true },
   );
-  run('gh', ['pr', 'edit', String(nummer), '--remove-label', WACHTRIJ_LABEL], {
+  run('gh', ['pr', 'edit', String(nummer), '--remove-label', WACHTRIJ_LABEL, ...repoArg], {
     cwd: repoDir,
     toleranter: true,
   });
@@ -120,8 +136,8 @@ function kickBack(repoDir: string, nummer: number, reden: string): void {
  * mergen. Rood of een merge-conflict → kick-back (uit de rij, met uitleg). Poort nog
  * bezig → wachten tot de volgende run (we lopen niet vooruit op de FIFO-volgorde).
  */
-function verwerkOudste(repoDir: string, nummer: number): Uitkomst {
-  const { mergeable, checks } = statusVan(repoDir, nummer);
+function verwerkOudste(repoDir: string, nummer: number, repoArg: readonly string[]): Uitkomst {
+  const { mergeable, checks } = statusVan(repoDir, nummer, repoArg);
   const gefaald = checks.some(
     (c) =>
       c.conclusion === 'FAILURE' ||
@@ -132,11 +148,11 @@ function verwerkOudste(repoDir: string, nummer: number): Uitkomst {
   const draaitNog = checks.some((c) => c.status !== 'COMPLETED');
 
   if (gefaald) {
-    kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is rood');
+    kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is rood', repoArg);
     return 'kickback';
   }
   if (mergeable === 'CONFLICTING') {
-    kickBack(repoDir, nummer, 'merge-conflict met main');
+    kickBack(repoDir, nummer, 'merge-conflict met main', repoArg);
     return 'kickback';
   }
   if (draaitNog || mergeable === 'UNKNOWN') {
@@ -144,13 +160,13 @@ function verwerkOudste(repoDir: string, nummer: number): Uitkomst {
   }
 
   // Groen + mergeable → mergen met een merge-commit (zoals de rest van het ecosysteem).
-  const merge = run('gh', ['pr', 'merge', String(nummer), '--merge'], {
+  const merge = run('gh', ['pr', 'merge', String(nummer), '--merge', ...repoArg], {
     cwd: repoDir,
     capture: true,
     toleranter: true,
   });
   if (merge.code !== 0) {
-    kickBack(repoDir, nummer, 'de merge mislukte');
+    kickBack(repoDir, nummer, 'de merge mislukte', repoArg);
     return 'kickback';
   }
   ok(`#${String(nummer)} geïntegreerd`);
@@ -223,6 +239,12 @@ export interface IntegreerOpties {
   readonly installeer?: boolean;
   /** Verwijdert die LaunchAgent. */
   readonly verwijder?: boolean;
+  /**
+   * Richt `gh` op deze `<owner>/<naam>` i.p.v. de git-remote van de huidige map. Zo
+   * draait de drain zonder de repo-map te lezen — nodig om de LaunchAgent buiten
+   * `~/Documents` (macOS TCC) te kunnen draaien.
+   */
+  readonly repo?: string;
 }
 
 /**
@@ -242,6 +264,9 @@ export function integreer(opties: IntegreerOpties = {}): void {
   }
 
   const repoDir = process.cwd();
+  // Met --repo richten we gh expliciet en lezen we de repo-map niet (TCC-vrij); zonder
+  // --repo gebruikt gh de git-remote van de huidige map.
+  const repoArg: string[] = opties.repo === undefined ? [] : ['--repo', opties.repo];
   if (!neemLock()) {
     waarschuwing('Er draait al een integreer-run; deze wordt overgeslagen.');
     return;
@@ -250,7 +275,7 @@ export function integreer(opties: IntegreerOpties = {}): void {
     kop('Wachtrij verwerken');
     const gezien = new Set<number>();
     for (;;) {
-      const rij = wachtrij(repoDir);
+      const rij = wachtrij(repoDir, repoArg);
       const oudste = rij[0];
       if (oudste === undefined) {
         ok('Wachtrij is leeg.');
@@ -263,7 +288,7 @@ export function integreer(opties: IntegreerOpties = {}): void {
       }
       gezien.add(oudste.nummer);
 
-      if (verwerkOudste(repoDir, oudste.nummer) === 'wacht') {
+      if (verwerkOudste(repoDir, oudste.nummer, repoArg) === 'wacht') {
         ok(
           `#${String(oudste.nummer)}: poort draait nog — de wachtrij pauzeert tot de volgende run.`,
         );

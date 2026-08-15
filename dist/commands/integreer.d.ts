@@ -10,6 +10,12 @@ export interface IntegreerOpties {
     readonly installeer?: boolean;
     /** Verwijdert die LaunchAgent. */
     readonly verwijder?: boolean;
+    /**
+     * Richt `gh` op deze `<owner>/<naam>` i.p.v. de git-remote van de huidige map. Zo
+     * draait de drain zonder de repo-map te lezen — nodig om de LaunchAgent buiten
+     * `~/Documents` (macOS TCC) te kunnen draaien.
+     */
+    readonly repo?: string;
 }
 /**
  * Werkt de factory-wachtrij af: neemt de oudste open `wachtrij`-PR, toetst hem via de
