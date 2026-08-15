@@ -151,6 +151,63 @@ function voegAppOptieToe(naam: string): void {
   }
 }
 
+/**
+ * Maakt de private GitHub-repo aan, zet `origin` en pusht `main` — in één gh-aanroep.
+ * Best-effort, net als voegAppOptieToe: is gh er niet, uitgelogd, zonder repo-scope,
+ * of bestaat de repo al, dan laten we de lokale app staan en drukken we de handmatige
+ * route af in plaats van hard te stoppen. De app is dan lokaal nog altijd bruikbaar.
+ */
+function maakGitHubRepo(naam: string, appDir: string): void {
+  kop('GitHub-repo aanmaken');
+  const repo = `${BACKLOG_OWNER}/${naam}`;
+  const uitkomst = run(
+    'gh',
+    ['repo', 'create', repo, '--private', '--source', appDir, '--remote', 'origin', '--push'],
+    { capture: true, toleranter: true },
+  );
+  if (uitkomst.code === 0) {
+    ok(`${repo} (private) aangemaakt, origin gezet en main gepusht`);
+    drukDeployChecklist(naam);
+    return;
+  }
+  waarschuwing(
+    `Kon de repo ${repo} niet via gh aanmaken (niet ingelogd, geen repo-scope, of hij bestaat al).`,
+  );
+  drukHandmatigeRepo(naam, appDir);
+}
+
+/**
+ * De twee stappen die bewust bij de mens blijven: het prod-secret zetten en de
+ * self-hosted runner registreren. Het registratietoken en het secret-materiaal
+ * halen we hier expliciet níet op — dat hoort bij de mens, niet bij de generator.
+ */
+function drukDeployChecklist(naam: string): void {
+  const repo = `${BACKLOG_OWNER}/${naam}`;
+  process.stdout.write(
+    [
+      '',
+      'Deploy-setup (handmatig, één keer):',
+      `  1. gh secret set PROD_SECRETS_ENV --repo ${repo} < environments/prod.secrets.env`,
+      `  2. runner-token op https://github.com/${repo}/settings/actions/runners/new, dan:`,
+      `     RUNNER_TOKEN=<token> ./scripts/setup-runner.sh ${naam}`,
+      '',
+    ].join('\n'),
+  );
+}
+
+/** Foutpad: de app staat lokaal klaar; druk de handmatige repo-stap af, plus de checklist. */
+function drukHandmatigeRepo(naam: string, appDir: string): void {
+  const repo = `${BACKLOG_OWNER}/${naam}`;
+  process.stdout.write(
+    [
+      '',
+      'De app staat lokaal klaar. Maak hem zelf GitHub-native:',
+      `  gh repo create ${repo} --private --source ${appDir} --remote origin --push`,
+    ].join('\n'),
+  );
+  drukDeployChecklist(naam);
+}
+
 export interface NieuwOpties {
   /** Koppel de factory via link:../factory in plaats van de git-tag; voor ontwikkelen aan de factory zelf. */
   readonly link?: boolean;
@@ -215,8 +272,14 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
   run('git', ['init', '-q', appDir]);
   git(['symbolic-ref', 'HEAD', 'refs/heads/main'], appDir);
   syncNaarApp(appDir);
+  git(['add', '-A'], appDir);
+  // --no-verify: er is nog geen node_modules, dus de pre-commit-poort kan hier niet
+  // draaien; verifiëren hoort straks bij `pnpm verify`, niet bij het aanmaken. Zonder
+  // deze commit valt er ook niets te pushen.
+  git(['commit', '-q', '--no-verify', '-m', 'init: applicatie uit het factory-skeleton'], appDir);
 
   voegAppOptieToe(naam);
+  maakGitHubRepo(naam, appDir);
 
   ok(
     `'${naam}' staat klaar op poorten ${String(poorten.dev)} (dev), ${String(poorten.acc)} (acc), ${String(poorten.prod)} (prod)`,
