@@ -119,4 +119,63 @@ describe('nieuw', () => {
       nieuw('Ongeldige Naam');
     }).toThrow(/kleine letters/);
   });
+
+  it('commit het skeleton en maakt een private GitHub-repo met een gepushte main', () => {
+    const { factoryRepo } = maakWerkruimte();
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    process.chdir(factoryRepo);
+
+    nieuw('proefapp');
+
+    // Er komt een init-commit vóór de push; zonder node_modules kan de pre-commit-poort
+    // niet draaien, dus expliciet --no-verify.
+    expect(opnemer.aanroepen).toContainEqual(
+      expect.objectContaining({
+        commando: 'git',
+        argumenten: expect.arrayContaining(['commit', '--no-verify']),
+      }),
+    );
+    // De repo wordt privé aangemaakt, met origin en een gepushte main, in één gh-aanroep.
+    expect(opnemer.aanroepen).toContainEqual(
+      expect.objectContaining({
+        commando: 'gh',
+        argumenten: expect.arrayContaining([
+          'repo',
+          'create',
+          'gjvv13/proefapp',
+          '--private',
+          '--push',
+        ]),
+      }),
+    );
+    // De deploy-checklist (secret + runner) wordt afgedrukt, maar niets ervan
+    // automatisch uitgevoerd.
+    const uitvoer = schrijf.mock.calls.map((c) => String(c[0])).join('');
+    expect(uitvoer).toContain('PROD_SECRETS_ENV');
+    expect(uitvoer).toContain('setup-runner.sh proefapp');
+  });
+
+  it('valt netjes terug als gh de repo niet kan aanmaken: geen crash, app blijft, handmatige route', () => {
+    const { factoryRepo, werkruimte } = maakWerkruimte();
+    // gh repo create faalt (uitgelogd, geen recht, of de repo bestaat al).
+    const opnemerMetFout = maakUitvoerderOpnemer((aanroep) =>
+      aanroep.commando === 'gh' && aanroep.argumenten[0] === 'repo' ? { code: 1 } : {},
+    );
+    stelUitvoerderIn(opnemerMetFout.uitvoerder);
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    process.chdir(factoryRepo);
+
+    expect(() => {
+      nieuw('proefapp');
+    }).not.toThrow();
+
+    // De app is lokaal wél aangemaakt.
+    expect(readFileSync(path.join(werkruimte, 'proefapp', 'factory.json'), 'utf8')).toContain(
+      '"naam": "proefapp"',
+    );
+    // En de gebruiker krijgt de handmatige repo-stap plus de checklist te zien.
+    const uitvoer = schrijf.mock.calls.map((c) => String(c[0])).join('');
+    expect(uitvoer).toContain('gh repo create gjvv13/proefapp');
+    expect(uitvoer).toContain('PROD_SECRETS_ENV');
+  });
 });
