@@ -166,9 +166,16 @@ af — oudste PR eerst. Het toetst elke PR via de bestaande CI-poort (de `ci.yml
 merget bij groen + mergeable; een rode poort of merge-conflict koppelt terug (label eraf +
 PR-comment) zonder de rij te blokkeren. Een mini-lock houdt het single-instance; `integreer`
 raakt de werkmap niet aan (alleen `gh`). Een merge triggert daarna de deploy-workflow, dus
-wachtrij en auto-deploy sluiten op elkaar aan. `factory integreer --installeer` zet een
-LaunchAgent op de mini die de wachtrij elke minuut aftikt (`--verwijder` haalt 'm weg);
-zonder die LaunchAgent draai je `factory integreer` met de hand.
+wachtrij en auto-deploy sluiten op elkaar aan.
+
+**Automatisch aftikken.** `factory integreer --installeer` zet een LaunchAgent op de mini
+die de wachtrij elke minuut afwerkt (`--verwijder` haalt 'm weg). Omdat de repo's in
+`~/Documents` staan — door macOS TCC afgeschermd voor launchd — installeert `--installeer`
+de factory **globaal** en draait de LaunchAgent `factory integreer --repo <owner>/<naam>`
+vanuit de home-map: zo raakt de agent `~/Documents` niet aan. `--repo` richt alle
+`gh`-aanroepen expliciet, dus de drain heeft de repo-map niet nodig — je kunt `factory
+integreer --repo <owner>/<naam>` ook los vanuit elke map draaien. Zonder LaunchAgent draai
+je `factory integreer` gewoon met de hand in de repo.
 
 Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash
