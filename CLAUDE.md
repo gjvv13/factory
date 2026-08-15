@@ -17,6 +17,8 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | Commando                                          | Wat het doet                                                                  |
 | ------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `factory verify [--snel]`                         | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build              |
+| `factory inleveren [--titel=<t>]`                 | Poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten  |
+| `factory integreer`                               | De factory-wachtrij afwerken (private apps zonder GitHub merge-queue)         |
 | `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen      |
 | `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren                   |
 | `factory deploy <acc\|prod>`                      | Uitrol-orchestratie voor de runner: `acc` = release + promote acc             |
@@ -153,6 +155,19 @@ GitHub-hosted runner komt er niet bij). De runner doet een verse checkout, waari
 untracked `*.secrets.env` ontbreken; prod-secrets komen daarom uit het repo-secret
 `PROD_SECRETS_ENV` (acc heeft geen secrets nodig). De runner zet je op met
 `scripts/setup-runner.sh`; verder heb je eenmalig dat secret nodig.
+
+## Seriële integratie op de apps
+
+`factory inleveren` integreert een branch. Op de publieke factory-repo gebruikt het de
+**GitHub merge-queue**. Op de private apps kan die queue niet (org-only), dus zet je
+`"integratie": "lokaal"` in `factory.json`: `inleveren` geeft de PR dan het label
+`wachtrij` i.p.v. auto-merge, en `factory integreer` op de mini werkt die rij **serieel**
+af — oudste PR eerst. Het toetst elke PR via de bestaande CI-poort (de `ci.yml`-checks) en
+merget bij groen + mergeable; een rode poort of merge-conflict koppelt terug (label eraf +
+PR-comment) zonder de rij te blokkeren. Een mini-lock houdt het single-instance; `integreer`
+raakt de werkmap niet aan (alleen `gh`). Een merge triggert daarna de deploy-workflow, dus
+wachtrij en auto-deploy sluiten op elkaar aan. (Het periodiek draaien van `integreer` via een
+LaunchAgent komt in een volgende slice; nu draai je het met de hand.)
 
 Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash

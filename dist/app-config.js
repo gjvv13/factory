@@ -33,6 +33,14 @@ const appConfigSchema = z.object({
      * beweegt de basislijn omhoog. Default 0.5.
      */
     dekkingsTolerantie: z.number().min(0).max(5).default(0.5),
+    /**
+     * Hoe `factory inleveren` een branch integreert. `merge-queue` (default) gebruikt de
+     * GitHub merge-queue (werkt op de publieke factory-repo). `lokaal` gebruikt de
+     * factory-eigen wachtrij: de PR krijgt het label `wachtrij` en `factory integreer`
+     * op de mini werkt die rij serieel af — voor de private apps waar de merge-queue niet
+     * beschikbaar is.
+     */
+    integratie: z.enum(['merge-queue', 'lokaal']).default('merge-queue'),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {

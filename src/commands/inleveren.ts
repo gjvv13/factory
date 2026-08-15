@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan } from '../shell.js';
+import { WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
 import { verify } from './verify.js';
 
 export interface InleverenOpties {
@@ -74,7 +76,8 @@ export function inleveren(opties: InleverenOpties = {}): void {
   git(['push', '-q', '-u', 'origin', branch], repoDir);
   ok(`${branch} gepusht`);
 
-  kop('PR openen en in de merge-queue zetten');
+  const lokaal = gebruiktLokaleWachtrij(repoDir);
+  kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
   const titelArgumenten =
     opties.titel === undefined
       ? ['--fill']
@@ -89,12 +92,30 @@ export function inleveren(opties: InleverenOpties = {}): void {
   if (prUrl === undefined || prUrl === '') {
     throw new GebruikersFout('Kon geen PR aanmaken of vinden met gh.');
   }
+
+  if (lokaal) {
+    // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
+    // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).
+    zorgVoorWachtrijLabel(repoDir);
+    run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+    ok(`in de wachtrij gezet: ${prUrl}`);
+    process.stdout.write(
+      `\nDe factory-wachtrij integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`,
+    );
+    return;
+  }
+
   // Auto-merge aanzetten: met een ingeschakelde merge-queue plaatst dit de PR in de
   // wachtrij zodra de checks groen zijn. De queue merget serieel naar main.
   run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
   ok(`ingeleverd: ${prUrl}`);
-
   process.stdout.write(
     `\nDe merge-queue integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`,
   );
+}
+
+/** Of deze repo de factory-eigen wachtrij gebruikt (`factory.json`: `integratie: lokaal`). */
+function gebruiktLokaleWachtrij(repoDir: string): boolean {
+  const appDir = zoekAppDir(repoDir);
+  return appDir !== undefined && leesAppConfig(appDir).integratie === 'lokaal';
 }
