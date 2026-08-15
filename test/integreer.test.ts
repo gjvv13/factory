@@ -127,28 +127,44 @@ describe('integreer', () => {
     expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '5', '--merge']);
     expect(ghArgs(aanroepen)).toContainEqual(['pr', 'merge', '6', '--merge']);
   });
+
+  it('--repo: richt elke gh-aanroep op de opgegeven repo (TCC-vrij)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, GROEN));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer({ repo: 'gjvv13/assistant' });
+
+    const gh = ghArgs(aanroepen);
+    expect(gh.find((a) => a[1] === 'list')).toEqual(
+      expect.arrayContaining(['--repo', 'gjvv13/assistant']),
+    );
+    expect(gh.find((a) => a[1] === 'view')).toEqual(
+      expect.arrayContaining(['--repo', 'gjvv13/assistant']),
+    );
+    expect(gh).toContainEqual(['pr', 'merge', '7', '--merge', '--repo', 'gjvv13/assistant']);
+  });
 });
 
 describe('bouwPlist', () => {
-  const config = {
+  const opzet = {
     naam: 'proefapp',
-    poorten: { dev: 1, acc: 2, prod: 3 },
-    envRoot: 'envs',
-    dekkingsRatchet: 'waarschuw' as const,
-    dekkingsTolerantie: 0.5,
-    integratie: 'lokaal' as const,
-    appDir: '/repo/proefapp',
-    envRootPad: '/repo/proefapp/envs',
+    bin: '/usr/local/bin/factory',
+    repo: 'gjvv13/proefapp',
+    werkmap: '/Users/gjvv',
+    logPad: '/Users/gjvv/Library/Logs/nl.factory.integreer.proefapp.log',
   };
 
-  it('bevat het label, het commando, de werkmap en een interval', () => {
-    const plist = bouwPlist(config);
+  it('wijst buiten ~/Documents: globale bin, --repo en home als werkmap', () => {
+    const plist = bouwPlist(opzet);
     expect(plist).toContain('<key>Label</key><string>nl.factory.integreer.proefapp</string>');
-    expect(plist).toContain('/repo/proefapp/node_modules/.bin/factory');
-    expect(plist).toContain('<string>integreer</string>');
-    expect(plist).toContain('<key>WorkingDirectory</key><string>/repo/proefapp</string>');
+    expect(plist).toContain('<string>/usr/local/bin/factory</string>');
+    expect(plist).toContain('<string>--repo=gjvv13/proefapp</string>');
+    expect(plist).toContain('<key>WorkingDirectory</key><string>/Users/gjvv</string>');
     expect(plist).toContain('<key>StartInterval</key><integer>60</integer>');
-    // De shell-PATH wordt meegebakken zodat launchd node/gh/pnpm vindt.
+    // De shell-PATH wordt meegebakken zodat launchd node/gh vindt.
     expect(plist).toContain('<key>PATH</key>');
+    // De TCC-gevoelige velden (bin, werkmap, log) wijzen buiten ~/Documents.
+    expect(plist).not.toContain('/Documents/proefapp');
+    expect(plist).not.toContain('node_modules/.bin/factory');
   });
 });
