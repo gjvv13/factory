@@ -27,6 +27,20 @@ const E2E_SUBPAD = path.join('coverage', 'e2e');
  */
 const STANDAARD_EXCLUDE = ['app/src/main.ts', 'app/src/db/migrate.ts', 'app/src/db/seed.ts'];
 
+/**
+ * De bronpaden die unit en contract al meten (`LAAG_INCLUDE` in `configs/coverage.js`).
+ * De e2e-meting draait op de héle app, dus zonder deze uitsluiting meet c8 `core/` en
+ * `clients/` nóg een keer — met andere branch-locaties dan vitest, waarop de merge ze
+ * dubbel telt (#69). Bewust hier herhaald, net als {@link STANDAARD_EXCLUDE} (TypeScript
+ * in het pakket vs. los JavaScript daar); de drift-guard-test houdt beide lijsten gelijk.
+ */
+export const LAAG_UITSLUITING = [
+  'app/src/core/**/*.ts',
+  'app/src/flags/**/*.ts',
+  'app/src/config.ts',
+  'app/src/clients/**/*.ts',
+];
+
 function coverageAan(): boolean {
   return Boolean(process.env.FACTORY_COVERAGE);
 }
@@ -70,7 +84,7 @@ export async function schrijfE2eDekking(rootDir: string): Promise<void> {
     reportsDirectory: path.join(rootDir, E2E_SUBPAD),
     reporter: ['json-summary', 'json'],
     include: ['app/src/**'],
-    exclude: STANDAARD_EXCLUDE,
+    exclude: [...STANDAARD_EXCLUDE, ...LAAG_UITSLUITING],
     excludeNodeModules: true,
     all: false,
     resolve: '',
