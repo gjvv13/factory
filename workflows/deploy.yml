@@ -7,17 +7,18 @@ name: deploy
 # Draait op een self-hosted runner op de mini (prod draait als pm2 op 127.0.0.1 en
 # is voor een GitHub-hosted runner onbereikbaar).
 #
-# De prod-poort: bevat de change een nieuwe DB-migratie, dan loopt prod via het
-# GitHub-environment `prod` en wacht op één goedkeuring (migraties rollen niet
-# automatisch terug). Zonder migratie gaat prod automatisch door.
+# De prod-poort: bevat de change een nieuwe DB-migratie, dan rolt prod NIET
+# automatisch uit (migraties rollen niet terug) maar draait de `migratie-melding`-job,
+# die vraagt om een handmatige `factory promote prod`. Zonder migratie gaat prod
+# automatisch door. (Environment-required-reviewers zijn op private persoonlijke repos
+# niet beschikbaar — Team/Enterprise-only — vandaar deze handmatige stap.)
 #
 # Eenmalige setup in de app-repo:
 #   - een self-hosted runner op de mini met het label `mini`, als je gebruiker
 #     (pm2 + ~/AppEnvs bereikbaar) — zie factory/scripts/setup-runner.sh;
 #   - een repo-secret `PROD_SECRETS_ENV` met de volledige inhoud van
 #     environments/prod.secrets.env (die staat niet in git; de verse checkout van de
-#     runner heeft 'm nodig om prod met secrets te starten);
-#   - een environment `prod` met verplichte reviewer(s), voor de migratie-poort.
+#     runner heeft 'm nodig om prod met secrets te starten).
 
 on:
   push:
@@ -70,12 +71,12 @@ jobs:
       - id: migratie
         run: echo "nieuw=$(node_modules/.bin/factory heeft-migratie | tail -n1)" >> "$GITHUB_OUTPUT"
 
+  # Alleen zónder migratie automatisch naar prod. Migraties rollen niet terug, dus
+  # bij een nieuwe migratie draait i.p.v. deze job de `migratie-melding`-job hieronder.
   prod:
     needs: acc
+    if: ${{ needs.acc.outputs.migratie != 'ja' }}
     runs-on: [self-hosted, mini]
-    # Bij een nieuwe migratie via het environment `prod` (verplichte goedkeuring);
-    # anders geen environment, dus meteen door.
-    environment: ${{ needs.acc.outputs.migratie == 'ja' && 'prod' || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -105,3 +106,27 @@ jobs:
       # deploy prod promoveert de bestaande (nieuwste) tag naar prod; geen nieuwe
       # release. Komt prod niet gezond op, dan geldt promote's proces-rollback.
       - run: pnpm exec factory deploy prod
+
+  # Migratie-poort zonder betaald environment. Environment-required-reviewers zijn op
+  # private persoonlijke repos niet beschikbaar (Team/Enterprise-only), dus we rollen
+  # prod bij een nieuwe migratie NIET automatisch uit maar melden dat er een handmatige
+  # promote nodig is. De run blijft groen: prod is bewust overgeslagen, niet gefaald.
+  migratie-melding:
+    needs: acc
+    if: ${{ needs.acc.outputs.migratie == 'ja' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Migratie gedetecteerd — prod handmatig uitrollen
+        run: |
+          echo "::warning::Nieuwe DB-migratie in deze release — prod is NIET automatisch uitgerold. Rol handmatig uit met: factory promote prod"
+          {
+            echo "### ⚠️ Migratie gedetecteerd — prod niet automatisch uitgerold"
+            echo ""
+            echo "Deze release bevat een nieuwe DB-migratie. Migraties rollen niet automatisch"
+            echo "terug, dus prod wacht op een handmatige stap. Toets de migratie op acc en rol"
+            echo "prod dan uit met:"
+            echo ""
+            echo '```'
+            echo "factory promote prod"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

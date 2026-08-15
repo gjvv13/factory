@@ -138,16 +138,21 @@ Heeft een app een `deploy.yml` (via `factory sync`) en een self-hosted runner me
 label `mini` op de mini, dan rolt elke merge naar `main` automatisch uit. De
 workflow draait `factory deploy acc` (nieuwe release-tag + promote acc) en daarna
 prod. Bevat de change een **nieuwe DB-migratie** (`factory heeft-migratie` kijkt
-naar toegevoegde bestanden onder `migrations/` t.o.v. de vorige tag), dan loopt prod
-via het GitHub-environment `prod` en wacht op één goedkeuring — migraties rollen niet
-automatisch terug. Zonder migratie gaat prod automatisch door.
+naar toegevoegde bestanden onder `migrations/` t.o.v. de vorige tag), dan rolt de
+workflow prod **niet** automatisch uit — migraties rollen niet automatisch terug —
+maar meldt met een warning + een run-samenvatting dat je prod handmatig moet
+uitrollen met `factory promote prod`. Zonder migratie gaat prod automatisch door.
+
+(Een `prod`-environment met verplichte reviewer zou fraaier zijn, maar
+environment-protection is op private persoonlijke repos niet beschikbaar — net als de
+merge-queue vereist het een Team/Enterprise-organisatie. Vandaar de handmatige
+promote-stap i.p.v. een approval-klik.)
 
 Prod draait als pm2 op `127.0.0.1`, dus de uitrol kan alleen op de mini (een
 GitHub-hosted runner komt er niet bij). De runner doet een verse checkout, waarin de
 untracked `*.secrets.env` ontbreken; prod-secrets komen daarom uit het repo-secret
 `PROD_SECRETS_ENV` (acc heeft geen secrets nodig). De runner zet je op met
-`scripts/setup-runner.sh`; verder heb je eenmalig het environment `prod` met een
-verplichte reviewer en dat secret nodig.
+`scripts/setup-runner.sh`; verder heb je eenmalig dat secret nodig.
 
 Vier soorten bestanden kunnen niet uit `node_modules` komen, omdat Claude Code,
 git en GitHub Actions ze op een vaste plek in de repo verwachten: de slash
