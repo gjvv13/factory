@@ -39,12 +39,16 @@ export interface RunOptions {
 export interface RunResult {
   readonly code: number;
   readonly stdout: string;
+  /** Gevangen stderr; leeg als de uitvoer naar de terminal ging (geen capture). */
+  readonly stderr: string;
 }
 
 /** Ruwe uitkomst van een proces, vóór interpretatie door run(). */
 export interface ProcesUitkomst {
   readonly code: number;
   readonly stdout: string;
+  /** Gevangen stderr (alleen bij capture); leeg of afwezig als niet gevangen. */
+  readonly stderr?: string;
   /** Gezet als het proces niet gestart kon worden (commando niet gevonden e.d.). */
   readonly startfout?: string;
 }
@@ -70,7 +74,7 @@ const spawnUitvoerder: Uitvoerder = (commando, argumenten, options) => {
   if (resultaat.error !== undefined) {
     return { code: 1, stdout: '', startfout: resultaat.error.message };
   }
-  return { code: resultaat.status ?? 1, stdout: resultaat.stdout };
+  return { code: resultaat.status ?? 1, stdout: resultaat.stdout, stderr: resultaat.stderr };
 };
 
 let huidigeUitvoerder: Uitvoerder = spawnUitvoerder;
@@ -99,7 +103,101 @@ export function run(commando: string, argumenten: string[], options: RunOptions 
       `'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`,
     );
   }
-  return { code: uitkomst.code, stdout: uitkomst.stdout };
+  return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+}
+
+/**
+ * Herkent de signatuur van een tijdelijke DNS-storing naar een externe host — de
+ * blip die af en toe `git push` (ssh) of `pnpm install` (https) laat mislukken.
+ * Bewust strak op de bekende strings, zodat een échte fout (auth, non-fast-forward,
+ * merge-conflict) níet als vergeeflijk telt en meteen naar boven komt.
+ */
+export function isDnsBlip(tekst: string): boolean {
+  return /could not resolve host|nodename nor servname|temporary failure in name resolution|getaddrinfo (?:ENOTFOUND|EAI_AGAIN)/i.test(
+    tekst,
+  );
+}
+
+/** Een pauze in milliseconden. Injecteerbaar zodat tests niet echt wachten. */
+export type Wacht = (ms: number) => void;
+
+const echteWacht: Wacht = (ms) => {
+  // Synchrone slaap: run() is synchroon (spawnSync), dus de backoff kan geen await
+  // gebruiken. Atomics.wait blokkeert deze thread zonder te pollen. In een CLI is
+  // even blokkeren prima; tests vervangen dit door een no-op.
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+let huidigeWacht: Wacht = echteWacht;
+
+/** Vervangt de backoff-slaap. Alleen bedoeld voor tests. */
+export function stelWachtIn(wacht: Wacht): void {
+  huidigeWacht = wacht;
+}
+
+/** Herstelt de echte backoff-slaap na een test. */
+export function herstelWacht(): void {
+  huidigeWacht = echteWacht;
+}
+
+export interface HerhaalOpties {
+  /** Maximaal aantal pogingen (inclusief de eerste). Default 3. */
+  readonly pogingen?: number;
+  /** Basiswachttijd in ms; verdubbelt per poging (1s → 2s → 4s). Default 1000. */
+  readonly backoffMs?: number;
+  /** Korte omschrijving voor de waarschuwing, bijv. 'push naar origin'. */
+  readonly wat?: string;
+}
+
+/**
+ * Voert een commando uit en herhaalt het bij een tijdelijke DNS-storing, met
+ * oplopende backoff. Alleen die klasse fout wordt herhaald: elke andere non-nul
+ * uitkomst valt terug op het normale run()-gedrag (fout naar boven, tenzij
+ * `toleranter`). Blijft de storing aanhouden, dan faalt de laatste poging met de
+ * echte fout. De uitvoer wordt gevangen om stderr te kunnen inspecteren en bij een
+ * echte fout alsnog doorgegeven, zodat de aanroeper niets aan zichtbaarheid inlevert.
+ */
+export function runMetHerhaling(
+  commando: string,
+  argumenten: string[],
+  options: RunOptions = {},
+  herhaal: HerhaalOpties = {},
+): RunResult {
+  const pogingen = herhaal.pogingen ?? 3;
+  const backoffMs = herhaal.backoffMs ?? 1000;
+  const wat = herhaal.wat ?? commando;
+
+  for (let poging = 1; ; poging += 1) {
+    const uitkomst = huidigeUitvoerder(commando, argumenten, { ...options, capture: true });
+    if (uitkomst.startfout !== undefined) {
+      throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
+    }
+    if (uitkomst.code === 0) {
+      return { code: 0, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+    }
+
+    const uitvoer = `${uitkomst.stdout}\n${uitkomst.stderr ?? ''}`;
+    if (isDnsBlip(uitvoer) && poging < pogingen) {
+      const wachtMs = backoffMs * 2 ** (poging - 1);
+      waarschuwing(
+        `${wat} faalde op een tijdelijke DNS-storing (poging ${String(poging)}/${String(pogingen)}), opnieuw over ${String(Math.round(wachtMs / 1000))}s…`,
+      );
+      huidigeWacht(wachtMs);
+      continue;
+    }
+
+    // Geen blip, of de pogingen zijn op: terug naar het normale run()-gedrag. We
+    // gaven capture geforceerd aan, dus geef de opgevangen uitvoer alsnog door zodat
+    // de echte fout zichtbaar is.
+    if (options.toleranter === true) {
+      return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+    }
+    if (uitkomst.stdout !== '') process.stdout.write(uitkomst.stdout);
+    if ((uitkomst.stderr ?? '') !== '') process.stderr.write(uitkomst.stderr ?? '');
+    throw new GebruikersFout(
+      `'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`,
+    );
+  }
 }
 
 export function git(argumenten: string[], cwd: string, options: RunOptions = {}): RunResult {

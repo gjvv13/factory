@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
-import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan, waarschuwing, } from '../shell.js';
+import { GebruikersFout, git, kop, ok, pakketbeheerder, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
 import { verify } from './verify.js';
 const SOORTEN = ['patch', 'minor', 'major'];
 function leesVersie(repoDir) {
@@ -54,8 +54,10 @@ export function release(soortArgument) {
     ok(`Release ${tag} aangemaakt`);
     if (uitvoerVan('git', ['remote', 'get-url', 'origin'], repoDir) !== undefined) {
         kop('Naar origin pushen');
-        git(['push', '-q', 'origin', 'main'], repoDir);
-        git(['push', '-q', 'origin', tag], repoDir);
+        // Push gaat naar GitHub (ssh/https) en is daarmee gevoelig voor de tijdelijke
+        // DNS-blip op de mini; herhaal alleen die klasse fout met backoff (zie #99).
+        runMetHerhaling('git', ['push', '-q', 'origin', 'main'], { cwd: repoDir }, { wat: 'push van main naar origin' });
+        runMetHerhaling('git', ['push', '-q', 'origin', tag], { cwd: repoDir }, { wat: `push van ${tag} naar origin` });
         ok(`main en ${tag} gepusht`);
     }
     else {
