@@ -50,20 +50,29 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 
 ## De pipeline
 
-| Stap          | Commando                             | Waar             |
-| ------------- | ------------------------------------ | ---------------- |
-| 1. Backlog    | `/idee <beschrijving>`               | hier             |
-| 2. Refinement | `/refine <issue#>`                   | hier             |
-| 3. Bouwen     | `/bouw <issue#> <slice>`             | in de applicatie |
-| 4. Testen     | `pnpm verify`                        | in de applicatie |
-| 5. Releasen   | `pnpm release [patch\|minor\|major]` | in de applicatie |
-| 6. Promoveren | `pnpm promote acc\|prod [tag]`       | in de applicatie |
+| Stap           | Commando                             | Waar             |
+| -------------- | ------------------------------------ | ---------------- |
+| 1. Backlog     | `/idee <beschrijving>`               | hier             |
+| 2. Functioneel | `/functioneel <issue#>`              | hier             |
+| 3. Technisch   | `/refine <issue#>`                   | hier             |
+| 4. Akkoord     | label naar `status:refined`          | hier             |
+| 5. Bouwen      | `/bouw <issue#> <slice>`             | in de applicatie |
+| 6. Testen      | `pnpm verify`                        | in de applicatie |
+| 7. Releasen    | `pnpm release [patch\|minor\|major]` | in de applicatie |
+| 8. Promoveren  | `pnpm promote acc\|prod [tag]`       | in de applicatie |
+
+Stap 2 legt vast **wat** het moet doen (dat weet alleen jij), stap 3 **hoe** (dat
+volgt uit de code). Die knip maakt stap 3 uitbesteedbaar aan een onbemande werker
+zonder dat een idee ooit ongezien code wordt; het staatlabel is de riem. Voor kleine
+`type:task`- en `type:bug`-items mag stap 2 overgeslagen worden: `/refine` op een
+`status:idea`-item doet beide helften in één keer.
 
 `/status` geeft het overzicht over de backlog en alle applicaties.
 
 De **backlog is één set GitHub Issues** in `gjvv13/factory`, met het `App`-veld
-(een kolom op het board) per applicatie en het label `status:idea|refined|done`
-per fase — zie [`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in
+(een kolom op het board) per applicatie en het label
+`status:idea|functioneel|technisch|refined|done` per fase — zie
+[`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in
 de applicatie.
 
 ## Een applicatie koppelen

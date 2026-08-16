@@ -28,17 +28,23 @@ app toe en de console neemt hem mee in het overzicht en de flag-bediening.
 
 ## De pipeline
 
-| Stap          | Commando                             | Waar             |
-| ------------- | ------------------------------------ | ---------------- |
-| 1. Backlog    | `/idee <beschrijving>`               | hier (factory)   |
-| 2. Refinement | `/refine <issue#>`                   | hier (factory)   |
-| 3. Bouwen     | `/bouw <issue#> <slice>`             | in de applicatie |
-| 4. Testen     | `pnpm verify`                        | in de applicatie |
-| 5. Releasen   | `pnpm release [patch\|minor\|major]` | in de applicatie |
-| 6. Promoveren | `pnpm promote acc\|prod [tag]`       | in de applicatie |
+| Stap           | Commando                             | Waar             |
+| -------------- | ------------------------------------ | ---------------- |
+| 1. Backlog     | `/idee <beschrijving>`               | hier (factory)   |
+| 2. Functioneel | `/functioneel <issue#>`              | hier (factory)   |
+| 3. Technisch   | `/refine <issue#>`                   | hier (factory)   |
+| 4. Akkoord     | label naar `status:refined`          | hier (factory)   |
+| 5. Bouwen      | `/bouw <issue#> <slice>`             | in de applicatie |
+| 6. Testen      | `pnpm verify`                        | in de applicatie |
+| 7. Releasen    | `pnpm release [patch\|minor\|major]` | in de applicatie |
+| 8. Promoveren  | `pnpm promote acc\|prod [tag]`       | in de applicatie |
 
-Groomen (idee, refine) doe je hier; bouwen doe je in de applicatie-repo.
-`/status` geeft het overzicht over de backlog en alle applicaties.
+Stap 2 legt vast **wat** het moet doen, stap 3 **hoe** — die knip maakt de
+technische uitwerking uitbesteedbaar aan een onbemande werker, terwijl de intentie
+en het akkoord bij jou blijven.
+
+Groomen (idee, functioneel, refine) doe je hier; bouwen doe je in de
+applicatie-repo. `/status` geeft het overzicht over de backlog en alle applicaties.
 
 ## Eén backlog voor alles
 
