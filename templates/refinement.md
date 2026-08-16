@@ -1,7 +1,7 @@
 ---
 id: <kort-kebab-case-id>
 titel: <korte titel>
-status: refined
+status: <fase — functioneel, technisch of refined; gelijk aan het status:-label>
 aangemaakt: <JJJJ-MM-DD>
 gerefined: <JJJJ-MM-DD>
 ---
@@ -14,6 +14,11 @@ Wat gaan we bouwen, in drie regels. Iemand die dit leest weet daarna waar het
 over gaat zonder de rest te lezen.
 
 ## Functionele architectuur
+
+_Functioneel — dit is van jou. Wat er gevraagd wordt weet alleen jij; deze secties
+leg je in gesprek vast met `/functioneel`. Een werker die de technische helft
+uitwerkt neemt ze **letterlijk** over en herschrijft ze niet — wil hij ervan
+afwijken, dan is dat een vraag terug, geen eigen besluit._
 
 ### Gedrag
 
@@ -42,6 +47,9 @@ dat dan onder _Wat het expliciet níet doet_.
 Grenzen zijn even belangrijk als de functie zelf.
 
 ## Technische architectuur
+
+_Technisch — dit volgt uit de code. Vanaf hier tot en met Besluiten werkt `/refine`
+het uit: met de hand, of onbemand door een werker._
 
 ### Onderdelen
 

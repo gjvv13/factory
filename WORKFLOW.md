@@ -23,7 +23,11 @@ Labels-kolom schoon en groepeer je het board in één oogopslag per applicatie.
 Naast het App-veld draagt elk issue twee soorten labels:
 
 - **`status:<fase>`** — waar het in de pijplijn zit: `status:idea` (ruw),
-  `status:refined` (uitgewerkt, klaar om te bouwen), `status:done` (afgerond).
+  `status:functioneel` (wát het moet doen ligt vast), `status:technisch`
+  (uitgewerkt, wacht op akkoord), `status:refined` (akkoord, klaar om te bouwen),
+  `status:done` (afgerond).
+- **`escalatie`** — een werker is gestopt met een vraag, of zijn run mislukte. Het
+  issue wacht op een antwoord en wordt niet opnieuw opgepakt.
 - **`type:<soort>`** — wat voor werk het is: `type:epic` (grote, meerdere-slices
   functionaliteit), `type:task` (klus, chore, kleine verbetering), `type:bug` (defect).
 
@@ -57,20 +61,40 @@ voor één applicatie, `status:` voor een fase, of `type:` voor epics vs. klein 
 
 ## De pijplijn
 
-| Stap          | Commando                 | Waar             | Wat er met het issue gebeurt                                          |
-| ------------- | ------------------------ | ---------------- | --------------------------------------------------------------------- |
-| 1. Idee       | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + labels `type:<soort>` + `status:idea` |
-| 2. Refinement | `/refine <issue#>`       | factory          | Body uitgewerkt; label `status:idea` → `status:refined`               |
-| 3. Bouwen     | `/bouw <issue#> <slice>` | in de applicatie | Slice bouwen; acceptatiecriteria afvinken in het issue                |
-| 4. Testen     | `pnpm verify`            | in de applicatie | —                                                                     |
-| 5. Releasen   | `pnpm release`           | in de applicatie | —                                                                     |
-| 6. Promoveren | `pnpm promote`           | in de applicatie | Bij afronding: `status:refined` → `status:done`, issue sluiten        |
+| Stap           | Commando                 | Waar             | Wat er met het issue gebeurt                                          |
+| -------------- | ------------------------ | ---------------- | --------------------------------------------------------------------- |
+| 1. Idee        | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + labels `type:<soort>` + `status:idea` |
+| 2. Functioneel | `/functioneel <issue#>`  | factory          | Wát het moet doen ligt vast; `status:idea` → `status:functioneel`     |
+| 3. Technisch   | `/refine <issue#>`       | factory          | Architectuur en slices; `status:functioneel` → `status:technisch`     |
+| 4. Akkoord     | label omzetten           | factory          | `status:technisch` → `status:refined`                                 |
+| 5. Bouwen      | `/bouw <issue#> <slice>` | in de applicatie | Slice bouwen; acceptatiecriteria afvinken in het issue                |
+| 6. Testen      | `pnpm verify`            | in de applicatie | —                                                                     |
+| 7. Releasen    | `pnpm release`           | in de applicatie | —                                                                     |
+| 8. Promoveren  | `pnpm promote`           | in de applicatie | Bij afronding: `status:refined` → `status:done`, issue sluiten        |
 
 `/status` geeft het overzicht via het board (per `App`-veld en `status:`).
 
+### De knip tussen functioneel en technisch
+
+Stap 2 en 3 zijn bewust gescheiden: **wat er gevraagd wordt weet alleen jij; hoe het
+gebouwd wordt volgt uit de code.** De refinement-template heeft die naad al — de
+secties onder _Functionele architectuur_ tegenover die onder _Technische
+architectuur_ — en `/functioneel` vult alleen de eerste helft.
+
+Die knip is er niet voor de vorm: hij maakt stap 3 uitbesteedbaar aan een onbemande
+werker (de orkestrator, #104) zonder dat er ooit een idee ongezien code wordt. **Het
+staatlabel is de riem.** Een werker pakt alleen issues op in de staat die hij mag
+behandelen; blijft een item op `status:idea` staan, dan gebeurt er niets. En alleen
+jij zet `status:technisch` om naar `status:refined` — voor een refinement bestaat
+geen `verify` die hem kan afkeuren, dus die poort kan alleen bij jou liggen.
+
+Voor kleine, duidelijke `type:task`- en `type:bug`-items mag je stap 2 overslaan:
+`/refine` op een `status:idea`-item doet beide helften in één keer en eindigt op
+`status:refined`, zoals vanouds.
+
 Aftikken hoort aan het eind, niet bij de merge: de acceptatiecriteria vink je af
-tijdens het bouwen (stap 3), maar `status:done` en het sluiten van het issue horen
-bij stap 6 — als de laatste slice op productie draait en je hem daar gezien hebt.
+tijdens het bouwen (stap 5), maar `status:done` en het sluiten van het issue horen
+bij stap 8 — als de laatste slice op productie draait en je hem daar gezien hebt.
 Wat "af" verder inhoudt, staat als één lijst onder _Klaar_ in de
 [`coding-guidelines`-skill](skills/coding-guidelines/SKILL.md).
 
@@ -94,7 +118,8 @@ app-chat; bouwen hoort in de factory-chat.
 
 ## Grooming vs. bouwen
 
-Groomen (idee, refine) doe je in factory; bouwen doe je in de applicatie-repo.
+Groomen (idee, functioneel, refine) doe je in factory; bouwen doe je in de
+applicatie-repo.
 Omdat alle issues in `gjvv13/factory` staan, werkt `/bouw` vanuit elke app met
 `gh issue view <nummer> -R gjvv13/factory`.
 

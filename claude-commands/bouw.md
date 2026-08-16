@@ -46,7 +46,7 @@ Doe dit zo:
 9. Commit in kleine stappen. Vink de acceptatiecriteria van deze slice af in het
    issue zodra je het gedrag hebt zien werken (in de GitHub-UI of met
    `gh issue edit`). Laat het label op `status:refined` staan en sluit het issue
-   niet: dat gebeurt pas als de laatste slice op productie draait — stap 6 van de
+   niet: dat gebeurt pas als de laatste slice op productie draait — stap 8 van de
    pijplijn in `WORKFLOW.md`.
 10. Sluit af met: wat werkt er nu, hoe kan ik het zelf proberen (concreet commando
     of bericht), en wat de volgende stap is.
