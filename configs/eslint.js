@@ -4,7 +4,8 @@ import prettier from 'eslint-config-prettier';
 
 /**
  * Gedeelde ESLint-configuratie voor alle applicaties uit de factory.
- * De regels horen bij CODING_GUIDELINES.md: wat afdwingbaar is, staat hier.
+ * De regels horen bij de coding-guidelines-skill
+ * (skills/coding-guidelines/SKILL.md): wat afdwingbaar is, staat hier.
  *
  * Gebruik in een applicatie:
  *

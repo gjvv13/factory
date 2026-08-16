@@ -28,8 +28,8 @@ factory: <antwoord>
 ### Natuurlijke taal
 
 Welke acties zijn via **natuurlijke taal** bereikbaar? Standaard: **alle** — elke
-gebruikersactie hoort een vrije-taal-ingang te hebben (zie het brein-patroon in
-`CODING_GUIDELINES.md`). Noem per actie een voorbeeldzin en de terugval als het
+gebruikersactie hoort een vrije-taal-ingang te hebben (zie het brein-patroon in de
+`coding-guidelines`-skill). Noem per actie een voorbeeldzin en de terugval als het
 brein het niet begrijpt. Is een actie bewust alléén een exact commando, motiveer
 dat dan onder _Wat het expliciet níet doet_.
 
@@ -45,7 +45,7 @@ Grenzen zijn even belangrijk als de functie zelf.
 
 ### Onderdelen
 
-Welke modules komen erbij of veranderen, per laag (zie `CODING_GUIDELINES.md`):
+Welke modules komen erbij of veranderen, per laag (zie de `coding-guidelines`-skill):
 
 | Laag     | Bestand                   | Wat er verandert |
 | -------- | ------------------------- | ---------------- |
@@ -60,8 +60,10 @@ Nieuwe of gewijzigde tabellen, en de migratie die daarvoor nodig is.
 
 ### Externe koppelingen
 
-Welke diensten worden aangeroepen, en welk contract hoort daarbij? Geen externe
-koppeling zonder contract test.
+Welke diensten worden aangeroepen, en welk contract hoort daarbij? Geen uitgaande
+koppeling zonder test die het contract vastlegt: een Pact als de andere kant een
+van onze eigen apps is, anders een opgenomen respons met een schema-check (zie
+_Tests_ in de `coding-guidelines`-skill).
 
 ### Feature flag
 
@@ -69,8 +71,9 @@ Naam van de flag en wanneer hij aan mag in productie.
 
 ## Slices
 
-Elke slice is zelfstandig af: werkt, is getest, kan naar productie. Als een
-slice alleen zin heeft samen met de volgende, is de opdeling verkeerd.
+Elke slice is zelfstandig af: werkt, is getest, kan naar productie — zie _Klaar_ in
+de `coding-guidelines`-skill voor de volledige lijst. Als een slice alleen zin
+heeft samen met de volgende, is de opdeling verkeerd.
 
 ### Slice 1 — <naam>
 

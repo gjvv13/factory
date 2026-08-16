@@ -44,8 +44,8 @@ channels/  clients/  http/      ← buitenkant: praten met de wereld
 - **`http/`** valideert invoer, roept `core/` aan en maakt een respons. Niets meer.
 - **`db/`** bevat schema, migraties en het inlezen van testdata. Queries staan in
   repositories in `core/`, zodat de rest van de code geen SQL of Drizzle ziet.
-- **`clients/`** bevat uitgaande koppelingen. Elke externe verbinding krijgt een
-  contract test.
+- **`clients/`** bevat uitgaande koppelingen. Elke uitgaande verbinding krijgt een
+  test die het contract vastlegt — welke soort, zie _Tests_.
 
 ## Afhankelijkheden expliciet maken
 
@@ -108,8 +108,21 @@ naam herhaalt. Wel commentaar bij een keuze die een lezer zou willen aanvechten.
 
 - Elke slice levert tests op. Een slice zonder tests is niet af.
 - **Unit** (`app/test/unit/`): domeinlogica, snel, in-memory database.
-- **Contract** (`app/test/contract/`): elke uitgaande verbinding krijgt een
-  Pact-contract. Nieuwe externe koppeling betekent nieuw contract.
+- **Contract** (`app/test/contract/`): elke uitgaande verbinding wordt hier
+  vastgelegd, maar met welk gereedschap hangt af van wie er aan de andere kant zit.
+  - **Een van onze eigen apps** (beheer → assistant, assistant → boodschappen):
+    een **Pact**. De aanroepende app legt zijn verwachting vast, de leverende app
+    verifieert die in zijn eigen poort. Daar is Pact voor gemaakt, en alleen dan
+    vangt hij een echte breuk — vóórdat je hem op productie merkt.
+  - **Een dienst van derden** (Claude, Matrix, een winkel-API): **geen Pact**.
+    Niemand aan die kant verifieert jouw contract, dus levert het alleen een dure
+    omweg naar een mock op. Leg de koppeling vast met een opgenomen respons plus
+    een Zod-schema op het antwoord: dat toetst wél iets, namelijk dat jouw client
+    het antwoord aankan en dat je aannames over het formaat expliciet zijn.
+
+  De regel blijft dus: geen nieuwe uitgaande koppeling zonder test die het contract
+  vastlegt. Alleen het gereedschap verschilt.
+
 - **End to end** (`app/test/e2e/`): tegen een echt gestarte applicatie over HTTP.
 - Testdata staat in `app/test/fixtures/` en wordt vóór elke test opnieuw
   ingelezen. Tests mogen nooit afhangen van wat een vorige test achterliet.
@@ -156,3 +169,42 @@ Kleine commits met een zin die zegt wat er verandert en waarom, in de
 gebiedende wijs: `voeg een time-out toe aan de mail-client omdat een trage host
 anders alles blokkeert`. Elke commit gaat door de pre-commit poort; `--no-verify`
 alleen als je weet waarom.
+
+## Klaar
+
+Eén lijst, zodat "is dit af?" geen gesprek achteraf is. Hij geldt per slice: een
+slice is zelfstandig af of hij is verkeerd geknipt.
+
+**Wat de poort toetst** — `factory verify`, en daarmee ook `release`:
+
+opmaak, lint, types, unit-, contract- en e2e-tests, de build, en de dekking (boven
+het minimum én niet onder de basislijn van de ratchet). Rood is niet af. De
+pre-commit hook draait hier alleen de snelle helft van; `--no-verify` slaat die
+over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
+
+**Wat je zelf toetst**, want hier is geen script voor:
+
+- [ ] De acceptatiecriteria van de slice staan afgevinkt in het issue, en ze staan
+      afgevinkt omdat je het gedrag hébt zien werken — niet omdat de code er staat.
+- [ ] De actie is bereikbaar in natuurlijke taal (zie _Natuurlijke taal_), of de
+      refinement legt onder _Wat het expliciet níet doet_ uit waarom niet.
+- [ ] Nieuw gedrag zit achter een flag die uit staat in productie, en je weet
+      wanneer die flag weer weg mag (zie _Feature flags_).
+- [ ] Verandert het datamodel: de migratie is gegenereerd met `pnpm db:generate`,
+      en er is een terugweg. Dit is de enige stap in de hele pijplijn die
+      `promote <vorige tag>` níet terugdraait, dus splits een verandering in
+      toevoegen-en-vullen nu, en het oude veld weghalen in een latere release —
+      pas als niets het meer leest.
+- [ ] Kan het nieuwe gedrag falen, dan kun je achteraf zien dát het gebeurde: een
+      logregel op het punt waar de beslissing valt, met het id dat het inkomende
+      bericht of verzoek meedraagt. Een fout die alleen als stilte zichtbaar is,
+      kost op productie een veelvoud.
+- [ ] Wijkt het gedrag af van wat de documentatie van de app belooft, dan is die
+      documentatie mee bijgewerkt.
+- [ ] Je hebt het zelf gedaan op een omgeving waar het écht draait — acc na
+      `promote acc`, of prod. "CI was groen" is geen waarneming.
+
+**Wanneer het issue dicht gaat.** Afvinken doe je tijdens het bouwen; `status:done`
+en het sluiten van het issue horen bij de laatste stap van de pijplijn, als de
+laatste slice op productie draait en je hem daar gezien hebt. Een gesloten issue
+betekent "het werkt", niet "het is gemerged".

@@ -87,4 +87,4 @@ dat doen.
 
 - [`WORKFLOW.md`](WORKFLOW.md) — de backlog- en pipeline-werkwijze over de repo's heen
 - [`CLAUDE.md`](CLAUDE.md) — hoe de factory intern in elkaar zit en hoe je eraan werkt
-- [`CODING_GUIDELINES.md`](CODING_GUIDELINES.md) — de coding guidelines die voor elke app gelden
+- [`skills/coding-guidelines/SKILL.md`](skills/coding-guidelines/SKILL.md) — de coding guidelines en de definition of done die voor elke app gelden

@@ -41,11 +41,13 @@ Doe dit zo:
 7. Schrijf de tests uit de slice: unit voor de logica, contract bij een nieuwe
    externe koppeling, e2e voor het gedrag dat ik als gebruiker merk. Nieuwe
    testdata gaat in `app/test/fixtures/`.
-8. Draai `pnpm verify` tot alles groen is. Rood betekent niet af.
+8. Draai `pnpm verify` tot alles groen is, en loop daarna de _Klaar_-lijst uit de
+   `coding-guidelines`-skill langs. Rood is niet af, maar groen alleen ook niet.
 9. Commit in kleine stappen. Vink de acceptatiecriteria van deze slice af in het
-   issue zodra ze aantoonbaar werken (in de GitHub-UI of met `gh issue edit`). Is
-   dit de laatste slice, zet dan het label `status:refined` → `status:done` en sluit
-   het issue.
+   issue zodra je het gedrag hebt zien werken (in de GitHub-UI of met
+   `gh issue edit`). Laat het label op `status:refined` staan en sluit het issue
+   niet: dat gebeurt pas als de laatste slice op productie draait — stap 6 van de
+   pijplijn in `WORKFLOW.md`.
 10. Sluit af met: wat werkt er nu, hoe kan ik het zelf proberen (concreet commando
     of bericht), en wat de volgende stap is.
 
