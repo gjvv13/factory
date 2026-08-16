@@ -48,6 +48,10 @@ function geefLockVrij() {
         // Al weg — prima.
     }
 }
+/** Waar de run naar keek, voor in een foutmelding: het repo van `--repo` of de werkmap. */
+function doelOmschrijving(repoDir, repoArg) {
+    return repoArg[1] ?? repoDir;
+}
 function wachtrij(repoDir, repoArg) {
     const uit = uitvoerVan('gh', [
         'pr',
@@ -60,7 +64,14 @@ function wachtrij(repoDir, repoArg) {
         'number,createdAt',
         ...repoArg,
     ], repoDir);
-    if (uit === undefined || uit === '') {
+    // `undefined` betekent dat gh faalde, `''` dat er niets in de rij staat. Die twee
+    // uit elkaar houden is het hele punt: viel de query om (geen git-repo in de
+    // werkmap, gh niet ingelogd, verkeerd repo), dan is "de wachtrij is leeg" een
+    // groen vinkje voor een controle die niet heeft plaatsgevonden.
+    if (uit === undefined) {
+        throw new Error(`De wachtrij kon niet gelezen worden: \`gh pr list\` faalde voor ${doelOmschrijving(repoDir, repoArg)}.`);
+    }
+    if (uit === '') {
         return [];
     }
     const rijen = JSON.parse(uit);
@@ -70,7 +81,12 @@ function wachtrij(repoDir, repoArg) {
 }
 function statusVan(repoDir, nummer, repoArg) {
     const uit = uitvoerVan('gh', ['pr', 'view', String(nummer), '--json', 'mergeable,statusCheckRollup', ...repoArg], repoDir);
-    const data = JSON.parse(uit ?? '{}');
+    // Ook hier: een mislukte aanroep is geen "status onbekend". Dat laatste laat de
+    // rij stilstaan zonder te zeggen waarom.
+    if (uit === undefined) {
+        throw new Error(`De status van #${String(nummer)} kon niet gelezen worden: \`gh pr view\` faalde voor ${doelOmschrijving(repoDir, repoArg)}.`);
+    }
+    const data = JSON.parse(uit === '' ? '{}' : uit);
     return { mergeable: data.mergeable ?? 'UNKNOWN', checks: data.statusCheckRollup ?? [] };
 }
 function kickBack(repoDir, nummer, reden, repoArg) {
@@ -121,6 +137,14 @@ function verwerkOudste(repoDir, nummer, repoArg) {
         kickBack(repoDir, nummer, 'de merge mislukte', repoArg);
         return 'kickback';
     }
+    // Label eraf: de PR is uit de rij. Anders draagt een gemergede PR het label nog,
+    // en ziet de volgende ronde hem heel even opnieuw als oudste — GitHub meldt een
+    // merge niet meteen overal. Dat leverde de tegenstrijdige melding
+    // "geïntegreerd" gevolgd door "bleef in de wachtrij" op.
+    run('gh', ['pr', 'edit', String(nummer), '--remove-label', WACHTRIJ_LABEL, ...repoArg], {
+        cwd: repoDir,
+        toleranter: true,
+    });
     ok(`#${String(nummer)} geïntegreerd`);
     return 'gemerged';
 }
@@ -300,7 +324,7 @@ export function integreer(opties = {}) {
             }
             // Vangnet tegen een lus: bleef de oudste na verwerking toch staan, dan stoppen.
             if (gezien.has(oudste.nummer)) {
-                waarschuwing(`#${String(oudste.nummer)} bleef in de wachtrij; gestopt.`);
+                waarschuwing(`#${String(oudste.nummer)} draagt het wachtrij-label nog na verwerking; gestopt om een lus te voorkomen.`);
                 break;
             }
             gezien.add(oudste.nummer);
