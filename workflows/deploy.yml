@@ -56,7 +56,22 @@ jobs:
           node-version-file: .nvmrc
           # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
           # op een blijvende self-hosted runner levert de Actions-cache weinig op.
-      - run: pnpm install --frozen-lockfile
+      # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
+      # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
+      # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI
+      # is grep-op-stderr broos, en een deterministische fout (lockfile-mismatch) faalt
+      # zo alsnog snel en netjes na drie korte pogingen.
+      - name: Dependencies installeren (met DNS-retry)
+        run: |
+          for poging in 1 2 3; do
+            if pnpm install --frozen-lockfile; then exit 0; fi
+            if [ "$poging" -lt 3 ]; then
+              echo "::warning::pnpm install faalde (poging $poging/3) — opnieuw over $((poging * 5))s…"
+              sleep "$((poging * 5))"
+            fi
+          done
+          echo "::error::pnpm install bleef falen na 3 pogingen"
+          exit 1
       - name: Git-identiteit voor de release-commit
         run: |
           git config user.name "github-actions[bot]"
@@ -93,7 +108,22 @@ jobs:
           node-version-file: .nvmrc
           # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
           # op een blijvende self-hosted runner levert de Actions-cache weinig op.
-      - run: pnpm install --frozen-lockfile
+      # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
+      # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
+      # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI
+      # is grep-op-stderr broos, en een deterministische fout (lockfile-mismatch) faalt
+      # zo alsnog snel en netjes na drie korte pogingen.
+      - name: Dependencies installeren (met DNS-retry)
+        run: |
+          for poging in 1 2 3; do
+            if pnpm install --frozen-lockfile; then exit 0; fi
+            if [ "$poging" -lt 3 ]; then
+              echo "::warning::pnpm install faalde (poging $poging/3) — opnieuw over $((poging * 5))s…"
+              sleep "$((poging * 5))"
+            fi
+          done
+          echo "::error::pnpm install bleef falen na 3 pogingen"
+          exit 1
       # De verse checkout mist de untracked *.secrets.env; prod heeft die wél nodig.
       # We schrijven ze uit het repo-secret vlak vóór de uitrol. De secret gaat via
       # het env-blok, NIET direct als ${{ secrets.* }} in het run-commando: bij een

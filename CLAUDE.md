@@ -174,6 +174,14 @@ untracked `*.secrets.env` ontbreken; prod-secrets komen daarom uit het repo-secr
 `PROD_SECRETS_ENV` (acc heeft geen secrets nodig). De runner zet je op met
 `scripts/setup-runner.sh`; verder heb je eenmalig dat secret nodig.
 
+De mini heeft af en toe een **transiente DNS-blip** naar GitHub-hosts (#99). De
+netwerkstappen zijn daarom verhard: `factory release` herhaalt de `git push` bij een
+DNS-fout (in de CLI), en `deploy.yml` draait `pnpm install` in een bounded retry (3×
+met backoff). Eén ding valt buiten deze retry: het **downloaden van een action**
+(bijv. `actions/checkout`) gebeurt vóór de stap draait en is niet in de workflow te
+omhullen — faalt dat op de blip, dan is de remedie `gh run rerun --failed` (of, later,
+een runner-cache van de actions).
+
 ## Seriële integratie op de apps
 
 `factory inleveren` integreert een branch. Op de publieke factory-repo gebruikt het de
