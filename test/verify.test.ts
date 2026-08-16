@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { beoordeelDekking, verify } from '../src/commands/verify.js';
+import { beoordeelDekking, telKwetsbaarheden, verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
@@ -75,5 +75,40 @@ describe('beoordeelDekking', () => {
 
   it('geeft geen oordeel zonder metingen én zonder merge-cijfer', () => {
     expect(beoordeelDekking([], 80, undefined)).toBeUndefined();
+  });
+});
+
+describe('telKwetsbaarheden', () => {
+  const uitvoer = (v: Record<string, number>): string =>
+    JSON.stringify({ metadata: { vulnerabilities: v } });
+
+  it('telt alleen wat op of boven het drempelniveau zit', () => {
+    const telling = telKwetsbaarheden(
+      uitvoer({ info: 3, low: 2, moderate: 1, high: 2, critical: 1 }),
+      'high',
+    );
+    expect(telling).toEqual({ aantal: 3, perNiveau: { high: 2, critical: 1 } });
+  });
+
+  it('telt niets als er onder de drempel niets ligt', () => {
+    expect(telKwetsbaarheden(uitvoer({ low: 5, high: 0 }), 'high')).toEqual({
+      aantal: 0,
+      perNiveau: {},
+    });
+  });
+
+  it('onderscheidt "kon niet draaien" van "niets gevonden"', () => {
+    // Geen netwerk: pnpm schrijft een foutmelding in plaats van json.
+    expect(telKwetsbaarheden('ERR_PNPM_AUDIT_ENDPOINT_FAILED', 'high')).toBeUndefined();
+    expect(telKwetsbaarheden('', 'high')).toBeUndefined();
+    // Geldige json, maar niet de vorm die we verwachten.
+    expect(telKwetsbaarheden('{"advisories":{}}', 'high')).toBeUndefined();
+  });
+
+  it('respecteert een lagere drempel', () => {
+    expect(telKwetsbaarheden(uitvoer({ moderate: 2, high: 1 }), 'moderate')).toEqual({
+      aantal: 3,
+      perNiveau: { moderate: 2, high: 1 },
+    });
   });
 });

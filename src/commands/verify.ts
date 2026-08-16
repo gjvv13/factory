@@ -11,7 +11,7 @@ import {
   BASISLIJN_BESTAND,
 } from '../dekking-basislijn.js';
 import type { Verschil } from '../dekking-basislijn.js';
-import { draaiScript, kop, ok, waarschuwing, GebruikersFout } from '../shell.js';
+import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
   readonly script: string;
@@ -162,6 +162,97 @@ export function beoordeelDekking(
   return { totaal, faalt: totaal < minimum };
 }
 
+/** De ernstniveaus van een advisory, oplopend. */
+const AUDIT_NIVEAUS = ['info', 'low', 'moderate', 'high', 'critical'] as const;
+
+export interface AuditTelling {
+  /** Aantal kwetsbaarheden op of boven het drempelniveau. */
+  readonly aantal: number;
+  /** Per niveau het aantal, alleen voor de niveaus die meetellen. */
+  readonly perNiveau: Readonly<Record<string, number>>;
+}
+
+/**
+ * Telt de kwetsbaarheden vanaf een drempelniveau uit de json-uitvoer van
+ * `pnpm audit`.
+ *
+ * Geeft `undefined` als de uitvoer niet te lezen is. Dat betekent "de audit kon
+ * niet draaien" — meestal geen netwerk (zie #99) — en dat is iets anders dan
+ * "niets gevonden". De poort mag niet groen kleuren op een controle die niet
+ * heeft plaatsgevonden, en ook niet omvallen op een netwerkhapering die los
+ * staat van de wijziging.
+ */
+export function telKwetsbaarheden(uitvoer: string, vanaf: string): AuditTelling | undefined {
+  let data: unknown;
+  try {
+    data = JSON.parse(uitvoer);
+  } catch {
+    return undefined;
+  }
+  const tellingen =
+    typeof data === 'object' && data !== null && 'metadata' in data
+      ? (data as { metadata?: { vulnerabilities?: Record<string, unknown> } }).metadata
+          ?.vulnerabilities
+      : undefined;
+  if (tellingen === undefined) {
+    return undefined;
+  }
+  const drempel = AUDIT_NIVEAUS.indexOf(vanaf as (typeof AUDIT_NIVEAUS)[number]);
+  const perNiveau: Record<string, number> = {};
+  let aantal = 0;
+  for (const [niveau, waarde] of Object.entries(tellingen)) {
+    const positie = AUDIT_NIVEAUS.indexOf(niveau as (typeof AUDIT_NIVEAUS)[number]);
+    if (positie < drempel || typeof waarde !== 'number' || waarde === 0) {
+      continue;
+    }
+    perNiveau[niveau] = waarde;
+    aantal += waarde;
+  }
+  return { aantal, perNiveau };
+}
+
+/**
+ * Toetst de afhankelijkheden op bekende kwetsbaarheden. Draait alleen bij de
+ * volledige poort: de stap kost netwerk en zegt niets over de wijziging zelf.
+ */
+function toetsAfhankelijkheden(repoDir: string, config: AppConfig | undefined): void {
+  const stand = config?.audit ?? 'waarschuw';
+  if (stand === 'uit') {
+    return;
+  }
+  const vanaf = config?.auditNiveau ?? 'high';
+  kop('Afhankelijkheden (pnpm audit)');
+
+  // `pnpm audit` sluit af met een niet-nul code zodra het iets vindt, dus we
+  // beoordelen de uitvoer en niet de exitcode.
+  const uitkomst = run('pnpm', ['audit', '--json'], {
+    cwd: repoDir,
+    capture: true,
+    toleranter: true,
+  });
+  const telling = telKwetsbaarheden(uitkomst.stdout, vanaf);
+  if (telling === undefined) {
+    waarschuwing('audit kon niet draaien (geen netwerk?) — overgeslagen, niets getoetst.');
+    return;
+  }
+  if (telling.aantal === 0) {
+    ok(`geen kwetsbaarheden vanaf ${vanaf}`);
+    return;
+  }
+
+  const uitsplitsing = Object.entries(telling.perNiveau)
+    .map(([niveau, n]) => `${String(n)}× ${niveau}`)
+    .join(', ');
+  const melding =
+    telling.aantal === 1
+      ? `1 kwetsbaarheid vanaf ${vanaf} (${uitsplitsing})`
+      : `${String(telling.aantal)} kwetsbaarheden vanaf ${vanaf} (${uitsplitsing})`;
+  if (stand === 'blokkeer') {
+    throw new GebruikersFout(`${melding}. Draai \`pnpm audit\` voor de details.`);
+  }
+  waarschuwing(`${melding} — draai \`pnpm audit\` voor de details.`);
+}
+
 export interface VerifyOpties {
   /** Slaat de e2e-tests over: handig tijdens ontwikkelen. */
   readonly snel?: boolean;
@@ -246,6 +337,8 @@ export function verify(opties: VerifyOpties = {}): void {
     if (gecombineerd !== undefined && config !== undefined && config.dekkingsRatchet !== 'uit') {
       pasRatchetToe(config, gecombineerd);
     }
+
+    toetsAfhankelijkheden(repoDir, config);
   }
 
   for (const titel of overgeslagen) {

@@ -21,6 +21,17 @@ declare const appConfigSchema: z.ZodObject<{
         "merge-queue": "merge-queue";
         lokaal: "lokaal";
     }>>;
+    audit: z.ZodDefault<z.ZodEnum<{
+        uit: "uit";
+        waarschuw: "waarschuw";
+        blokkeer: "blokkeer";
+    }>>;
+    auditNiveau: z.ZodDefault<z.ZodEnum<{
+        low: "low";
+        moderate: "moderate";
+        high: "high";
+        critical: "critical";
+    }>>;
 }, z.core.$strip>;
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
 export interface AppConfig extends AppConfigBestand {
