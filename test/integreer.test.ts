@@ -143,6 +143,47 @@ describe('integreer', () => {
     );
     expect(gh).toContainEqual(['pr', 'merge', '7', '--merge', '--repo', 'gjvv13/assistant']);
   });
+
+  it('een mislukte wachtrij-query stopt met een fout, niet met "wachtrij is leeg"', () => {
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[1] === 'list' ? { code: 1, stdout: '' } : {};
+    const { uitvoerder } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      integreer({ repo: 'gjvv13/backlog' });
+    }).toThrow(/gjvv13\/backlog/);
+  });
+
+  it('een mislukte status-query stopt met een fout in plaats van eeuwig te wachten', () => {
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando !== 'gh') return {};
+      if (argumenten[1] === 'list') {
+        return { stdout: JSON.stringify([{ number: 7, createdAt: '2026-08-15T10:00:00Z' }]) };
+      }
+      if (argumenten[1] === 'view') return { code: 1, stdout: '' };
+      return {};
+    };
+    const { uitvoerder } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      integreer();
+    }).toThrow(/#7/);
+  });
+
+  it('haalt na een geslaagde merge het wachtrij-label van de PR', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, GROEN));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer();
+
+    const gh = ghArgs(aanroepen);
+    const merge = gh.findIndex((a) => a[1] === 'merge');
+    const labelEraf = gh.findIndex((a) => a[1] === 'edit' && a.includes('--remove-label'));
+    expect(labelEraf).toBeGreaterThan(merge); // pas ná de merge
+    expect(gh[labelEraf]).toEqual(['pr', 'edit', '7', '--remove-label', 'wachtrij']);
+  });
 });
 
 describe('tarballVanDep', () => {

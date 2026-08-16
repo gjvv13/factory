@@ -11,6 +11,7 @@ import { release } from './commands/release.js';
 import { sync } from './commands/sync.js';
 import { verify } from './commands/verify.js';
 import { toonMigratieStatus } from './migratie.js';
+import { leesArgumenten } from './argumenten.js';
 import { fout, GebruikersFout } from './shell.js';
 const HULP = `factory — pipeline van idee tot productie
 
@@ -29,62 +30,78 @@ const HULP = `factory — pipeline van idee tot productie
 `;
 async function main(argumenten) {
     const [commando, ...rest] = argumenten;
-    const vlaggen = new Set(rest.filter((argument) => argument.startsWith('--')));
-    const positioneel = rest.filter((argument) => !argument.startsWith('--'));
     switch (commando) {
-        case 'verify':
-            verify({ snel: vlaggen.has('--snel'), preCommit: vlaggen.has('--pre-commit') });
+        case 'verify': {
+            const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--snel', '--pre-commit'] });
+            verify({ snel: schakelaars.has('--snel'), preCommit: schakelaars.has('--pre-commit') });
             return;
+        }
         case 'inleveren': {
-            const titel = [...vlaggen]
-                .find((vlag) => vlag.startsWith('--titel='))
-                ?.slice('--titel='.length);
-            inleveren(titel === undefined || titel === '' ? {} : { titel });
+            const { waarden } = leesArgumenten(rest, { waarden: ['--titel'] });
+            const titel = waarden.get('--titel');
+            inleveren(titel === undefined ? {} : { titel });
             return;
         }
         case 'integreer': {
-            const repo = [...vlaggen].find((vlag) => vlag.startsWith('--repo='))?.slice('--repo='.length);
+            const { schakelaars, waarden } = leesArgumenten(rest, {
+                schakelaars: ['--installeer', '--verwijder'],
+                waarden: ['--repo'],
+            });
+            const repo = waarden.get('--repo');
             integreer({
-                installeer: vlaggen.has('--installeer'),
-                verwijder: vlaggen.has('--verwijder'),
-                ...(repo === undefined || repo === '' ? {} : { repo }),
+                installeer: schakelaars.has('--installeer'),
+                verwijder: schakelaars.has('--verwijder'),
+                ...(repo === undefined ? {} : { repo }),
             });
             return;
         }
-        case 'release':
+        case 'release': {
+            const { positioneel } = leesArgumenten(rest);
             release(positioneel[0]);
             return;
-        case 'promote':
-            await promote(positioneel[0], positioneel[1], { ja: vlaggen.has('--ja') });
+        }
+        case 'promote': {
+            const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--ja'] });
+            await promote(positioneel[0], positioneel[1], { ja: schakelaars.has('--ja') });
             return;
-        case 'deploy':
+        }
+        case 'deploy': {
+            const { positioneel } = leesArgumenten(rest);
             await deploy(positioneel[0]);
             return;
+        }
         case 'heeft-migratie':
             toonMigratieStatus();
             return;
-        case 'env':
+        case 'env': {
+            const { positioneel } = leesArgumenten(rest);
             await env(positioneel[0], positioneel[1]);
             return;
-        case 'flag':
+        }
+        case 'flag': {
+            const { positioneel } = leesArgumenten(rest);
             await flag(positioneel[0], positioneel[1], positioneel[2]);
             return;
+        }
         case 'backup': {
-            const offsite = [...vlaggen]
-                .find((vlag) => vlag.startsWith('--offsite='))
-                ?.slice('--offsite='.length);
+            const { waarden, positioneel } = leesArgumenten(rest, { waarden: ['--offsite'] });
+            const offsite = waarden.get('--offsite');
             backup(positioneel[0], {
                 ...(positioneel[1] === undefined ? {} : { bewaar: Number(positioneel[1]) }),
-                ...(offsite === undefined || offsite === '' ? {} : { offsiteDir: offsite }),
+                ...(offsite === undefined ? {} : { offsiteDir: offsite }),
             });
             return;
         }
-        case 'nieuw':
-            nieuw(positioneel[0], { link: vlaggen.has('--link') });
+        case 'nieuw': {
+            const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--link'] });
+            nieuw(positioneel[0], { link: schakelaars.has('--link') });
             return;
-        case 'sync':
-            sync({ check: vlaggen.has('--check') });
+        }
+        case 'sync': {
+            const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--check'] });
+            sync({ check: schakelaars.has('--check') });
             return;
+        }
         case undefined:
         case 'help':
         case '--help':
