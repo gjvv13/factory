@@ -41,6 +41,16 @@ const appConfigSchema = z.object({
      * beschikbaar is.
      */
     integratie: z.enum(['merge-queue', 'lokaal']).default('merge-queue'),
+    /**
+     * Gedrag van de afhankelijkheden-audit in de volledige `factory verify`. `waarschuw`
+     * (default) meldt kwetsbare pakketten geel en houdt de poort groen; `blokkeer` laat
+     * verify falen; `uit` slaat de stap over. Advies-eerst, net als de dekkings-ratchet:
+     * een advisory in een transitieve dev-dependency mag een release niet gijzelen
+     * zolang je hem nog niet beoordeeld hebt.
+     */
+    audit: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
+    /** Vanaf welke ernst de audit meetelt. Default `high`: lager is in de praktijk ruis. */
+    auditNiveau: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
 });
 export const APP_CONFIG_BESTAND = 'factory.json';
 function absoluut(basis, pad) {

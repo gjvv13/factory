@@ -122,6 +122,15 @@ ze los kan tonen. De e2e-server draait als apart proces en wordt via
 `NODE_V8_COVERAGE` gemeten; de e2e-`global-setup` zet die ruwe coverage met c8 om
 naar `coverage/e2e/` (`factory/e2e-coverage`).
 
+**De afhankelijkheden-audit** draait als laatste stap van de volledige verify:
+`pnpm audit`, geteld vanaf `auditNiveau` (default `high`). `audit` bepaalt het
+gedrag — `waarschuw` (default) meldt geel en houdt de poort groen, `blokkeer` laat
+verify falen, `uit` slaat de stap over. Advies-eerst, net als de ratchet: een
+advisory in een transitieve dev-dependency mag geen release gijzelen zolang je hem
+nog niet beoordeeld hebt. De stap onderscheidt bewust "niets gevonden" van "kon
+niet draaien": zonder netwerk waarschuwt hij en toetst hij niets, in plaats van
+groen te kleuren of de poort te laten omvallen op een DNS-blip.
+
 Zo staat de poort bij het **release-moment**: `factory release` draait de volledige
 verify, dus er ontstaat geen tag onder de drempel, en `factory promote prod` rolt
 alleen bestaande tags uit — code onder de drempel bereikt de productie dus niet.

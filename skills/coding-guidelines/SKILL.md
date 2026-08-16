@@ -60,6 +60,13 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
 
 - `strict` staat aan, inclusief `noUncheckedIndexedAccess` en
   `exactOptionalPropertyTypes`. Geen `any`, geen `as` om een fout weg te duwen.
+  - Wil je een waarde tóétsen aan een type, gebruik dan `satisfies`: dat
+    controleert zonder het type te verbreden of te liegen.
+  - Moet je een onbekende waarde smal maken, schrijf dan een type-guard
+    (`function isX(waarde: unknown): waarde is X`) of laat Zod het doen. Een
+    guard is een controle; een `as` is een belofte die niemand nakijkt.
+  - `as unknown as` is nooit goed. Kom je daar toch uit, dan klopt het type
+    eronder niet — repareer dat.
 - Invoer van buiten (HTTP-body, omgevingsvariabelen, JSON-bestanden) wordt
   gevalideerd met Zod voordat het het domein binnenkomt. Binnen het domein
   vertrouwen we types; op de grens vertrouwen we niets.
@@ -128,6 +135,23 @@ naam herhaalt. Wel commentaar bij een keuze die een lezer zou willen aanvechten.
   ingelezen. Tests mogen nooit afhangen van wat een vorige test achterliet.
 - Test gedrag, niet implementatie. De naam van een test beschrijft het gedrag
   in een hele zin.
+- **Een test mag nooit van timing afhangen.** De fixtures-regel hierboven dekt
+  staat, niet tijd — en dat gat kost een halve dag zodra het toeslaat.
+  - Wacht op **alle** gevolgen van je prikkel, niet op het eerste dat langskomt.
+    Stuurt een commando een state-wijziging én een antwoord, wacht dan op allebei;
+    anders loopt het tweede door in de volgende test.
+  - **Match op een id**, niet op volgorde. Draagt het bericht een `eventId` of een
+    correlatie-id, laat de wachtvoorwaarde daarop selecteren — dan kan een late
+    reactie uit een vorige test per definitie niet meetellen.
+  - **Geen `sleep`.** Poll met een deadline, of gebruik de `Clock`.
+  - Een test die "meestal" slaagt is kapot. Een rode poort die niets betekent
+    leert je om te herdraaien in plaats van te kijken, en juist dat maakt een
+    échte regressie later onzichtbaar.
+- **Schrijf op wat je bewust níet test.** Dekking is een hulpmiddel, geen doel: de
+  goedkoopste manier om een cijfer te halen is een test die de implementatie
+  vastpint, en die betaal je terug bij elke refactor. Laat generated code,
+  triviale doorgeefluiken en configuratie gerust ongedekt — maar zet er één regel
+  bij waarom, zodat het een keuze is en geen gat.
 
 ## Feature flags
 
@@ -177,8 +201,9 @@ slice is zelfstandig af of hij is verkeerd geknipt.
 
 **Wat de poort toetst** — `factory verify`, en daarmee ook `release`:
 
-opmaak, lint, types, unit-, contract- en e2e-tests, de build, en de dekking (boven
-het minimum én niet onder de basislijn van de ratchet). Rood is niet af. De
+opmaak, lint, types, unit-, contract- en e2e-tests, de build, de dekking (boven
+het minimum én niet onder de basislijn van de ratchet) en de afhankelijkheden
+(`pnpm audit`, standaard een gele melding). Rood is niet af. De
 pre-commit hook draait hier alleen de snelle helft van; `--no-verify` slaat die
 over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
 
@@ -201,6 +226,10 @@ over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
       kost op productie een veelvoud.
 - [ ] Wijkt het gedrag af van wat de documentatie van de app belooft, dan is die
       documentatie mee bijgewerkt.
+- [ ] Til je de factory naar een nieuwe versie, dan heb je `factory sync` gedraaid
+      en het resultaat meegecommit. Een bump zonder sync laat de slash commands en
+      de skill achterlopen, en de sync-drift-stap in CI zet je poort rood — vaak in
+      elke app tegelijk.
 - [ ] Je hebt het zelf gedaan op een omgeving waar het écht draait — acc na
       `promote acc`, of prod. "CI was groen" is geen waarneming.
 
