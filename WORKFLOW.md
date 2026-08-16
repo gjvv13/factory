@@ -68,6 +68,12 @@ voor één applicatie, `status:` voor een fase, of `type:` voor epics vs. klein 
 
 `/status` geeft het overzicht via het board (per `App`-veld en `status:`).
 
+Aftikken hoort aan het eind, niet bij de merge: de acceptatiecriteria vink je af
+tijdens het bouwen (stap 3), maar `status:done` en het sluiten van het issue horen
+bij stap 6 — als de laatste slice op productie draait en je hem daar gezien hebt.
+Wat "af" verder inhoudt, staat als één lijst onder _Klaar_ in de
+[`coding-guidelines`-skill](skills/coding-guidelines/SKILL.md).
+
 ## Als de pijplijn hapert
 
 Loopt er iets mis tussen "mijn code is af" en "het draait op prod" — verify/CI,
