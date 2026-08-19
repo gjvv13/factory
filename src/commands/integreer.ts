@@ -1,5 +1,6 @@
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -217,6 +218,15 @@ const INTERVAL_S = 60;
 
 function plistPad(naam: string): string {
   return path.join(os.homedir(), 'Library', 'LaunchAgents', `${LAUNCH_PREFIX}.${naam}.plist`);
+}
+
+/**
+ * Of er voor deze app een integreer-LaunchAgent geïnstalleerd is. `inleveren` gebruikt
+ * dit om een lokale-wachtrij-app te waarschuwen als niemand de rij afwerkt — anders
+ * blijft een gelabelde PR stil staan (de stille-drain-storing uit #108).
+ */
+export function heeftIntegreerAgent(naam: string): boolean {
+  return existsSync(plistPad(naam));
 }
 
 export interface PlistOpzet {

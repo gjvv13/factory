@@ -2,7 +2,13 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { bouwPlist, integreer, minstensVersie, tarballVanDep } from '../src/commands/integreer.js';
+import {
+  bouwPlist,
+  heeftIntegreerAgent,
+  integreer,
+  minstensVersie,
+  tarballVanDep,
+} from '../src/commands/integreer.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
 
@@ -227,5 +233,12 @@ describe('bouwPlist', () => {
     // De TCC-gevoelige velden (bin, werkmap, log) wijzen buiten ~/Documents.
     expect(plist).not.toContain('/Documents/proefapp');
     expect(plist).not.toContain('node_modules/.bin/factory');
+  });
+});
+
+describe('heeftIntegreerAgent', () => {
+  it('meldt onwaar als er geen LaunchAgent-plist voor de app staat', () => {
+    // Een naam die met vrijwel zekerheid geen geïnstalleerde drain heeft.
+    expect(heeftIntegreerAgent('app-zonder-agent-9f3k2x')).toBe(false);
   });
 });

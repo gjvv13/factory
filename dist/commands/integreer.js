@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { vereisAppConfig } from '../app-config.js';
@@ -154,6 +154,14 @@ const LAUNCH_PREFIX = 'nl.factory.integreer';
 const INTERVAL_S = 60;
 function plistPad(naam) {
     return path.join(os.homedir(), 'Library', 'LaunchAgents', `${LAUNCH_PREFIX}.${naam}.plist`);
+}
+/**
+ * Of er voor deze app een integreer-LaunchAgent geïnstalleerd is. `inleveren` gebruikt
+ * dit om een lokale-wachtrij-app te waarschuwen als niemand de rij afwerkt — anders
+ * blijft een gelabelde PR stil staan (de stille-drain-storing uit #108).
+ */
+export function heeftIntegreerAgent(naam) {
+    return existsSync(plistPad(naam));
 }
 /**
  * Bouwt de LaunchAgent-plist die `factory integreer --repo <repo>` periodiek draait.

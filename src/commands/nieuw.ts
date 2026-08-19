@@ -258,6 +258,11 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
         naam,
         poorten: { dev: poorten.dev, acc: poorten.acc, prod: poorten.prod },
         envRoot: `~/AppEnvs/${naam}`,
+        // De GitHub merge-queue werkt niet op private repos, en `nieuw` maakt de app
+        // altijd privé aan — dus meteen de factory-eigen wachtrij kiezen. Anders erft de
+        // app stil `merge-queue` (de default) en struikelt `inleveren` daar later op.
+        // De drain die de rij afwerkt zet je op met `factory integreer --installeer`.
+        integratie: 'lokaal',
         // De dekkings-ratchet staat vanaf dag één aan (advies-eerst): de eerste volledige
         // `factory verify` legt de basislijn vast en waarschuwt daarna bij een daling. Zet 'm
         // op 'blokkeer' zodra de app stabiel dekt, of 'uit' om 'm stil te leggen.
@@ -285,6 +290,16 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
     `'${naam}' staat klaar op poorten ${String(poorten.dev)} (dev), ${String(poorten.acc)} (acc), ${String(poorten.prod)} (prod)`,
   );
   process.stdout.write(
-    ['', 'Volgende stappen:', `  cd ../${naam}`, '  pnpm install', '  pnpm verify', ''].join('\n'),
+    [
+      '',
+      'Volgende stappen:',
+      `  cd ../${naam}`,
+      '  pnpm install',
+      '  pnpm verify',
+      // Deze app draait op de lokale wachtrij; zonder drain-agent blijft een ingeleverde
+      // PR stil in de rij staan (#108). Zet 'm daarom hier meteen op.
+      '  factory integreer --installeer   # zet de wachtrij-drain voor deze private app op',
+      '',
+    ].join('\n'),
   );
 }
