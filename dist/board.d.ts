@@ -73,13 +73,27 @@ export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] |
 /** Het label waaraan een geëscaleerd item te herkennen is. */
 export declare const ESCALATIE_LABEL = "escalatie";
 /**
- * De open backlog-issues met het escalatie-label.
+ * De open backlog-issues met het escalatie-label, of undefined als het niet gelezen
+ * kon worden.
+ *
+ * Dat verschil is niet academisch. Een lege verzameling bij een mislukte aanroep zou
+ * betekenen dat de escalatie-rem stil wegvalt: een item dat gisteren een vraag stelde
+ * wordt dan opnieuw opgepakt, stelt dezelfde vraag, en kost weer een run. #104 sluit
+ * dat expliciet uit.
  *
  * Via REST, niet via het board: labels lezen kan prima met `gh api repos/...`, en dat
  * telt tegen de aparte REST-pot die vrijwel ongebruikt blijft. De GraphQL-punten
  * bewaren we voor Projects v2, dat geen alternatief heeft.
  */
-export declare function escalaties(cwd?: string): Set<number>;
+export declare function escalaties(cwd?: string): Set<number> | undefined;
+/**
+ * Maakt het escalatie-label aan als het nog niet bestaat (idempotent).
+ *
+ * `gh issue edit --add-label` faalt op een label dat niet bestaat, en `zetLabel` faalt
+ * zacht — samen zou dat betekenen dat een escalatie stil niet gemarkeerd wordt en het
+ * item elke run opnieuw opgepakt wordt. Zelfde patroon als `zorgVoorWachtrijLabel`.
+ */
+export declare function zorgVoorEscalatieLabel(cwd?: string): void;
 /** Zet een label op een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
 export declare function zetLabel(issue: number, label: string, cwd?: string): void;
 /** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */

@@ -27,6 +27,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory terugrol <acc\|prod>`                    | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)       |
 | `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers           |
 | `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                           |
+| `factory backup <acc\|prod> [aantal]`             | Consistente SQLite-backup met rotatie, optioneel off-site                      |
 | `factory nieuw <naam>`                            | Nieuwe applicatie uit het skeleton, met een vrij poortblok                     |
 | `factory sync`                                    | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo  |
 | `factory orkestreer <--dry\|--eenmalig>`          | Onbemande werker op de wachtrij _Klaar voor technische refinement_             |

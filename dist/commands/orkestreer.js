@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { escalaties, ESCALATIE_LABEL, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, } from '../board.js';
+import { escalaties, ESCALATIE_LABEL, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -68,6 +68,11 @@ function bouwWachtrij(cwd) {
             `  (\`gh api rate_limit --jq .resources.graphql\`).`);
     }
     const geblokkeerd = escalaties(cwd);
+    if (geblokkeerd === undefined) {
+        // Zonder deze lijst weten we niet welke items al een vraag hebben openstaan, en
+        // dan draaien we die vraag opnieuw — met kosten en zonder nieuwe informatie.
+        throw new GebruikersFout('Kon de escalaties niet lezen; zonder die lijst zou een openstaande vraag opnieuw draaien.');
+    }
     const bruikbaar = [];
     for (const item of alles) {
         if (geblokkeerd.has(item.issue)) {
@@ -99,6 +104,10 @@ export function bouwPrompt(item, werkmap, factoryMap) {
 }
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export function orkestreer(opties = {}) {
+    if (opties.dry === true && opties.eenmalig === true) {
+        // Stil één van de twee kiezen laat iemand denken dat de run gestart is.
+        throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
+    }
     if (opties.dry !== true && opties.eenmalig !== true) {
         // Er is in deze fase nog geen automatiek. Een kaal commando dat tóch een werker
         // start is precies het soort verrassing dat je bij onbemand werk niet wilt.
@@ -138,21 +147,48 @@ export function orkestreer(opties = {}) {
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
 function werkAf(item, cwd, wortel) {
     kop(`#${String(item.issue)} — ${item.titel}`);
+    zorgVoorEscalatieLabel(cwd);
     const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
     // De factory-spiegel gaat mee als leesmap: daar staan de templates, WORKFLOW.md en
     // de coding-guidelines waar de werker zijn uitwerking op moet enten.
     const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+    // Meteen als bezet markeren: een `/refine`-sessie in de chat kent dit slot niet en
+    // zou anders hetzelfde item oppakken.
     zetKolom(item.issue, WERK_KOLOM, cwd);
-    const sessie = randomUUID();
-    const uitkomst = draaiWerker({
-        prompt: bouwPrompt(item, werkmap, factoryMap),
-        werkmap,
-        sessie,
-        extraMappen: [factoryMap],
-        budgetUsd: BUDGET_USD,
-        model: MODEL,
-    });
-    verwerk(item, uitkomst, werkmap, cwd);
+    // Vanaf hier staat het item buiten de wachtrij. Valt de run om — een fout, of een
+    // Ctrl-C halverwege een run van tien minuten — dan zou het daar blijven staan zonder
+    // comment en zonder label: uit de wachtrij, niet als vastgelopen te herkennen, en
+    // dus nooit meer aan de beurt. Vandaar dit vangnet, ook op een signaal.
+    const terugInWachtrij = () => {
+        zetKolom(item.issue, WACHTRIJ_KOLOM, cwd);
+    };
+    const bijSignaal = () => {
+        terugInWachtrij();
+        geefLockVrij();
+        process.exit(130);
+    };
+    process.on('SIGINT', bijSignaal);
+    process.on('SIGTERM', bijSignaal);
+    try {
+        const sessie = randomUUID();
+        const uitkomst = draaiWerker({
+            prompt: bouwPrompt(item, werkmap, factoryMap),
+            werkmap,
+            sessie,
+            extraMappen: [factoryMap],
+            budgetUsd: BUDGET_USD,
+            model: MODEL,
+        });
+        verwerk(item, uitkomst, werkmap, cwd);
+    }
+    catch (fout) {
+        terugInWachtrij();
+        throw fout;
+    }
+    finally {
+        process.off('SIGINT', bijSignaal);
+        process.off('SIGTERM', bijSignaal);
+    }
 }
 /** Vertaalt de uitkomst van de werker naar wat er op GitHub gebeurt. */
 function verwerk(item, uitkomst, werkmap, cwd) {

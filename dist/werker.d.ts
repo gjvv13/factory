@@ -111,9 +111,11 @@ export declare function werkerArgumenten(opdracht: WerkerOpdracht): string[];
 /**
  * Draait één werker en vertaalt zijn uitvoer naar een uitkomst.
  *
- * Faalt nooit met een exceptie: elke manier waarop dit mis kan gaan levert
- * `afloop: 'mislukt'` met een leesbare reden, want de orkestrator moet die reden in
- * een comment kunnen zetten en door kunnen naar het volgende item.
+ * Elke uitkomst die `claude` teruggeeft levert een `WerkerUitkomst`, ook een kapotte:
+ * de orkestrator moet de reden in een comment kunnen zetten en door naar het volgende
+ * item. Eén ding gooit wél — een `claude` die niet te starten is. Dat is geen probleem
+ * van dít item maar van de machine, en het escaleren van één issue zou dat verbergen
+ * terwijl elke volgende run er net zo goed op stukloopt.
  */
 export declare function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst;
 export {};

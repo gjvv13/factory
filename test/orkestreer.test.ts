@@ -39,30 +39,37 @@ function boardAntwoord(items: unknown[]): string {
   });
 }
 
-/** Het antwoord waarmee `zetKolom` zijn ids vindt. */
-const DOELWIT_ANTWOORD = JSON.stringify({
-  data: {
-    user: {
-      projectV2: {
-        id: 'PVT_x',
-        field: { id: 'PVTSSF_x', options: [{ id: 'optie-technisch', name: 'Technisch refinen' }] },
+/**
+ * Het antwoord waarmee `zetKolom` zijn ids vindt. `huidig` verandert mee: `zetKolom`
+ * slaat een verplaatsing over als het item al in de doelkolom staat, dus een vast
+ * antwoord zou de tweede verplaatsing onzichtbaar maken.
+ */
+function doelwitAntwoord(huidig: string): string {
+  return JSON.stringify({
+    data: {
+      user: {
+        projectV2: {
+          id: 'PVT_x',
+          field: {
+            id: 'PVTSSF_x',
+            options: [
+              { id: 'optie-wachtrij', name: 'Klaar voor technische refinement' },
+              { id: 'optie-technisch', name: 'Technisch refinen' },
+              { id: 'optie-bouwen', name: 'Klaar voor Bouwen' },
+            ],
+          },
+        },
       },
-    },
-    repository: {
-      issue: {
-        projectItems: {
-          nodes: [
-            {
-              id: 'PVTI_x',
-              project: { number: 2 },
-              fieldValueByName: { name: 'Klaar voor technische refinement' },
-            },
-          ],
+      repository: {
+        issue: {
+          projectItems: {
+            nodes: [{ id: 'PVTI_x', project: { number: 2 }, fieldValueByName: { name: huidig } }],
+          },
         },
       },
     },
-  },
-});
+  });
+}
 
 /** Een geslaagde werker-envelop met een verdict. */
 function werkerKlaar(): string {
@@ -110,13 +117,22 @@ const WACHTRIJ = [
 function bepaler(
   opties: { board?: unknown[]; escalaties?: string; werker?: string } = {},
 ): UitkomstBepaler {
+  // Het board onthoudt waar het item staat, zodat `zetKolom` zich net zo gedraagt als
+  // in het echt: hij verplaatst alleen als de kolom écht verandert.
+  let huidig = 'Klaar voor technische refinement';
   return ({ commando, argumenten }) => {
     if (commando === 'claude') return { stdout: opties.werker ?? werkerKlaar() };
     if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
       const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
       if (query.includes('items(first:100'))
         return { stdout: boardAntwoord(opties.board ?? WACHTRIJ) };
-      return { stdout: DOELWIT_ANTWOORD };
+      return { stdout: doelwitAntwoord(huidig) };
+    }
+    if (commando === 'gh' && argumenten[0] === 'project') {
+      const optie = argumenten[argumenten.indexOf('--single-select-option-id') + 1];
+      huidig =
+        optie === 'optie-technisch' ? 'Technisch refinen' : 'Klaar voor technische refinement';
+      return {};
     }
     if (commando === 'gh' && argumenten[0] === 'api') return { stdout: opties.escalaties ?? '' };
     return {};
@@ -156,6 +172,71 @@ describe('orkestreer', () => {
     herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
+  });
+
+  it('weigert --dry en --eenmalig samen', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    // Stil één van de twee kiezen laat iemand denken dat de run gestart is.
+    expect(() => {
+      orkestreer({ dry: true, eenmalig: true, werkplaatsWortel: wortel });
+    }).toThrow(/sluiten elkaar uit/);
+  });
+
+  it('stopt als de escalatielijst niet gelezen kan worden', () => {
+    const basis = bepaler();
+    const stuk: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'gh' &&
+      aanroep.argumenten[0] === 'api' &&
+      aanroep.argumenten[1] !== 'graphql'
+        ? { code: 1 }
+        : basis(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+
+    // Een lege lijst bij een mislukte aanroep zou betekenen dat een item dat gisteren
+    // een vraag stelde vandaag opnieuw draait — met kosten en zonder nieuwe informatie.
+    expect(() => {
+      orkestreer({ dry: true, werkplaatsWortel: wortel });
+    }).toThrow(/escalaties niet lezen/);
+  });
+
+  it('zet het item terug in de wachtrij als de run omvalt', () => {
+    // `claude` is niet geïnstalleerd: `run` gooit op een startfout, ook met toleranter.
+    // Dat is een probleem van de machine, niet van dit item — het hoort dus terug in
+    // de wachtrij en niet met een escalatie geblokkeerd te worden.
+    // Eén bepaler-instantie: hij houdt de kolom bij, dus elke aanroep opnieuw bouwen
+    // zou het board telkens terugzetten op de beginstand.
+    const basis = bepaler();
+    const stuk: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
+        : basis(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(stuk);
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    }).toThrow(/claude/);
+
+    // Twee verplaatsingen: naar Technisch refinen bij aanvang, en terug bij de val.
+    // Zonder die tweede staat het item in geen enkele wachtrij meer.
+    const verplaatsingen = aanroepen.filter((a) => a.argumenten[0] === 'project');
+    expect(verplaatsingen).toHaveLength(2);
+    expect(ghArgs(aanroepen).some((a) => a.includes('--add-label'))).toBe(false);
+  });
+
+  it('maakt het escalatielabel aan voordat het gebruikt wordt', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerMislukt() }));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // `gh issue edit --add-label` faalt op een label dat niet bestaat, en labelen faalt
+    // zacht: zonder dit zou een escalatie stil niet gemarkeerd worden.
+    const maken = aanroepen.findIndex((a) => a.argumenten[0] === 'label');
+    const zetten = aanroepen.findIndex((a) => a.argumenten.includes('--add-label'));
+    expect(maken).toBeGreaterThanOrEqual(0);
+    expect(zetten).toBeGreaterThan(maken);
   });
 
   it('doet niets zonder --dry of --eenmalig', () => {
@@ -293,11 +374,12 @@ describe('orkestreer', () => {
   });
 
   it('geeft het slot ook vrij als de run onderweg omvalt', () => {
+    const basis = bepaler();
     const stuk: UitkomstBepaler = (aanroep, index) =>
       // De werkplaats klonen mislukt; dat gooit, halverwege werkAf.
       aanroep.commando === 'gh' && aanroep.argumenten[0] === 'repo'
         ? { code: 1 }
-        : bepaler()(aanroep, index);
+        : basis(aanroep, index);
     stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
 
     expect(() => {

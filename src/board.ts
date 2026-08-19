@@ -477,16 +477,22 @@ export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefin
 export const ESCALATIE_LABEL = 'escalatie';
 
 /**
- * De open backlog-issues met het escalatie-label.
+ * De open backlog-issues met het escalatie-label, of undefined als het niet gelezen
+ * kon worden.
+ *
+ * Dat verschil is niet academisch. Een lege verzameling bij een mislukte aanroep zou
+ * betekenen dat de escalatie-rem stil wegvalt: een item dat gisteren een vraag stelde
+ * wordt dan opnieuw opgepakt, stelt dezelfde vraag, en kost weer een run. #104 sluit
+ * dat expliciet uit.
  *
  * Via REST, niet via het board: labels lezen kan prima met `gh api repos/...`, en dat
  * telt tegen de aparte REST-pot die vrijwel ongebruikt blijft. De GraphQL-punten
  * bewaren we voor Projects v2, dat geen alternatief heeft.
  */
-export function escalaties(cwd?: string): Set<number> {
+export function escalaties(cwd?: string): Set<number> | undefined {
   const omgeving = ghOmgeving();
   if (!omgeving.kan) {
-    return new Set();
+    return undefined;
   }
   const ruw = uitvoerMetEnv(
     'gh',
@@ -499,7 +505,11 @@ export function escalaties(cwd?: string): Set<number> {
     cwd,
     omgeving.env,
   );
-  if (ruw === undefined || ruw === '') {
+  if (ruw === undefined) {
+    return undefined;
+  }
+  if (ruw === '') {
+    // Wél gelezen, niets gevonden: dat is een geldige lege wachtrij.
     return new Set();
   }
   const nummers = ruw
@@ -507,6 +517,40 @@ export function escalaties(cwd?: string): Set<number> {
     .map((regel) => Number.parseInt(regel.trim(), 10))
     .filter((nummer) => Number.isSafeInteger(nummer) && nummer > 0);
   return new Set(nummers);
+}
+
+/**
+ * Maakt het escalatie-label aan als het nog niet bestaat (idempotent).
+ *
+ * `gh issue edit --add-label` faalt op een label dat niet bestaat, en `zetLabel` faalt
+ * zacht — samen zou dat betekenen dat een escalatie stil niet gemarkeerd wordt en het
+ * item elke run opnieuw opgepakt wordt. Zelfde patroon als `zorgVoorWachtrijLabel`.
+ */
+export function zorgVoorEscalatieLabel(cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  run(
+    'gh',
+    [
+      'label',
+      'create',
+      ESCALATIE_LABEL,
+      '--repo',
+      `${EIGENAAR}/${BACKLOG_REPO}`,
+      '--description',
+      'Werker is gestopt met een vraag, of de run mislukte',
+      '--color',
+      'D93F0B',
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
 }
 
 /** Zet een label op een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
