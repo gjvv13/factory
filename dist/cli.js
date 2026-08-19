@@ -10,6 +10,7 @@ import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
 import { sync } from './commands/sync.js';
+import { werkplek } from './commands/werkplek.js';
 import { terugrol } from './commands/terugrol.js';
 import { verify } from './commands/verify.js';
 import { toonMigratieStatus } from './migratie.js';
@@ -31,6 +32,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
+  factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
 `;
 async function main(argumenten) {
     const [commando, ...rest] = argumenten;
@@ -109,6 +111,11 @@ async function main(argumenten) {
         case 'nieuw': {
             const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--link'] });
             nieuw(positioneel[0], { link: schakelaars.has('--link') });
+            return;
+        }
+        case 'werkplek': {
+            const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--op'] });
+            werkplek(positioneel[0], { op: schakelaars.has('--op') });
             return;
         }
         case 'sync': {
