@@ -148,6 +148,11 @@ jobs:
   # luistert op loopback en een GitHub-hosted runner komt daar niet bij. Nodig zijn de
   # repo-variabele `DEPLOY_NOTIFY_URL` en het secret `DEPLOY_NOTIFY_TOKEN` (zoals
   # `deploy.yml` in de apps); zonder die variabele blijft het bij een waarschuwing.
+  #
+  # Bewust niet door een test gedekt: deze job is YAML zonder eigen poort, en een
+  # nagebouwde curl zou alleen zichzelf toetsen. Wat wél te toetsen is — welke items
+  # bleven liggen en dat ze als uitvoer de deur uit gaan — staat in `test/afronden.test.ts`.
+  # Het bewijs dat de job zelf loopt is een echte release (acceptatiecriterium van #195).
   melding:
     needs: release
     if: ${{ needs.release.outputs.bord_overgeslagen != '' }}
