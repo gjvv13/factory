@@ -25,10 +25,14 @@ function argsVan(aanroepen: ProcesAanroep[], eerste: string): string[][] {
   return aanroepen.filter((a) => a.argumenten[0] === eerste).map((a) => a.argumenten);
 }
 
-/** Beantwoordt `rev-parse --git-common-dir` met de .git van `repo`, zoals git zelf doet. */
+/**
+ * Beantwoordt `rev-parse --git-common-dir` met de .git van `repo`, zoals git zelf doet.
+ * Alleen díe aanroep: de branch-controle gebruikt óók rev-parse, en die moet leeg
+ * blijven zodat een test niet per ongeluk het bestaande-branch-pad neemt.
+ */
 function metWortel(repo: string, extra?: UitkomstBepaler): UitkomstBepaler {
   return (aanroep, index) => {
-    if (aanroep.argumenten[0] === 'rev-parse') {
+    if (aanroep.argumenten.includes('--git-common-dir')) {
       return { stdout: `${repo}/.git` };
     }
     return extra?.(aanroep, index) ?? {};
@@ -60,9 +64,15 @@ describe('branchVan', () => {
 describe('werkplek', () => {
   let oorspronkelijkeCwd: string;
 
+  let uitvoer: string[];
+
   beforeEach(() => {
     oorspronkelijkeCwd = process.cwd();
-    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
   });
 
   afterEach(() => {
@@ -90,6 +100,31 @@ describe('werkplek', () => {
       werkplekPad(repo, 173),
       'origin/main',
     ]);
+    // Het pad op stdout is het product: /bouw gebruikt het om erheen te gaan.
+    expect(uitvoer.join('')).toContain(`${werkplekPad(repo, 173)}\n`);
+  });
+
+  it('hervat een bestaande branch in plaats van te falen op -b', () => {
+    const repo = maakRepo();
+    const bepaal: UitkomstBepaler = ({ argumenten }) =>
+      argumenten[0] === 'rev-parse' && argumenten[1] === '-q'
+        ? { stdout: 'abc123' } // de branch bestaat al
+        : {};
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metWortel(repo, bepaal));
+    stelUitvoerderIn(uitvoerder);
+
+    werkplek('173');
+
+    // `worktree remove` laat de branch staan, dus na een --op bestaat hij nog. Met -b
+    // zou git hier hard afbreken met "a branch named ... already exists".
+    expect(argsVan(aanroepen, 'worktree')).toContainEqual([
+      'worktree',
+      'add',
+      '-q',
+      werkplekPad(repo, 173),
+      'slice/173-1',
+    ]);
+    expect(argsVan(aanroepen, 'worktree').some((a) => a.includes('-b'))).toBe(false);
   });
 
   it('doet niets als de werkplek al bestaat', () => {
@@ -102,6 +137,7 @@ describe('werkplek', () => {
 
     // Idempotent: een hervatte sessie krijgt dezelfde map, geen fout en geen tweede add.
     expect(aanroepen.some((a) => a.argumenten[0] === 'worktree')).toBe(false);
+    expect(uitvoer.join('')).toContain(`${werkplekPad(repo, 173)}\n`);
   });
 
   it('meldt waar de branch al staat in plaats van een kale git-fout', () => {

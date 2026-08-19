@@ -42,6 +42,13 @@ export function branchVan(issue: number): string {
   return `slice/${String(issue)}-1`;
 }
 
+/** Of de branch lokaal al bestaat. `worktree remove` laat hem namelijk staan. */
+function branchBestaat(repoDir: string, branch: string): boolean {
+  // `rev-parse --verify` print de sha; lege uitvoer betekent dat de branch er niet is.
+  const sha = uitvoerVan('git', ['rev-parse', '-q', '--verify', `refs/heads/${branch}`], repoDir);
+  return sha !== undefined && sha !== '';
+}
+
 /** Het pad van de worktree waar deze branch al is uitgecheckt, of undefined. */
 function elders(repoDir: string, branch: string): string | undefined {
   const lijst = uitvoerVan('git', ['worktree', 'list', '--porcelain'], repoDir) ?? '';
@@ -96,8 +103,17 @@ export function werkplek(issueArgument: string | undefined, opties: WerkplekOpti
   // Vers ophalen: een worktree van een verouderde main levert een branch die pas bij
   // het inleveren conflicteert, en dat is het duurste moment om erachter te komen.
   git(['fetch', '-q', 'origin'], repoDir);
-  git(['worktree', 'add', '-q', '-b', branch, pad, 'origin/main'], repoDir);
-  ok(`${pad} op ${branch} (van origin/main)`);
+  // `worktree remove` haalt de map weg maar laat de branch staan. Bij een tweede
+  // `werkplek` op hetzelfde issue bestaat de branch dus al, en dan is `-b` een harde
+  // git-fout ("a branch named … already exists"). Hervat 'm in plaats daarvan: er kan
+  // werk in zitten dat je juist terug wilt.
+  if (branchBestaat(repoDir, branch)) {
+    git(['worktree', 'add', '-q', pad, branch], repoDir);
+    ok(`${pad} op bestaande branch ${branch}`);
+  } else {
+    git(['worktree', 'add', '-q', '-b', branch, pad, 'origin/main'], repoDir);
+    ok(`${pad} op ${branch} (van origin/main)`);
+  }
   process.stdout.write(`${pad}\n`);
 }
 
@@ -114,8 +130,13 @@ function ruimOp(repoDir: string, pad: string): void {
     toleranter: true,
   });
   if (uitkomst.code !== 0) {
+    // Geef de reden van git door in plaats van er één te verzinnen: vuil werk is de
+    // meest voorkomende oorzaak, maar niet de enige (je kunt bijvoorbeeld niet de
+    // worktree verwijderen waar je zelf in staat).
+    const reden = uitkomst.stderr.trim();
     waarschuwing(
-      `werkplek ${pad} blijft staan — er staat nog ongecommit werk in. Ruim hem zelf op met: git worktree remove --force ${pad}`,
+      `werkplek ${pad} blijft staan${reden === '' ? '' : ` — ${reden}`}\n` +
+        `  Ruim hem zelf op met: git worktree remove --force ${pad}`,
     );
     return;
   }
