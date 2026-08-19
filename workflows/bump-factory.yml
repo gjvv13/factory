@@ -56,8 +56,11 @@ jobs:
           echo "::notice::factory bumpen van $huidig naar $nieuwste"
           node -e "const fs=require('fs');const p=require('./package.json');p.devDependencies.factory='git+https://github.com/gjvv13/factory.git#'+process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste"
           # Volledige install (niet --lockfile-only): we hebben de nieuwe factory in
-          # node_modules nodig om `factory sync` ermee te draaien.
-          pnpm install
+          # node_modules nodig om `factory sync` ermee te draaien. `--no-frozen-lockfile`
+          # is nodig omdat pnpm in CI standaard frozen is: we hebben net de factory-pin
+          # in package.json opgehoogd, dus de lockfile loopt bewust achter en moet juist
+          # hier meebewegen (anders faalt de install met ERR_PNPM_OUTDATED_LOCKFILE).
+          pnpm install --no-frozen-lockfile
           pnpm exec factory sync
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
