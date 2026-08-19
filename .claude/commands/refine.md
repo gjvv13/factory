@@ -62,8 +62,10 @@ Doe dit zo:
    Zet daarna de kolom die bij jouw ingang hoort:
    - vanaf **Idee**:
      `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value Bouwen`
-   - vanaf **Technisch refinen**: laat de kolom staan. Verplaats het item **niet**
-     naar Bouwen — dat is het akkoord van de gebruiker, niet van jou.
+   - vanaf **Technisch refinen**:
+     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value Akkoord`
+     Verplaats het **niet** door naar Bouwen — dat is het akkoord van de gebruiker,
+     niet van jou.
 9. Sluit af met de slices op één regel per stuk, en zeg wat de volgende stap is:
    - vanaf **Idee**: `cd ../<app>` en daar `/bouw <nummer> 1`.
    - vanaf **Technisch refinen**: het item wacht op mijn akkoord — bouwen kan zodra

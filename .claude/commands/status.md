@@ -8,10 +8,11 @@ Geef een overzicht van de factory en alles wat eruit gebouwd is. Doe dit:
    applicatie is een kolom (het `App`-veld) op het board, niet meer een label:
    `gh project item-list 2 --owner gjvv13 --format json --limit 100`
    en groepeer het overzicht per `App`-veld en daarbinnen per kolom (`status` in de
-   json): Idee / Functioneel uitwerken / Technisch refinen / Bouwen / In aanbouw /
-   Uitrollen / Done. Noem apart wat in **Functioneel uitwerken** staat (dat wacht op
-   een gesprek met de gebruiker), wat in **Bouwen** staat (dat kan opgepakt worden)
-   en wat het label `escalatie` draagt (dat wacht op een antwoord).
+   json): Idee / Functioneel uitwerken / Technisch refinen / Akkoord / Bouwen /
+   In aanbouw / Uitrollen / Done. Noem apart wat op de gebruiker wacht — **Functioneel
+   uitwerken** (een gesprek) en **Akkoord** (een goedkeuring) — wat in **Bouwen** staat
+   (dat kan opgepakt worden) en wat het label `escalatie` draagt (dat wacht op een
+   antwoord).
 2. In deze repo: `git status --short`, `git log --oneline -5` en
    `git tag --sort=-v:refname | head -3` — de staat van de factory zelf.
 3. Voor elke applicatie naast deze repo (mappen met een `factory.json`): dezelfde

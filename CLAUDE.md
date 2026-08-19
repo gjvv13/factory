@@ -57,7 +57,7 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 | 1. Backlog     | `/idee <beschrijving>`               | hier             |
 | 2. Functioneel | `/functioneel <issue#>`              | hier             |
 | 3. Technisch   | `/refine <issue#>`                   | hier             |
-| 4. Akkoord     | kolom naar **Bouwen**                | hier             |
+| 4. Akkoord     | kolom **Akkoord** → **Bouwen**       | hier             |
 | 5. Bouwen      | `/bouw <issue#> <slice>`             | in de applicatie |
 | 6. Testen      | `pnpm verify`                        | in de applicatie |
 | 7. Releasen    | `pnpm release [patch\|minor\|major]` | in de applicatie |
@@ -73,8 +73,8 @@ een item uit **Idee** doet beide helften in één keer.
 
 De **backlog is één set GitHub Issues** in `gjvv13/factory`. Het **board** is de bron
 van waarheid voor waar een item staat: het `App`-veld per applicatie en het
-`Status`-veld (Idee → Functioneel uitwerken → Technisch refinen → Bouwen → In aanbouw
-→ Uitrollen → Done) per fase. Er zijn geen `status:`-labels — zie
+`Status`-veld (Idee → Functioneel uitwerken → Technisch refinen → Akkoord → Bouwen →
+In aanbouw → Uitrollen → Done) per fase. Er zijn geen `status:`-labels — zie
 [`WORKFLOW.md`](WORKFLOW.md). Groomen doe je hier, bouwen doe je in de applicatie.
 
 ## Een applicatie koppelen
