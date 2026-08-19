@@ -178,9 +178,13 @@ De mini heeft af en toe een **transiente DNS-blip** naar GitHub-hosts (#99). De
 netwerkstappen zijn daarom verhard: `factory release` herhaalt de `git push` bij een
 DNS-fout (in de CLI), en `deploy.yml` draait `pnpm install` in een bounded retry (3×
 met backoff). Eén ding valt buiten deze retry: het **downloaden van een action**
-(bijv. `actions/checkout`) gebeurt vóór de stap draait en is niet in de workflow te
-omhullen — faalt dat op de blip, dan is de remedie `gh run rerun --failed` (of, later,
-een runner-cache van de actions).
+(bijv. `actions/checkout`, maar ook `setup-node` en `pnpm/action-setup`) gebeurt vóór
+de stap draait en is niet in de workflow te omhullen. Daarvoor is er een apart vangnet
+(#122): `deploy-rerun.yml` draait ná een gefaalde deploy-run, herkent de
+action-download-faalsignatuur in de log en start de gefaalde jobs **eenmalig** opnieuw
+(alleen bij `run_attempt == 1`, zodat een echte bouwfout na één rerun rood blijft). Een
+transiente hik lost zichzelf zo op i.p.v. prod stil te laten achterlopen; handmatig
+`gh run rerun --failed` blijft de terugval.
 
 **Een gefaalde deploy is niet meer stil (#112).** `/health` meldt "ok" ook als een
 uitrol niet aankwam en de oude versie nog draait; daarom toetst `promote` na de swap
