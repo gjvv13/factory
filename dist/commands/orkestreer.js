@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { escalaties, ESCALATIE_LABEL, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { bordItems, escalaties, ESCALATIE_LABEL, haalLabelWeg, laatsteOrkestratorComment, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -190,22 +190,73 @@ function werkAf(item, cwd, wortel) {
         process.off('SIGTERM', bijSignaal);
     }
 }
+/** De onzichtbare markering waaraan een orkestrator-comment te herkennen is. */
+const MARKERING = '<!-- orkestrator:';
+const VRAAG_MERK = '<!-- orkestrator:vraag -->';
+const VRAAG_EIND = '<!-- /orkestrator:vraag -->';
+const ADVIES_MERK = '<!-- orkestrator:advies -->';
+const ADVIES_EIND = '<!-- /orkestrator:advies -->';
+/**
+ * Bouwt de escalatie-comment: leesbaar voor jou, terugleesbaar voor `antwoord`.
+ *
+ * De markeringen zijn HTML-comments, dus onzichtbaar in de gerenderde issue. Zonder
+ * die grenzen zou `status` de vraag uit opgemaakte tekst moeten vissen, en dan breekt
+ * het zodra iemand de comment bijwerkt of de opmaak verandert.
+ */
+export function escalatieComment(issue, vraag, advies, uitkomst, werkmap) {
+    return (`**Escalatie.**\n\n` +
+        `${VRAAG_MERK}\n**Vraag:** ${vraag}\n${VRAAG_EIND}\n\n` +
+        `${ADVIES_MERK}\n**Advies:** ${advies}\n${ADVIES_EIND}\n\n` +
+        `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
+        voetnoot(uitkomst, werkmap));
+}
+/** Leest een escalatie terug uit de comment die `escalatieComment` schreef. */
+export function leesEscalatie(comment) {
+    const sessie = /<!-- orkestrator: sessie=([^\s]+) werkmap=(.+?) -->/.exec(comment);
+    if (sessie?.[1] === undefined || sessie[2] === undefined) {
+        return undefined;
+    }
+    const vraag = tussen(comment, VRAAG_MERK, VRAAG_EIND);
+    const advies = tussen(comment, ADVIES_MERK, ADVIES_EIND);
+    if (vraag === undefined || advies === undefined) {
+        return undefined;
+    }
+    return { vraag, advies, sessie: sessie[1], werkmap: sessie[2] };
+}
+/**
+ * De tekst tussen een open- en sluitmarkering, zonder het label ervoor.
+ *
+ * Expliciet sluiten en niet "tot de volgende markering": het advies wordt gevolgd door
+ * de antwoord-hint en de voetnoot, en die hoorden er in de eerste versie stilzwijgend
+ * bij. Een parser die op het eind van het blok gokt, gokt vroeg of laat verkeerd.
+ */
+function tussen(tekst, van, tot) {
+    const begin = tekst.indexOf(van);
+    if (begin === -1) {
+        return undefined;
+    }
+    const rest = tekst.slice(begin + van.length);
+    const eind = rest.indexOf(tot);
+    return (eind === -1 ? rest : rest.slice(0, eind))
+        .replace(/^\s*\*\*(Vraag|Advies):\*\*\s*/, '')
+        .trim();
+}
 /** Vertaalt de uitkomst van de werker naar wat er op GitHub gebeurt. */
 function verwerk(item, uitkomst, werkmap, cwd) {
-    const staart = `\n\n${voetnoot(uitkomst, werkmap)}`;
     if (uitkomst.afloop === 'mislukt') {
         // Escalatie, niet opnieuw proberen: dezelfde fout elke nacht opnieuw draaien kost
-        // geld en levert niets op.
-        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
-        plaatsComment(item.issue, `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}${staart}`, cwd);
+        // geld en levert niets op. Terug in de wachtrij-kolom, want er wordt niet aan
+        // gewerkt — het label houdt hem daar uit de rij tot jij hem beantwoordt.
+        blokkeer(item, cwd);
+        plaatsComment(item.issue, `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
         waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
         return;
     }
     const verdict = uitkomst.verdict;
     if (verdict?.uitkomst === 'escalatie') {
-        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
-        plaatsComment(item.issue, `**Escalatie.**\n\n**Vraag:** ${verdict.vraag}\n\n**Advies:** ${verdict.advies}${staart}`, cwd);
-        ok(`#${String(item.issue)} geëscaleerd`);
+        blokkeer(item, cwd);
+        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap), cwd);
+        ok(`#${String(item.issue)} geëscaleerd — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
         return;
     }
     if (verdict?.uitkomst !== 'klaar') {
@@ -214,27 +265,39 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
         return;
     }
+    rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd);
+}
+/** Zet een item stil: terug in de wachtrij-kolom, met het label dat het overslaat. */
+function blokkeer(item, cwd) {
+    zetKolom(item.issue, WACHTRIJ_KOLOM, cwd);
+    zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+}
+/** Schrijft de uitwerking weg en zet het item op wachten-op-akkoord. */
+function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
     const tijdelijk = mkdtempSync(path.join(os.tmpdir(), 'factory-orkestreer-'));
     const bodyBestand = path.join(tijdelijk, 'body.md');
-    writeFileSync(bodyBestand, verdict.body.endsWith('\n') ? verdict.body : `${verdict.body}\n`);
-    const geschreven = schrijfBody(item.issue, bodyBestand, cwd);
+    writeFileSync(bodyBestand, body.endsWith('\n') ? body : `${body}\n`);
+    const geschreven = schrijfBody(issue, bodyBestand, cwd);
     rmSync(tijdelijk, { recursive: true, force: true });
     if (!geschreven) {
         // De uitwerking is er wel maar staat nergens; dat is een mislukking, geen succes.
-        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
-        plaatsComment(item.issue, `**Uitwerking kon niet weggeschreven worden.**${staart}`, cwd);
+        blokkeer({ issue }, cwd);
+        plaatsComment(issue, `**Uitwerking kon niet weggeschreven worden.**\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
         return;
     }
-    plaatsComment(item.issue, `**Technisch uitgewerkt** (${String(verdict.slices)} slice${verdict.slices === 1 ? '' : 's'}).\n\n` +
-        `${verdict.samenvatting}\n\nHet item staat op **${WERK_KOLOM}** en wacht op je akkoord; ` +
-        `dat akkoord is het verplaatsen naar **Klaar voor Bouwen**.${staart}`, cwd);
-    ok(`#${String(item.issue)} uitgewerkt en op ${WERK_KOLOM}`);
+    zetKolom(issue, WERK_KOLOM, cwd);
+    haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+    plaatsComment(issue, `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
+        `${samenvatting}\n\nHet item staat op **${WERK_KOLOM}** en wacht op je akkoord; ` +
+        `dat akkoord is het verplaatsen naar **Klaar voor Bouwen**.\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
+    ok(`#${String(issue)} uitgewerkt en op ${WERK_KOLOM}`);
 }
 /**
  * De voetnoot onder elke comment: kosten, beurten en de sessie.
  *
  * De sessie-markering is niet decoratief — `factory orkestreer antwoord` hervat er
- * later mee, en sessies zijn map-gebonden, dus de werkmap hoort erbij.
+ * later mee. De werkmap staat erbij omdat de werker daar de code leest; hervatten
+ * zelf blijkt niet map-gebonden (gemeten, anders dan #104 aannam).
  */
 function voetnoot(uitkomst, werkmap) {
     const delen = [
@@ -244,5 +307,116 @@ function voetnoot(uitkomst, werkmap) {
     ].filter((deel) => deel !== undefined);
     return (`<sub>${delen.join(' · ')}</sub>\n` +
         `<!-- orkestrator: sessie=${uitkomst.sessie} werkmap=${werkmap} -->`);
+}
+// --- status: wat wacht er op mij ---------------------------------------------
+/**
+ * Toont in één blik waar iedereen op wacht: op jou, op een antwoord, of op een werker.
+ *
+ * Eén board-lezing voor alle drie de blokken; het escalatie-blok haalt zijn vraag en
+ * advies uit de comment die de orkestrator zelf schreef.
+ */
+export function orkestreerStatus(cwd) {
+    const items = bordItems(cwd);
+    if (items === undefined) {
+        throw new GebruikersFout('Kon het board niet lezen.');
+    }
+    const geblokkeerd = escalaties(cwd);
+    if (geblokkeerd === undefined) {
+        throw new GebruikersFout('Kon de escalaties niet lezen.');
+    }
+    const wachtOpAkkoord = items.filter((item) => item.kolom === WERK_KOLOM && !geblokkeerd.has(item.issue));
+    const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
+    const wachtrij = items.filter((item) => item.kolom === WACHTRIJ_KOLOM && !geblokkeerd.has(item.issue));
+    kop(`Technisch uitgewerkt, wacht op jouw akkoord (${String(wachtOpAkkoord.length)})`);
+    toonLijst(wachtOpAkkoord);
+    kop(`Geëscaleerd, wacht op een antwoord (${String(vastgelopen.length)})`);
+    for (const item of vastgelopen) {
+        toonRegel(item);
+        const comment = laatsteOrkestratorComment(item.issue, MARKERING, cwd);
+        const escalatie = comment === undefined ? undefined : leesEscalatie(comment);
+        if (escalatie === undefined) {
+            // Zeg het: een escalatie zonder leesbare vraag is niet te beantwoorden, en dat
+            // stil laten is erger dan een lelijke regel.
+            process.stdout.write('         (geen leesbare escalatie-comment gevonden)\n');
+            continue;
+        }
+        process.stdout.write(`         Vraag:  ${escalatie.vraag}\n`);
+        process.stdout.write(`         Advies: ${escalatie.advies}\n`);
+        process.stdout.write(`         Antwoorden: factory orkestreer antwoord ${String(item.issue)} "<jouw keuze>"\n`);
+    }
+    kop(`Wachtrij: ${WACHTRIJ_KOLOM} (${String(wachtrij.length)})`);
+    toonLijst(wachtrij);
+}
+function toonLijst(items) {
+    if (items.length === 0) {
+        process.stdout.write('  —\n');
+        return;
+    }
+    for (const item of items) {
+        toonRegel(item);
+    }
+}
+function toonRegel(item) {
+    const nummer = `#${String(item.issue)}`.padEnd(6);
+    process.stdout.write(`  ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`);
+}
+/**
+ * Beantwoordt een escalatie: het antwoord gaat terug de bestaande sessie in.
+ *
+ * Hervatten is niet alleen sneller maar veel goedkoper — gemeten op 2026-08-19 kostte
+ * een hervatting $0,02 tegen $0,32 voor een verse run, want de context zit in de
+ * cache. Het werk tot de escalatie blijft dus staan; de werker begint niet opnieuw.
+ */
+export function orkestreerAntwoord(issueArgument, tekst, opties = {}, cwd = process.cwd()) {
+    const issue = Number.parseInt(issueArgument ?? '', 10);
+    if (!Number.isSafeInteger(issue) || issue <= 0 || tekst === undefined || tekst.trim() === '') {
+        throw new GebruikersFout('Gebruik: factory orkestreer antwoord <issuenummer> "<jouw antwoord>"');
+    }
+    const comment = laatsteOrkestratorComment(issue, MARKERING, cwd);
+    const escalatie = comment === undefined ? undefined : leesEscalatie(comment);
+    if (escalatie === undefined) {
+        throw new GebruikersFout(`Geen escalatie gevonden op #${String(issue)}.\n` +
+            '  Er staat geen orkestrator-comment met een sessie-markering; er valt dus niets te hervatten.');
+    }
+    kop(`Antwoord op #${String(issue)}`);
+    const uitkomst = draaiWerker({
+        prompt: vervolgPrompt(escalatie, tekst),
+        werkmap: escalatie.werkmap,
+        sessie: escalatie.sessie,
+        budgetUsd: BUDGET_USD,
+        model: MODEL,
+        ...(opties.opnieuw === true ? {} : { hervat: true }),
+    });
+    if (uitkomst.sessieWeg === true) {
+        // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
+        // hier letterlijk. Het werk tot de escalatie is dan wel verloren.
+        throw new GebruikersFout(`De sessie ${escalatie.sessie} bestaat niet meer, dus hervatten kan niet.\n` +
+            `  Begin een verse run met je antwoord erbij:\n` +
+            `    factory orkestreer antwoord ${String(issue)} "${tekst}" --opnieuw\n` +
+            '  Dat kost meer (geen cache) en het werk tot de escalatie is weg, maar het loopt door.');
+    }
+    if (uitkomst.afloop === 'mislukt') {
+        plaatsComment(issue, `**Antwoord verwerkt, maar de run mislukte.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
+            voetnoot(uitkomst, escalatie.werkmap), cwd);
+        throw new GebruikersFout(`De run mislukte: ${uitkomst.fout ?? 'onbekende fout'}`);
+    }
+    const verdict = uitkomst.verdict;
+    if (verdict?.uitkomst === 'escalatie') {
+        // Nog een vraag. Het label blijft staan; er is gewoon een nieuwe ronde nodig.
+        plaatsComment(issue, escalatieComment(issue, verdict.vraag, verdict.advies, uitkomst, escalatie.werkmap), cwd);
+        ok(`#${String(issue)} escaleert opnieuw`);
+        return;
+    }
+    if (verdict?.uitkomst !== 'klaar') {
+        throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitwerking.`);
+    }
+    rondAf(issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, escalatie.werkmap, cwd);
+}
+/** De prompt waarmee de sessie hervat wordt: jouw antwoord, en verder niets nieuws. */
+function vervolgPrompt(escalatie, tekst) {
+    return (`Antwoord op je vraag "${escalatie.vraag}":\n\n${tekst}\n\n` +
+        'Werk hiermee verder en geef opnieuw een verdict. Loop vóór je antwoord de gesloten ' +
+        'lijst uit de onbemand-werken-skill nog een keer langs; kom je er nog een tegen, dan ' +
+        'escaleer je opnieuw in plaats van hem zelf op te lossen.');
 }
 //# sourceMappingURL=orkestreer.js.map

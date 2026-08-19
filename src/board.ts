@@ -411,8 +411,17 @@ interface WachtrijAntwoord {
   };
 }
 
+/** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
+export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined {
+  return bordItems(cwd)?.filter((item) => item.kolom === kolom);
+}
+
 /**
- * Alle open items in één kolom, oudste eerst.
+ * Alle open items op het board, met hun kolom, oudste eerst — in één query.
+ *
+ * Eén ophaalpunt voor élke vraag over het board: de wachtrij is er een filter op, en
+ * `orkestreer status` heeft drie kolommen tegelijk nodig. Twee keer lezen omdat je
+ * twee kolommen wilt is precies de verspilling die #104 wegneemt.
  *
  * Dit is de dure kant van het board, en daarom **één document per pagina** in plaats
  * van `gh project item-list`: gemeten op 2026-08-19 kost deze query 2 punten en die
@@ -426,7 +435,7 @@ interface WachtrijAntwoord {
  * Levert undefined als het board niet gelezen kon worden — dat is iets anders dan
  * "er staat niets in", en de aanroeper hoort dat verschil te merken.
  */
-export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined {
+export function bordItems(cwd?: string): BacklogItem[] | undefined {
   const omgeving = ghOmgeving();
   if (!omgeving.kan) {
     return undefined;
@@ -468,7 +477,8 @@ export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefin
     for (const knoop of items.nodes ?? []) {
       const inhoud = knoop.content;
       const nummer = inhoud?.number;
-      if (nummer === undefined || inhoud?.state !== 'OPEN' || knoop.status?.name !== kolom) {
+      const kolom = knoop.status?.name;
+      if (nummer === undefined || inhoud?.state !== 'OPEN' || kolom === undefined) {
         continue;
       }
       const app = knoop.app?.name;
@@ -654,5 +664,81 @@ export function zetItemsUitBereikOpDone(
       sluitIssue(ouder, cwd);
       ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
     }
+  }
+}
+
+/**
+ * De laatste comment op een issue die van de orkestrator komt, of undefined.
+ *
+ * Via REST (aparte pot), en herkenbaar aan de markering die de orkestrator er zelf
+ * onder zet. Dat is hoe een escalatie zijn sessie draagt: GitHub is de waarheid van de
+ * backlog, dus de vraag én de weg terug staan bij het onderwerp waar ze over gaan.
+ */
+export function laatsteOrkestratorComment(
+  issue: number,
+  markering: string,
+  cwd?: string,
+): string | undefined {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return undefined;
+  }
+  const ruw = uitvoerMetEnv(
+    'gh',
+    [
+      'api',
+      `repos/${EIGENAAR}/${BACKLOG_REPO}/issues/${String(issue)}/comments?per_page=100`,
+      '--jq',
+      '[.[].body] | @base64',
+    ],
+    cwd,
+    omgeving.env,
+  );
+  if (ruw === undefined || ruw === '') {
+    return undefined;
+  }
+  // Base64 omdat comment-bodies zelf newlines bevatten; anders is er geen scheiding
+  // tussen twee comments in de uitvoer van jq.
+  let bodies: unknown;
+  try {
+    bodies = JSON.parse(Buffer.from(ruw.trim(), 'base64').toString('utf8')) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (!Array.isArray(bodies)) {
+    return undefined;
+  }
+  const vanOns = bodies.filter(
+    (body): body is string => typeof body === 'string' && body.includes(markering),
+  );
+  return vanOns[vanOns.length - 1];
+}
+
+/** Haalt een label van een backlog-issue. Faalt zacht. */
+export function haalLabelWeg(issue: number, label: string, cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  const uitkomst = run(
+    'gh',
+    [
+      'issue',
+      'edit',
+      String(issue),
+      '--repo',
+      `${EIGENAAR}/${BACKLOG_REPO}`,
+      '--remove-label',
+      label,
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon label '${label}' niet van #${String(issue)} halen.`);
   }
 }

@@ -122,12 +122,14 @@ export const VERDICT_JSON_SCHEMA = {
 /** De argumenten voor de `claude`-aanroep. Apart, zodat een test ze kan nalopen. */
 export function werkerArgumenten(opdracht) {
     return [
+        // Hervatten of beginnen: `--resume` neemt de sessie-id van de bestaande sessie,
+        // `--session-id` kent hem toe aan een nieuwe.
+        ...(opdracht.hervat === true ? ['--resume', opdracht.sessie] : []),
         '-p',
         opdracht.prompt,
         '--output-format',
         'json',
-        '--session-id',
-        opdracht.sessie,
+        ...(opdracht.hervat === true ? [] : ['--session-id', opdracht.sessie]),
         '--model',
         opdracht.model,
         '--max-budget-usd',
@@ -161,6 +163,13 @@ export function draaiWerker(opdracht) {
         ruw = JSON.parse(uitkomst.stdout);
     }
     catch {
+        const alles = `${uitkomst.stdout}\n${uitkomst.stderr}`;
+        if (alles.includes('No conversation found with session ID')) {
+            // Geen JSON, maar wel een duidelijke reden. Gemeten: een onbekende sessie geeft
+            // deze regel in platte tekst met exit 1 — de aanroeper moet dat kunnen zien,
+            // want een verse run is dan het enige pad dat nog werkt.
+            return { ...mislukt(opdracht.sessie, 'de sessie bestaat niet meer'), sessieWeg: true };
+        }
         const staart = (uitkomst.stderr === '' ? uitkomst.stdout : uitkomst.stderr).trim().slice(-300);
         return mislukt(opdracht.sessie, `claude gaf geen leesbare JSON terug: ${staart}`);
     }

@@ -64,8 +64,14 @@ export interface BacklogItem {
     readonly kolom: string;
     readonly aangemaakt: string;
 }
+/** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
+export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;
 /**
- * Alle open items in één kolom, oudste eerst.
+ * Alle open items op het board, met hun kolom, oudste eerst — in één query.
+ *
+ * Eén ophaalpunt voor élke vraag over het board: de wachtrij is er een filter op, en
+ * `orkestreer status` heeft drie kolommen tegelijk nodig. Twee keer lezen omdat je
+ * twee kolommen wilt is precies de verspilling die #104 wegneemt.
  *
  * Dit is de dure kant van het board, en daarom **één document per pagina** in plaats
  * van `gh project item-list`: gemeten op 2026-08-19 kost deze query 2 punten en die
@@ -79,7 +85,7 @@ export interface BacklogItem {
  * Levert undefined als het board niet gelezen kon worden — dat is iets anders dan
  * "er staat niets in", en de aanroeper hoort dat verschil te merken.
  */
-export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;
+export declare function bordItems(cwd?: string): BacklogItem[] | undefined;
 /** Het label waaraan een geëscaleerd item te herkennen is. */
 export declare const ESCALATIE_LABEL = "escalatie";
 /**
@@ -119,3 +125,13 @@ export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: st
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
  */
 export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): void;
+/**
+ * De laatste comment op een issue die van de orkestrator komt, of undefined.
+ *
+ * Via REST (aparte pot), en herkenbaar aan de markering die de orkestrator er zelf
+ * onder zet. Dat is hoe een escalatie zijn sessie draagt: GitHub is de waarheid van de
+ * backlog, dus de vraag én de weg terug staan bij het onderwerp waar ze over gaan.
+ */
+export declare function laatsteOrkestratorComment(issue: number, markering: string, cwd?: string): string | undefined;
+/** Haalt een label van een backlog-issue. Faalt zacht. */
+export declare function haalLabelWeg(issue: number, label: string, cwd?: string): void;
