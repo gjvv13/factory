@@ -212,21 +212,36 @@ function zoekDoelwit(
  * tegenhouden. Een leeg board, een rate-limit of een ontbrekend item geeft een
  * waarschuwing en gaat door — anders valt een uitrol om op boekhouding.
  */
-export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
+/**
+ * Wat een poging tot verplaatsen opleverde.
+ *
+ * `al-goed` en `mislukt` zijn allebei "niet verzet", maar ze vragen het tegenovergestelde:
+ * het eerste is de idempotente rust van een tweede run, het tweede is een gat waar iemand
+ * naar moet kijken (#195). Ze in één `false` samenvatten was precies waarom een release
+ * stil groen kon blijven terwijl de kolom achterliep.
+ */
+export type KolomUitkomst = 'verzet' | 'al-goed' | 'mislukt';
+
+/** Zet de kolom en vertel welke van de drie uitkomsten het was. */
+export function zetKolomUitkomst(issue: number, kolom: Kolom, cwd?: string): KolomUitkomst {
   const omgeving = ghOmgeving();
   if (!omgeving.kan) {
     waarschuwing(
       `geen PROJECT_TOKEN in deze workflow — #${String(issue)} niet naar '${kolom}' gezet.`,
     );
-    return false;
+    return 'mislukt';
   }
   const doelwit = zoekDoelwit(issue, kolom, cwd, omgeving.env);
   if (doelwit === undefined) {
-    waarschuwing(`kon #${String(issue)} niet op het board vinden — kolom niet gezet.`);
-    return false;
+    waarschuwing(
+      `kon #${String(issue)} niet op het board vinden — kolom niet gezet. ` +
+        `Staat het item wél op het board, dan mag PROJECT_TOKEN het niet lezen: ` +
+        `dat vraagt een classic PAT met de scope 'project'.`,
+    );
+    return 'mislukt';
   }
   if (doelwit.huidig === kolom) {
-    return false;
+    return 'al-goed';
   }
   const uitkomst = run(
     'gh',
@@ -251,9 +266,20 @@ export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
   );
   if (uitkomst.code !== 0) {
     waarschuwing(`kon #${String(issue)} niet naar '${kolom}' verplaatsen op het board.`);
-    return false;
+    return 'mislukt';
   }
-  return true;
+  return 'verzet';
+}
+
+/**
+ * Zet de kolom; `true` als het item daadwerkelijk verplaatst is.
+ *
+ * De bestaande aanroepers willen precies deze vraag beantwoord ("heb ik iets veranderd?"),
+ * dus die houden hun boolean. Wie het verschil tussen "stond al goed" en "mislukt" nodig
+ * heeft, gebruikt `zetKolomUitkomst`.
+ */
+export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
+  return zetKolomUitkomst(issue, kolom, cwd) === 'verzet';
 }
 
 /**
@@ -661,9 +687,10 @@ export interface AfrondUitkomst {
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
  *
  * Ontbreekt het token, dan gaat de reeks in één keer over de kop in plaats van per item:
- * dat scheelt een waarschuwing per issue, en de aanroeper krijgt de nummers terug zodat
- * hij ze kan mélden (#195) — een stille overslag met exit 0 liet de kolom Uitrollen
- * vollopen zonder dat iemand het zag.
+ * dat scheelt een waarschuwing per issue. Lukt een enkele beweging niet — token zonder
+ * project-scope, item niet op het board, geweigerde mutatie — dan komt dat item er ook bij.
+ * De aanroeper krijgt de nummers terug zodat hij ze kan mélden (#195): een stille overslag
+ * met exit 0 liet de kolom Uitrollen vollopen zonder dat iemand het zag.
  */
 export function zetItemsUitBereikOpDone(
   vanaf: string,
@@ -686,8 +713,17 @@ export function zetItemsUitBereikOpDone(
     return { verzet: [], overgeslagen: issues };
   }
   const verzet: number[] = [];
+  const overgeslagen: number[] = [];
   for (const issue of issues) {
-    if (!zetKolom(issue, 'Done', cwd)) {
+    const beweging = zetKolomUitkomst(issue, 'Done', cwd);
+    if (beweging === 'mislukt') {
+      // Niet alleen een ontbrekend token laat een item liggen: een token dat het board niet
+      // mág lezen, een weggehaald bord-item of een geweigerde mutatie doen hetzelfde. Alle
+      // drie horen in de melding (#195, gezien op release v1.15.15).
+      overgeslagen.push(issue);
+      continue;
+    }
+    if (beweging === 'al-goed') {
       continue;
     }
     verzet.push(issue);
@@ -703,7 +739,7 @@ export function zetItemsUitBereikOpDone(
       ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
     }
   }
-  return { verzet, overgeslagen: [] };
+  return { verzet, overgeslagen };
 }
 
 /**
