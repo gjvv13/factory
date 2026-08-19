@@ -199,3 +199,21 @@ Omdat alle issues in `gjvv13/factory` staan, werkt `/bouw` vanuit elke app met
 
 Alles loopt via de `gh` CLI (ingelogd als `gjvv13`). Issues worden met
 `--body-file` en de labels hierboven aangemaakt en bijgewerkt.
+
+### Wat de backlog-repo aan secrets nodig heeft
+
+De pijplijn schrijft zelf op het board (#128, #185). Lokaal gebruikt hij jouw eigen
+`gh`-auth; in een workflow kan dat niet — het ingebouwde `GITHUB_TOKEN` is repo-gebonden
+en het board hangt onder een persoonlijk account. Daarvoor staan deze drie op
+`gjvv13/factory` (en `PROJECT_TOKEN` ook op elke app-repo):
+
+| Naam                  | Soort     | Waarvoor                                                      |
+| --------------------- | --------- | ------------------------------------------------------------- |
+| `PROJECT_TOKEN`       | secret    | het board schrijven: classic PAT met scope `project` + `repo` |
+| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt     |
+| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                |
+
+Ontbreekt `PROJECT_TOKEN`, dan slaat de bordstap zacht over en blijven items op
+**Uitrollen** staan — een release wordt daar nooit rood van. Dat liep één keer stil vol
+(#195); daarom meldt de release het nu in de ops-room. Verloopt de PAT, dan is dat de
+melding die je krijgt.

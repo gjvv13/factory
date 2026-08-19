@@ -18,6 +18,13 @@ export declare function isBacklogRepo(cwd?: string): boolean;
  */
 export declare function issueUitBranch(branch: string): number | undefined;
 /**
+ * Of het board in deze omgeving te schrijven is.
+ *
+ * Voor aanroepers die niet één item verplaatsen maar een reeks: die willen kunnen
+ * mélden dat er niets gebeurde in plaats van het per item te herhalen (#195).
+ */
+export declare function bordBereikbaar(): boolean;
+/**
  * Zet een issue in een kolom. Levert true als er iets veranderd is.
  *
  * Faalt nooit hard: de pijplijn levert software af, en de administratie mag dat niet
@@ -114,6 +121,13 @@ export declare function zorgVoorEscalatieLabel(cwd?: string): void;
 export declare function zetLabel(issue: number, label: string, cwd?: string): void;
 /** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
 export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean;
+/** Wat een afrondronde over een tagbereik heeft opgeleverd. */
+export interface AfrondUitkomst {
+    /** Items die daadwerkelijk naar Done zijn verplaatst. */
+    readonly verzet: readonly number[];
+    /** Items die bleven liggen omdat het board niet te schrijven was. */
+    readonly overgeslagen: readonly number[];
+}
 /**
  * Zet elk backlog-item uit een tagbereik op **Done**, plaatst een comment en sluit het;
  * sluit de ouder-epic mee zodra al zijn slices dicht zijn.
@@ -123,8 +137,13 @@ export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: st
  * tag ís haar productie. `zetKolom` is idempotent (een item dat al op Done staat levert
  * niets op), dus twee runs over hetzelfde bereik zijn veilig. Faalt zacht als de rest van
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
+ *
+ * Ontbreekt het token, dan gaat de reeks in één keer over de kop in plaats van per item:
+ * dat scheelt een waarschuwing per issue, en de aanroeper krijgt de nummers terug zodat
+ * hij ze kan mélden (#195) — een stille overslag met exit 0 liet de kolom Uitrollen
+ * vollopen zonder dat iemand het zag.
  */
-export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): void;
+export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): AfrondUitkomst;
 /**
  * Alle comments op een issue die van de orkestrator komen, oudste eerst.
  *

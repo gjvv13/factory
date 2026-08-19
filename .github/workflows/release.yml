@@ -44,6 +44,10 @@ jobs:
       ( !startsWith(github.event.head_commit.message, 'release:')
       && !contains(github.event.head_commit.message, 'gjvv13/release/') ) }}
     runs-on: ubuntu-latest
+    # Voor de meldjob hieronder (#195): welke items bleven liggen, en bij welke tag.
+    outputs:
+      bord_overgeslagen: ${{ steps.bump.outputs.bord_overgeslagen }}
+      tag: ${{ steps.bump.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -66,6 +70,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       - name: Bump op een release-branch, tag, en open een auto-merge-PR
+        id: bump
         env:
           GH_TOKEN: ${{ github.token }}
           # De PR-stappen draaien met een PAT i.p.v. github.token: een PR die met
@@ -110,10 +115,13 @@ jobs:
           # vrijkomt — ook als de PR-kant hieronder ontbreekt of faalt.
           git tag -a "$v" -m "Release $v"
           git push origin "$v"
+          echo "tag=$v" >> "$GITHUB_OUTPUT"
           # Factory-eigen backlog-items uit dit tagbereik naar Done (#185). De factory
           # draait geen `promote prod`, dus de release-tag ís haar Done-moment. Dit staat
           # vóór het RELEASE_PAT-afsplitspunt hieronder, zodat het ook gebeurt als er geen
           # release-PR komt. Een bordfout mag de release nooit rood maken — vandaar de `||`.
+          # Bleef er iets liggen, dan zet `afronden` zelf `bord_overgeslagen` als uitvoer
+          # en meldt de job hieronder het (#195).
           node dist/cli.js afronden "$laatste" "$v" \
             || echo "::warning::kon het board niet bijwerken voor $v (zie #185); de tag $v staat er wel."
           # De PR bumpt main's package.json mee, zodat main gelijk blijft lopen met de
@@ -131,3 +139,40 @@ jobs:
             || echo "::warning::kon de release-PR niet openen — de tag $v staat er wel."
           GH_TOKEN="$RELEASE_PAT" gh pr merge "release/$v" --auto --merge --delete-branch \
             || echo "::warning::kon auto-merge niet inschakelen op de release-PR (tag $v staat er wel)."
+
+  # Vangnet tegen een stílle overslag (#195): kon de release het board niet bijwerken, dan
+  # hoort dat te staan waar ik toch al kijk — de ops-room — en niet alleen als een groene
+  # regel in een log. Precies dat liet de kolom Uitrollen zes items diep vollopen.
+  #
+  # Draait op de mini, niet op de release-runner: het meld-endpoint van de assistent
+  # luistert op loopback en een GitHub-hosted runner komt daar niet bij. Nodig zijn de
+  # repo-variabele `DEPLOY_NOTIFY_URL` en het secret `DEPLOY_NOTIFY_TOKEN` (zoals
+  # `deploy.yml` in de apps); zonder die variabele blijft het bij een waarschuwing.
+  #
+  # Bewust niet door een test gedekt: deze job is YAML zonder eigen poort, en een
+  # nagebouwde curl zou alleen zichzelf toetsen. Wat wél te toetsen is — welke items
+  # bleven liggen en dat ze als uitvoer de deur uit gaan — staat in `test/afronden.test.ts`.
+  # Het bewijs dat de job zelf loopt is een echte release (acceptatiecriterium van #195).
+  melding:
+    needs: release
+    if: ${{ needs.release.outputs.bord_overgeslagen != '' }}
+    runs-on: [self-hosted, mini]
+    steps:
+      - name: Melden dat het board niet is bijgewerkt
+        env:
+          NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
+          NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+          OVERGESLAGEN: ${{ needs.release.outputs.bord_overgeslagen }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          bericht="⚠ factory-release $TAG: het board is niet bijgewerkt (geen PROJECT_TOKEN). Niet naar Done gezet: $OVERGESLAGEN. Run: $run_url"
+          if [ -z "$NOTIFY_URL" ]; then
+            echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
+            exit 0
+          fi
+          curl -fsS -m 10 -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "{\"tekst\":\"$bericht\"}" \
+            || echo "::warning::kon de melding over het board niet aan de assistent versturen."

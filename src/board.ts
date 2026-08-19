@@ -98,6 +98,16 @@ function ghOmgeving(): { readonly kan: boolean; readonly env?: NodeJS.ProcessEnv
   return { kan: true };
 }
 
+/**
+ * Of het board in deze omgeving te schrijven is.
+ *
+ * Voor aanroepers die niet één item verplaatsen maar een reeks: die willen kunnen
+ * mélden dat er niets gebeurde in plaats van het per item te herhalen (#195).
+ */
+export function bordBereikbaar(): boolean {
+  return ghOmgeving().kan;
+}
+
 interface Doelwit {
   readonly itemId: string;
   readonly projectId: string;
@@ -632,6 +642,14 @@ export function schrijfBody(issue: number, bodyBestand: string, cwd?: string): b
   return true;
 }
 
+/** Wat een afrondronde over een tagbereik heeft opgeleverd. */
+export interface AfrondUitkomst {
+  /** Items die daadwerkelijk naar Done zijn verplaatst. */
+  readonly verzet: readonly number[];
+  /** Items die bleven liggen omdat het board niet te schrijven was. */
+  readonly overgeslagen: readonly number[];
+}
+
 /**
  * Zet elk backlog-item uit een tagbereik op **Done**, plaatst een comment en sluit het;
  * sluit de ouder-epic mee zodra al zijn slices dicht zijn.
@@ -641,6 +659,11 @@ export function schrijfBody(issue: number, bodyBestand: string, cwd?: string): b
  * tag ís haar productie. `zetKolom` is idempotent (een item dat al op Done staat levert
  * niets op), dus twee runs over hetzelfde bereik zijn veilig. Faalt zacht als de rest van
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
+ *
+ * Ontbreekt het token, dan gaat de reeks in één keer over de kop in plaats van per item:
+ * dat scheelt een waarschuwing per issue, en de aanroeper krijgt de nummers terug zodat
+ * hij ze kan mélden (#195) — een stille overslag met exit 0 liet de kolom Uitrollen
+ * vollopen zonder dat iemand het zag.
  */
 export function zetItemsUitBereikOpDone(
   vanaf: string,
@@ -648,11 +671,26 @@ export function zetItemsUitBereikOpDone(
   itemMelding: string,
   ouderMelding: string,
   cwd?: string,
-): void {
-  for (const issue of issuesUitBereik(vanaf, tag, cwd)) {
+): AfrondUitkomst {
+  const issues = [...issuesUitBereik(vanaf, tag, cwd)];
+  // Een bereik zonder items is geen overslag: dan valt er niets te melden en hoort het
+  // stil te blijven, ook zonder token. Anders wordt elke patch-release een bericht.
+  if (issues.length === 0) {
+    return { verzet: [], overgeslagen: [] };
+  }
+  if (!bordBereikbaar()) {
+    waarschuwing(
+      `geen PROJECT_TOKEN in deze workflow — niet naar 'Done' gezet: ` +
+        `${issues.map((i) => `#${String(i)}`).join(', ')}.`,
+    );
+    return { verzet: [], overgeslagen: issues };
+  }
+  const verzet: number[] = [];
+  for (const issue of issues) {
     if (!zetKolom(issue, 'Done', cwd)) {
       continue;
     }
+    verzet.push(issue);
     plaatsComment(issue, itemMelding, cwd);
     sluitIssue(issue, cwd);
     ok(`#${String(issue)} staat op Done`);
@@ -665,6 +703,7 @@ export function zetItemsUitBereikOpDone(
       ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
     }
   }
+  return { verzet, overgeslagen: [] };
 }
 
 /**

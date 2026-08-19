@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { createInterface } from 'node:readline/promises';
 import type { Readable, Writable } from 'node:stream';
@@ -112,6 +113,23 @@ export function run(commando: string, argumenten: string[], options: RunOptions 
  * Bewust strak op de bekende strings, zodat een échte fout (auth, non-fast-forward,
  * merge-conflict) níet als vergeeflijk telt en meteen naar boven komt.
  */
+/**
+ * Zet een uitvoer-variabele klaar voor de omliggende GitHub-workflow; buiten een
+ * workflow doet dit niets.
+ *
+ * Waarom de CLI dit zelf schrijft en de workflow het niet uit de uitvoer vist (zoals
+ * `heeft-migratie` doet): dit gaat niet om één waarde maar om een gegeven dat midden in
+ * een log met menselijke regels ontstaat. Dat er met `tail` uit halen is fragiel — de
+ * schrijver weet het gewoon.
+ */
+export function schrijfWorkflowUitvoer(naam: string, waarde: string): void {
+  const doel = process.env['GITHUB_OUTPUT'];
+  if (doel === undefined || doel === '') {
+    return;
+  }
+  appendFileSync(doel, `${naam}=${waarde}\n`);
+}
+
 export function isDnsBlip(tekst: string): boolean {
   return /could not resolve host|nodename nor servname|temporary failure in name resolution|getaddrinfo (?:ENOTFOUND|EAI_AGAIN)/i.test(
     tekst,

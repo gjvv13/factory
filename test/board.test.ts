@@ -450,6 +450,37 @@ describe('zetItemsUitBereikOpDone', () => {
     },
   });
 
+  it('geeft terug wat er verzet is en wat bleef liggen', () => {
+    // De aanroeper moet kunnen mélden dat er niets gebeurde (#195); daarvoor is "false"
+    // per item te weinig — hij heeft de nummers nodig.
+    const bepaler = (a: { commando: string; argumenten: string[] }) => {
+      if (a.commando === 'git' && a.argumenten[0] === 'log') {
+        return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+      }
+      if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+        return { stdout: boardMetDone };
+      }
+      return {};
+    };
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler).uitvoerder);
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [185],
+      overgeslagen: [],
+    });
+
+    // Dezelfde reeks in een workflow zonder token: niets verzet, alles gemeld.
+    herstelOmgeving();
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler).uitvoerder);
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [],
+      overgeslagen: [185],
+    });
+  });
+
   it('zet elk item uit het bereik op Done met de meegegeven melding', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) => {
       if (a.commando === 'git' && a.argumenten[0] === 'log') {

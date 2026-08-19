@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { afronden } from '../src/commands/afronden.js';
 import { GebruikersFout, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
@@ -65,14 +68,31 @@ const gesloten = (aanroepen: ProcesAanroep[]): string[] =>
 
 describe('afronden', () => {
   let herstelOmgeving: () => void;
+  let oudeUitvoer: string | undefined;
+
+  /** Laat de workflow-uitvoer in een verse temp-file landen en geeft het pad terug. */
+  function maakUitvoerBestand(): string {
+    const bestand = path.join(mkdtempSync(path.join(os.tmpdir(), 'factory-afronden-')), 'uitvoer');
+    writeFileSync(bestand, '');
+    process.env.GITHUB_OUTPUT = bestand;
+    return bestand;
+  }
 
   beforeEach(() => {
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    oudeUitvoer = process.env.GITHUB_OUTPUT;
+    delete process.env.GITHUB_OUTPUT;
   });
 
   afterEach(() => {
     herstelUitvoerder();
     herstelOmgeving();
+    vi.restoreAllMocks();
+    if (oudeUitvoer === undefined) {
+      delete process.env.GITHUB_OUTPUT;
+    } else {
+      process.env.GITHUB_OUTPUT = oudeUitvoer;
+    }
   });
 
   it('zet elk item uit het tagbereik op Done, becommentarieert en sluit het', () => {
@@ -132,6 +152,47 @@ describe('afronden', () => {
       afronden('v1.0.0', 'v1.1.0');
     }).toThrow(GebruikersFout);
     expect(aanroepen.some((a) => a.commando === 'gh')).toBe(false);
+  });
+
+  it('meldt de overgeslagen items als workflow-uitvoer wanneer het token ontbreekt', () => {
+    // In een workflow zonder PROJECT_TOKEN komt board.ts niet bij het bord. Dat was een
+    // stille exit 0 (#195); nu geeft `afronden` de nummers door zodat de meldjob in
+    // release.yml ze in de ops-room kan zetten.
+    herstelOmgeving();
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
+    const uitvoerBestand = maakUitvoerBestand();
+    const { uitvoerder, aanroepen } = opnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    afronden('v1.0.0', 'v1.1.0');
+
+    expect(readFileSync(uitvoerBestand, 'utf8')).toBe('bord_overgeslagen=#185\n');
+    // En het board is niet aangeraakt: geen half werk met een token dat het niet kan.
+    expect(aanroepen.some((a) => a.commando === 'gh')).toBe(false);
+  });
+
+  it('schrijft geen uitvoer wanneer alle items zijn verzet', () => {
+    const uitvoerBestand = maakUitvoerBestand();
+    stelUitvoerderIn(opnemer().uitvoerder);
+
+    afronden('v1.0.0', 'v1.1.0');
+
+    expect(readFileSync(uitvoerBestand, 'utf8')).toBe('');
+  });
+
+  it('blijft stil als er geen items in het tagbereik zitten, ook zonder token', () => {
+    // Anders wordt elke patch-release zonder backlog-item een bericht, en leest niemand
+    // ze nog.
+    herstelOmgeving();
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
+    const uitvoerBestand = maakUitvoerBestand();
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    stelUitvoerderIn(opnemer({ log: '' }).uitvoerder);
+
+    afronden('v1.0.0', 'v1.1.0');
+
+    expect(readFileSync(uitvoerBestand, 'utf8')).toBe('');
+    expect(schrijf.mock.calls.map(String).join('')).not.toMatch(/PROJECT_TOKEN/);
   });
 
   it('vraagt om beide tags', () => {

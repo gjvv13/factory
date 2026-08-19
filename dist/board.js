@@ -83,6 +83,15 @@ function ghOmgeving() {
     }
     return { kan: true };
 }
+/**
+ * Of het board in deze omgeving te schrijven is.
+ *
+ * Voor aanroepers die niet één item verplaatsen maar een reeks: die willen kunnen
+ * mélden dat er niets gebeurde in plaats van het per item te herhalen (#195).
+ */
+export function bordBereikbaar() {
+    return ghOmgeving().kan;
+}
 const OPZOEK_QUERY = `query($eigenaar:String!,$repo:String!,$project:Int!,$nummer:Int!){
   user(login:$eigenaar){ projectV2(number:$project){ id
     field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } } } }
@@ -488,12 +497,30 @@ export function schrijfBody(issue, bodyBestand, cwd) {
  * tag ís haar productie. `zetKolom` is idempotent (een item dat al op Done staat levert
  * niets op), dus twee runs over hetzelfde bereik zijn veilig. Faalt zacht als de rest van
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
+ *
+ * Ontbreekt het token, dan gaat de reeks in één keer over de kop in plaats van per item:
+ * dat scheelt een waarschuwing per issue, en de aanroeper krijgt de nummers terug zodat
+ * hij ze kan mélden (#195) — een stille overslag met exit 0 liet de kolom Uitrollen
+ * vollopen zonder dat iemand het zag.
  */
 export function zetItemsUitBereikOpDone(vanaf, tag, itemMelding, ouderMelding, cwd) {
-    for (const issue of issuesUitBereik(vanaf, tag, cwd)) {
+    const issues = [...issuesUitBereik(vanaf, tag, cwd)];
+    // Een bereik zonder items is geen overslag: dan valt er niets te melden en hoort het
+    // stil te blijven, ook zonder token. Anders wordt elke patch-release een bericht.
+    if (issues.length === 0) {
+        return { verzet: [], overgeslagen: [] };
+    }
+    if (!bordBereikbaar()) {
+        waarschuwing(`geen PROJECT_TOKEN in deze workflow — niet naar 'Done' gezet: ` +
+            `${issues.map((i) => `#${String(i)}`).join(', ')}.`);
+        return { verzet: [], overgeslagen: issues };
+    }
+    const verzet = [];
+    for (const issue of issues) {
         if (!zetKolom(issue, 'Done', cwd)) {
             continue;
         }
+        verzet.push(issue);
         plaatsComment(issue, itemMelding, cwd);
         sluitIssue(issue, cwd);
         ok(`#${String(issue)} staat op Done`);
@@ -505,6 +532,7 @@ export function zetItemsUitBereikOpDone(vanaf, tag, itemMelding, ouderMelding, c
             ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
         }
     }
+    return { verzet, overgeslagen: [] };
 }
 /**
  * Alle comments op een issue die van de orkestrator komen, oudste eerst.
