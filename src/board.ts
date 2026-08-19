@@ -668,20 +668,20 @@ export function zetItemsUitBereikOpDone(
 }
 
 /**
- * De laatste comment op een issue die van de orkestrator komt, of undefined.
+ * Alle comments op een issue die van de orkestrator komen, oudste eerst.
  *
- * Via REST (aparte pot), en herkenbaar aan de markering die de orkestrator er zelf
- * onder zet. Dat is hoe een escalatie zijn sessie draagt: GitHub is de waarheid van de
- * backlog, dus de vraag én de weg terug staan bij het onderwerp waar ze over gaan.
+ * Bewust álle, niet alleen de laatste: elke orkestrator-comment draagt de markering,
+ * ook "run mislukt" en "technisch uitgewerkt". Alleen de laatste pakken zou betekenen
+ * dat een escalatie onvindbaar wordt zodra er daarna nog iets gebeurde, terwijl de
+ * vraag gewoon een comment hoger staat. De aanroeper kiest de laatste die hij kan lezen.
+ *
+ * Via REST (aparte pot), want GitHub is de waarheid van de backlog: de vraag én de weg
+ * terug staan bij het onderwerp waar ze over gaan.
  */
-export function laatsteOrkestratorComment(
-  issue: number,
-  markering: string,
-  cwd?: string,
-): string | undefined {
+export function orkestratorComments(issue: number, markering: string, cwd?: string): string[] {
   const omgeving = ghOmgeving();
   if (!omgeving.kan) {
-    return undefined;
+    return [];
   }
   const ruw = uitvoerMetEnv(
     'gh',
@@ -695,7 +695,7 @@ export function laatsteOrkestratorComment(
     omgeving.env,
   );
   if (ruw === undefined || ruw === '') {
-    return undefined;
+    return [];
   }
   // Base64 omdat comment-bodies zelf newlines bevatten; anders is er geen scheiding
   // tussen twee comments in de uitvoer van jq.
@@ -703,15 +703,14 @@ export function laatsteOrkestratorComment(
   try {
     bodies = JSON.parse(Buffer.from(ruw.trim(), 'base64').toString('utf8')) as unknown;
   } catch {
-    return undefined;
+    return [];
   }
   if (!Array.isArray(bodies)) {
-    return undefined;
+    return [];
   }
-  const vanOns = bodies.filter(
+  return bodies.filter(
     (body): body is string => typeof body === 'string' && body.includes(markering),
   );
-  return vanOns[vanOns.length - 1];
 }
 
 /** Haalt een label van een backlog-issue. Faalt zacht. */

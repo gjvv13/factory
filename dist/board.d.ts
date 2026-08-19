@@ -126,12 +126,16 @@ export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: st
  */
 export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): void;
 /**
- * De laatste comment op een issue die van de orkestrator komt, of undefined.
+ * Alle comments op een issue die van de orkestrator komen, oudste eerst.
  *
- * Via REST (aparte pot), en herkenbaar aan de markering die de orkestrator er zelf
- * onder zet. Dat is hoe een escalatie zijn sessie draagt: GitHub is de waarheid van de
- * backlog, dus de vraag én de weg terug staan bij het onderwerp waar ze over gaan.
+ * Bewust álle, niet alleen de laatste: elke orkestrator-comment draagt de markering,
+ * ook "run mislukt" en "technisch uitgewerkt". Alleen de laatste pakken zou betekenen
+ * dat een escalatie onvindbaar wordt zodra er daarna nog iets gebeurde, terwijl de
+ * vraag gewoon een comment hoger staat. De aanroeper kiest de laatste die hij kan lezen.
+ *
+ * Via REST (aparte pot), want GitHub is de waarheid van de backlog: de vraag én de weg
+ * terug staan bij het onderwerp waar ze over gaan.
  */
-export declare function laatsteOrkestratorComment(issue: number, markering: string, cwd?: string): string | undefined;
+export declare function orkestratorComments(issue: number, markering: string, cwd?: string): string[];
 /** Haalt een label van een backlog-issue. Faalt zacht. */
 export declare function haalLabelWeg(issue: number, label: string, cwd?: string): void;

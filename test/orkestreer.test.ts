@@ -682,15 +682,43 @@ describe('orkestreer antwoord', () => {
     );
   });
 
-  it('begint een verse sessie met --opnieuw', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
+  it('begint met --opnieuw een verse sessie mét de volledige opdracht', () => {
+    const wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-opnieuw-'));
+    const metBoard: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'gh' &&
+      aanroep.argumenten[1] === 'graphql' &&
+      (aanroep.argumenten.find((a) => a.startsWith('query=')) ?? '').includes('items(first:100')
+        ? {
+            stdout: boardAntwoord([
+              boardItem(
+                51,
+                'assistant',
+                'Klaar voor technische refinement',
+                '2026-08-09T00:00:00Z',
+              ),
+            ]),
+          }
+        : antwoordBepaler()(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metBoard);
     stelUitvoerderIn(uitvoerder);
 
-    orkestreerAntwoord('51', 'doe WASM', { opnieuw: true }, '/repo');
+    orkestreerAntwoord('51', 'doe WASM', { opnieuw: true, werkplaatsWortel: wortel }, '/repo');
+    rmSync(wortel, { recursive: true, force: true });
 
     const claude = aanroepen.find((a) => a.commando === 'claude');
     expect(claude?.argumenten).not.toContain('--resume');
-    expect(claude?.argumenten).toContain('--session-id');
+    // Een verse id: hergebruik van de oude faalt met "Session ID is already in use"
+    // zodra die sessie toch nog bestaat (gemeten).
+    const sessie = claude?.argumenten[claude.argumenten.indexOf('--session-id') + 1];
+    expect(sessie).not.toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
+    expect(sessie).toMatch(/^[0-9a-f-]{36}$/);
+    // En de volledige opdracht, niet alleen het antwoord: een lege sessie weet anders
+    // niet wélk issue, wélke applicatie of wat er opgeleverd moet worden.
+    const prompt = claude?.argumenten[claude.argumenten.indexOf('-p') + 1] ?? '';
+    expect(prompt).toContain('#51');
+    expect(prompt).toContain('assistant');
+    expect(prompt).toContain('doe WASM');
+    expect(prompt).toContain('WASM of native?');
   });
 
   it('zegt het als de sessie niet meer te hervatten is, en biedt een verse run aan', () => {
@@ -707,6 +735,30 @@ describe('orkestreer antwoord', () => {
     }).toThrow(/--opnieuw/);
   });
 
+  it('vindt de escalatie ook als er daarna nog een comment kwam', () => {
+    const laterMislukt =
+      '**Run mislukt.** iets\n\n<sub>$0.10</sub>\n<!-- orkestrator: sessie=x werkmap=/w -->';
+    const naEscalatie: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werkerKlaar() };
+      if (commando === 'gh' && argumenten[1]?.includes('/comments') === true) {
+        return { stdout: commentsAntwoord([ESCALATIE, laterMislukt]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(naEscalatie);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+
+    // De mislukt-comment draagt ook de sessie-markering maar geen vraag; alleen naar
+    // de laatste kijken zou de vraag een comment hoger onvindbaar maken.
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    expect(claude?.argumenten[1]).toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
+  });
+
   it('weigert een issue zonder escalatie-comment', () => {
     const leeg: UitkomstBepaler = ({ commando, argumenten }) =>
       commando === 'gh' && argumenten[1]?.includes('/comments') === true
@@ -717,6 +769,20 @@ describe('orkestreer antwoord', () => {
     expect(() => {
       orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
     }).toThrow(/Geen escalatie gevonden/);
+  });
+
+  it('stopt op het lock, net als een gewone run', () => {
+    closeSync(openSync(LOCK_PAD, 'wx'));
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
+    stelUitvoerderIn(uitvoerder);
+
+    // Twee antwoorden tegelijk hervatten dezelfde sessie en schrijven allebei een body
+    // en een comment; de laatste wint en je houdt een dubbele comment over.
+    expect(() => {
+      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    }).toThrow(/draait al een orkestrator-run/);
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+    rmSync(LOCK_PAD, { force: true });
   });
 
   it('weigert een aanroep zonder nummer of tekst', () => {

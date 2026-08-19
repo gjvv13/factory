@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bordItems, escalaties, ESCALATIE_LABEL, haalLabelWeg, laatsteOrkestratorComment, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { bordItems, escalaties, ESCALATIE_LABEL, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -210,6 +210,24 @@ export function escalatieComment(issue, vraag, advies, uitkomst, werkmap) {
         `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
         voetnoot(uitkomst, werkmap));
 }
+/**
+ * De laatste escalatie op een issue, of undefined.
+ *
+ * Zoekt van achter naar voren naar een comment die écht als escalatie te lezen is.
+ * Alleen "de laatste orkestrator-comment" pakken gaat mis zodra er daarna nog iets
+ * gebeurde — een mislukte run schrijft ook een comment mét sessie-markering maar
+ * zonder vraag, en dan zou de vraag een comment hoger onvindbaar worden.
+ */
+export function laatsteEscalatie(issue, cwd) {
+    const comments = orkestratorComments(issue, MARKERING, cwd);
+    for (let i = comments.length - 1; i >= 0; i -= 1) {
+        const gelezen = leesEscalatie(comments[i] ?? '');
+        if (gelezen !== undefined) {
+            return gelezen;
+        }
+    }
+    return undefined;
+}
 /** Leest een escalatie terug uit de comment die `escalatieComment` schreef. */
 export function leesEscalatie(comment) {
     const sessie = /<!-- orkestrator: sessie=([^\s]+) werkmap=(.+?) -->/.exec(comment);
@@ -332,8 +350,7 @@ export function orkestreerStatus(cwd) {
     kop(`Geëscaleerd, wacht op een antwoord (${String(vastgelopen.length)})`);
     for (const item of vastgelopen) {
         toonRegel(item);
-        const comment = laatsteOrkestratorComment(item.issue, MARKERING, cwd);
-        const escalatie = comment === undefined ? undefined : leesEscalatie(comment);
+        const escalatie = laatsteEscalatie(item.issue, cwd);
         if (escalatie === undefined) {
             // Zeg het: een escalatie zonder leesbare vraag is niet te beantwoorden, en dat
             // stil laten is erger dan een lelijke regel.
@@ -372,21 +389,34 @@ export function orkestreerAntwoord(issueArgument, tekst, opties = {}, cwd = proc
     if (!Number.isSafeInteger(issue) || issue <= 0 || tekst === undefined || tekst.trim() === '') {
         throw new GebruikersFout('Gebruik: factory orkestreer antwoord <issuenummer> "<jouw antwoord>"');
     }
-    const comment = laatsteOrkestratorComment(issue, MARKERING, cwd);
-    const escalatie = comment === undefined ? undefined : leesEscalatie(comment);
+    const escalatie = laatsteEscalatie(issue, cwd);
     if (escalatie === undefined) {
         throw new GebruikersFout(`Geen escalatie gevonden op #${String(issue)}.\n` +
             '  Er staat geen orkestrator-comment met een sessie-markering; er valt dus niets te hervatten.');
     }
+    if (!neemLock()) {
+        // Twee antwoorden tegelijk hervatten dezelfde sessie en schrijven allebei een body
+        // en een comment; de laatste wint en je houdt een dubbele comment over.
+        throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+    }
+    try {
+        werkAntwoordAf(issue, tekst, escalatie, opties, cwd);
+    }
+    finally {
+        geefLockVrij();
+    }
+}
+function werkAntwoordAf(issue, tekst, escalatie, opties, cwd) {
     kop(`Antwoord op #${String(issue)}`);
-    const uitkomst = draaiWerker({
-        prompt: vervolgPrompt(escalatie, tekst),
-        werkmap: escalatie.werkmap,
-        sessie: escalatie.sessie,
-        budgetUsd: BUDGET_USD,
-        model: MODEL,
-        ...(opties.opnieuw === true ? {} : { hervat: true }),
-    });
+    const opdracht = opties.opnieuw === true
+        ? verseOpdracht(issue, tekst, escalatie, cwd, opties.werkplaatsWortel ?? werkplaatsWortel)
+        : {
+            prompt: vervolgPrompt(escalatie, tekst),
+            werkmap: escalatie.werkmap,
+            sessie: escalatie.sessie,
+            hervat: true,
+        };
+    const uitkomst = draaiWerker({ ...opdracht, budgetUsd: BUDGET_USD, model: MODEL });
     if (uitkomst.sessieWeg === true) {
         // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
         // hier letterlijk. Het werk tot de escalatie is dan wel verloren.
@@ -411,6 +441,31 @@ export function orkestreerAntwoord(issueArgument, tekst, opties = {}, cwd = proc
         throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitwerking.`);
     }
     rondAf(issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, escalatie.werkmap, cwd);
+}
+/**
+ * De volledige opdracht opnieuw, mét het antwoord — voor als de sessie weg is.
+ *
+ * Alleen het antwoord meesturen zou een lege sessie opleveren die niet weet wélk issue,
+ * wélke applicatie of wat er opgeleverd moet worden; die levert een verdict zonder
+ * inhoud, of erger, een verzonnen body die de issue-body overschrijft. En de sessie
+ * krijgt een **nieuwe** id: hergebruik van de oude faalt met "Session ID is already in
+ * use" zodra die toch nog bestaat (gemeten).
+ */
+function verseOpdracht(issue, tekst, escalatie, cwd, wortel) {
+    const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
+    if (item?.app === undefined) {
+        throw new GebruikersFout(`Kon #${String(issue)} niet op het board vinden (of het heeft geen App-veld);\n` +
+            '  zonder die gegevens is er geen opdracht om verse mee te beginnen.');
+    }
+    const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
+    const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+    return {
+        prompt: `${bouwPrompt({ ...item, app: item.app }, werkmap, factoryMap)}\n\n` +
+            `## Eerder gevraagd\n\nEen eerdere poging stelde deze vraag:\n\n> ${escalatie.vraag}\n\n` +
+            `Het antwoord is:\n\n> ${tekst}\n\nWerk daarmee verder.`,
+        werkmap,
+        sessie: randomUUID(),
+    };
 }
 /** De prompt waarmee de sessie hervat wordt: jouw antwoord, en verder niets nieuws. */
 function vervolgPrompt(escalatie, tekst) {

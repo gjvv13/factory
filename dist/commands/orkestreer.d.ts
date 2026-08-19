@@ -34,6 +34,15 @@ export interface Escalatie {
  * het zodra iemand de comment bijwerkt of de opmaak verandert.
  */
 export declare function escalatieComment(issue: number, vraag: string, advies: string, uitkomst: WerkerUitkomst, werkmap: string): string;
+/**
+ * De laatste escalatie op een issue, of undefined.
+ *
+ * Zoekt van achter naar voren naar een comment die écht als escalatie te lezen is.
+ * Alleen "de laatste orkestrator-comment" pakken gaat mis zodra er daarna nog iets
+ * gebeurde — een mislukte run schrijft ook een comment mét sessie-markering maar
+ * zonder vraag, en dan zou de vraag een comment hoger onvindbaar worden.
+ */
+export declare function laatsteEscalatie(issue: number, cwd: string): Escalatie | undefined;
 /** Leest een escalatie terug uit de comment die `escalatieComment` schreef. */
 export declare function leesEscalatie(comment: string): Escalatie | undefined;
 /**
