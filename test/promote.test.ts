@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { promote, versieUitHealth } from '../src/commands/promote.js';
 import * as shell from '../src/shell.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
+import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
 
 function maakApp(): string {
   const werkruimte = mkdtempSync(path.join(os.tmpdir(), 'factory-promote-'));
@@ -29,6 +29,7 @@ function eersteIndex(aanroepen: ProcesAanroep[], test: (a: ProcesAanroep) => boo
 describe('promote', () => {
   let oorspronkelijkeCwd: string;
   let fetchSpy: MockInstance<typeof fetch>;
+  let herstelOmgeving: () => void;
 
   beforeEach(() => {
     oorspronkelijkeCwd = process.cwd();
@@ -43,9 +44,12 @@ describe('promote', () => {
     vi.spyOn(shell, 'isGezondNaStart').mockResolvedValue(true);
     // Post-swap health: standaard is de omgeving na de swap gezond.
     vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok"}');
+    // Zie inleveren.test.ts: in CI draait de test zelf in een workflow.
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
   });
 
   afterEach(() => {
+    herstelOmgeving();
     process.chdir(oorspronkelijkeCwd);
     herstelUitvoerder();
   });

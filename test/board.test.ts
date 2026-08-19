@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { issuesUitBereik, issueUitBranch, plaatsComment, zetKolom } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
+import {
+  maakUitvoerderOpnemer,
+  zetBoardOmgeving,
+  type ProcesAanroep,
+  type UitkomstBepaler,
+} from './helpers.js';
 
 const ITEM = 'PVTI_test';
 const PROJECT = 'PVT_test';
@@ -76,7 +81,16 @@ describe('issueUitBranch', () => {
 });
 
 describe('zetKolom', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    // De tests draaien in CI zélf in een workflow; zonder dit slaat de poort in
+    // board.ts het bord over en meten we het verkeerde.
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
   afterEach(() => {
+    herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
   });
@@ -150,7 +164,14 @@ describe('zetKolom', () => {
 });
 
 describe('plaatsComment', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
   afterEach(() => {
+    herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
   });
@@ -223,5 +244,63 @@ describe('issuesUitBereik', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: historie })).uitvoerder);
 
     expect(issuesUitBereik('v1.0.0', 'v1.1.0')).toEqual([128]);
+  });
+});
+
+describe('token in een workflow', () => {
+  let herstelOmgeving = (): void => undefined;
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('gebruikt PROJECT_TOKEN als GH_TOKEN voor de gh-aanroepen', () => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true, pat: 'pat-geheim' });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
+    stelUitvoerderIn(uitvoerder);
+
+    zetKolom(128, 'Uitrollen');
+
+    // Zowel de opzoeking als de verplaatsing draaien met de PAT: het ingebouwde
+    // workflow-token komt niet bij een board onder een persoonlijk account.
+    for (const aanroep of aanroepen) {
+      expect(aanroep.env?.['GH_TOKEN']).toBe('pat-geheim');
+    }
+  });
+
+  it('slaat het board over in een workflow zonder PROJECT_TOKEN, met een waarschuwing', () => {
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
+    stelUitvoerderIn(uitvoerder);
+
+    // Geen throw en geen enkele aanroep: de deploy blijft groen, het bord loopt achter.
+    expect(zetKolom(128, 'Uitrollen')).toBe(false);
+    expect(aanroepen).toHaveLength(0);
+    expect(schrijf.mock.calls.map(String).join('')).toMatch(/geen PROJECT_TOKEN/);
+  });
+
+  it('plaatst ook geen comment in een workflow zonder PROJECT_TOKEN', () => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    plaatsComment(128, 'hallo');
+
+    // De backlog staat in een ander repo dan de app die uitrolt; ook een comment
+    // vraagt daarom een token dat verder reikt dan deze repo.
+    expect(aanroepen).toHaveLength(0);
+  });
+
+  it('werkt lokaal gewoon zonder PROJECT_TOKEN', () => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
+    stelUitvoerderIn(uitvoerder);
+
+    expect(zetKolom(128, 'Uitrollen')).toBe(true);
+    // Geen eigen omgeving: gh gebruikt de auth van de gebruiker zelf.
+    expect(aanroepen[0]?.env).toBeUndefined();
   });
 });
