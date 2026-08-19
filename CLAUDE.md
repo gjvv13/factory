@@ -148,9 +148,17 @@ ssh-URL, en een CI-runner heeft geen sleutel: dan kan de build de factory niet
 ophalen. Deze repo is daarom publiek — er staat geen enkel geheim in, alleen de
 pipeline en een generiek skelet.
 
-Een verbetering aan de pipeline bereikt een applicatie door hier te releasen en
-daar de versie te bumpen. Slash commands en de git hook moeten fysiek in de
-app-repo staan; die haal je op met `factory sync`.
+Een verbetering aan de pipeline bereikt een applicatie **automatisch** (#132): een
+merge naar factory-`main` tagt vanzelf via `release.yml`, en elke app draait een
+`bump-factory.yml` die de nieuwste tag oppikt, `factory sync` doet (CLI én workflows,
+skills, hook komen mee) en via de gewone pijplijn naar prod rolt. Slash commands en de
+git hook moeten fysiek in de app-repo staan; `factory sync` doet dat, en de auto-bump
+draait 'm voor je.
+
+**Eenmalige bootstrap.** Het auto-bump-bestand moet de eerste keer met de hand in een
+app landen: bump de factory-dep, `pnpm install`, `factory sync`, en lever in. Vanaf dan
+gaat het vanzelf. Wil je een app tijdelijk bevriezen op een factory-versie, verwijder
+dan zijn `bump-factory.yml` (of zet 'm in `syncNegeer`).
 
 ## Auto-deploy naar acc en prod
 

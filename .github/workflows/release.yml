@@ -1,0 +1,60 @@
+name: release
+
+# Auto-release van de factory zelf (#132). De apps rollen al automatisch uit bij een
+# merge; de factory deed dat niet, want ze is gereedschap en geen draaiende app — er
+# was alleen een handmatige `factory release`. Deze workflow zet bij elke merge naar
+# main een nieuwe tag, zodat een pijplijn-verbetering vanzelf vrijkomt. De apps pikken
+# die tag daarna zelf op via `bump-factory.yml`.
+#
+# Draait op een GitHub-hosted runner: `factory release` heeft geen prod nodig (alleen
+# verify + versie-bump + tag + push), en zo raakt de release de mini-DNS-blip niet.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Versie-sprong'
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # De release-commit is zelf een push naar main; sla die over, anders tagt de
+    # release zichzelf in een lus. Een handmatige dispatch draait altijd.
+    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'release:') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Dependencies installeren (met DNS-retry)
+        run: |
+          for poging in 1 2 3; do
+            if pnpm install --frozen-lockfile; then exit 0; fi
+            if [ "$poging" -lt 3 ]; then sleep "$((poging * 5))"; fi
+          done
+          echo "::error::pnpm install bleef falen na 3 pogingen"
+          exit 1
+      - name: Git-identiteit voor de release-commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      # factory release draait de volledige poort, bumpt de versie, commit, tagt en
+      # pusht main + tag. De `release:`-commit triggert deze workflow niet opnieuw.
+      - name: Releasen
+        run: pnpm exec factory release "${{ github.event.inputs.bump || 'patch' }}"
