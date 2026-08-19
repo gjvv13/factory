@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Readable, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -8,6 +11,7 @@ import {
   isDnsBlip,
   isGezondNaStart,
   runMetHerhaling,
+  schrijfWorkflowUitvoer,
   stelStarterIn,
   stelUitvoerderIn,
   stelWachtIn,
@@ -209,5 +213,38 @@ describe('wachtOpGezond', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('connection refused'));
 
     expect(await wachtOpGezond('http://127.0.0.1:1/health', 1)).toBeUndefined();
+  });
+});
+
+describe('schrijfWorkflowUitvoer', () => {
+  const oud = process.env.GITHUB_OUTPUT;
+
+  afterEach(() => {
+    if (oud === undefined) {
+      delete process.env.GITHUB_OUTPUT;
+    } else {
+      process.env.GITHUB_OUTPUT = oud;
+    }
+  });
+
+  it('hangt de regel achter het uitvoerbestand van de workflow', () => {
+    const bestand = path.join(mkdtempSync(path.join(os.tmpdir(), 'factory-uitvoer-')), 'uitvoer');
+    writeFileSync(bestand, 'eerder=1\n');
+    process.env.GITHUB_OUTPUT = bestand;
+
+    schrijfWorkflowUitvoer('bord_overgeslagen', '#1, #2');
+
+    // Aanhangen, niet overschrijven: een stap schrijft er vaak meer dan één.
+    expect(readFileSync(bestand, 'utf8')).toBe('eerder=1\nbord_overgeslagen=#1, #2\n');
+  });
+
+  it('doet niets buiten een workflow', () => {
+    delete process.env.GITHUB_OUTPUT;
+
+    // Lokaal is er geen uitvoerbestand; dat mag geen fout zijn, want dezelfde commando's
+    // draaien met de hand.
+    expect(() => {
+      schrijfWorkflowUitvoer('bord_overgeslagen', '#1');
+    }).not.toThrow();
   });
 });
