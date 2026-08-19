@@ -59,6 +59,8 @@ describe('nieuw', () => {
     expect(config).toMatchObject({
       naam: 'proefapp',
       poorten: { prod: 3000, dev: 3001, acc: 3002 },
+      // Private repo → lokale wachtrij, niet de merge-queue-default (#108).
+      integratie: 'lokaal',
     });
 
     // De tokens in het echte skeleton zijn ingevuld, niets blijft staan.

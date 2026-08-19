@@ -2,6 +2,12 @@
 export declare const WACHTRIJ_LABEL = "wachtrij";
 /** Maakt het `wachtrij`-label aan als het nog niet bestaat (idempotent, faalt niet als het er al is). */
 export declare function zorgVoorWachtrijLabel(repoDir: string): void;
+/**
+ * Of er voor deze app een integreer-LaunchAgent geïnstalleerd is. `inleveren` gebruikt
+ * dit om een lokale-wachtrij-app te waarschuwen als niemand de rij afwerkt — anders
+ * blijft een gelabelde PR stil staan (de stille-drain-storing uit #108).
+ */
+export declare function heeftIntegreerAgent(naam: string): boolean;
 export interface PlistOpzet {
     readonly naam: string;
     /** Absoluut pad naar de globaal geïnstalleerde factory-bin (buiten ~/Documents). */

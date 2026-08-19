@@ -5,7 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/commands/verify.js', () => ({ verify: vi.fn() }));
 
+// Alleen heeftIntegreerAgent stubben; de rest (zorgVoorWachtrijLabel, WACHTRIJ_LABEL)
+// blijft echt, zodat de wachtrij-label-aanroep in de tests gewoon plaatsvindt.
+vi.mock('../src/commands/integreer.js', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, heeftIntegreerAgent: vi.fn(() => true) };
+});
+
 import { inleveren } from '../src/commands/inleveren.js';
+import { heeftIntegreerAgent } from '../src/commands/integreer.js';
 import { verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
@@ -56,7 +64,19 @@ describe('inleveren', () => {
     oorspronkelijkeCwd = process.cwd();
     vi.spyOn(process.stdout, 'write').mockReturnValue(true);
     vi.mocked(verify).mockReset();
+    // Default: agent aanwezig, dus geen waarschuwing — dat de bestaande tests niet raakt.
+    vi.mocked(heeftIntegreerAgent).mockReturnValue(true);
   });
+
+  /** Vangt alles op wat inleveren naar stdout schrijft, voor de waarschuwings-tests. */
+  function vangStdout(): string[] {
+    const regels: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      regels.push(String(tekst));
+      return true;
+    });
+    return regels;
+  }
 
   afterEach(() => {
     process.chdir(oorspronkelijkeCwd);
@@ -194,5 +214,35 @@ describe('inleveren', () => {
       'wachtrij',
     ]);
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+  });
+
+  it('waarschuwt als er voor een lokale-wachtrij-app geen integreer-agent is', () => {
+    process.chdir(maakLokaleRepo());
+    vi.mocked(heeftIntegreerAgent).mockReturnValue(false);
+    const regels = vangStdout();
+    stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+
+    inleveren();
+
+    const uitvoer = regels.join('');
+    expect(uitvoer).toContain('geen integreer-agent voor proefapp');
+    expect(uitvoer).toContain('factory integreer --installeer');
+    // De hint noemt het juiste repo, afgeleid uit de PR-url.
+    expect(uitvoer).toContain('factory integreer --repo=gjvv13/factory');
+    // Bij een ontbrekende agent belooft het niet ten onrechte dat de rij doorloopt.
+    expect(uitvoer).not.toContain('integreert slice/58-1 serieel naar main');
+  });
+
+  it('waarschuwt niet als de integreer-agent er wél is', () => {
+    process.chdir(maakLokaleRepo());
+    vi.mocked(heeftIntegreerAgent).mockReturnValue(true);
+    const regels = vangStdout();
+    stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+
+    inleveren();
+
+    const uitvoer = regels.join('');
+    expect(uitvoer).not.toContain('geen integreer-agent');
+    expect(uitvoer).toContain('integreert slice/58-1 serieel naar main');
   });
 });

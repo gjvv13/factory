@@ -2,8 +2,17 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
-import { GebruikersFout, git, kop, ok, pakketbeheerder, run, uitvoerVan } from '../shell.js';
-import { WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
+import {
+  GebruikersFout,
+  git,
+  kop,
+  ok,
+  pakketbeheerder,
+  run,
+  uitvoerVan,
+  waarschuwing,
+} from '../shell.js';
+import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
 import { verify } from './verify.js';
 
 export interface InleverenOpties {
@@ -76,7 +85,9 @@ export function inleveren(opties: InleverenOpties = {}): void {
   git(['push', '-q', '-u', 'origin', branch], repoDir);
   ok(`${branch} gepusht`);
 
-  const lokaal = gebruiktLokaleWachtrij(repoDir);
+  const appDir = zoekAppDir(repoDir);
+  const config = appDir === undefined ? undefined : leesAppConfig(appDir);
+  const lokaal = config?.integratie === 'lokaal';
   kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
   const titelArgumenten =
     opties.titel === undefined
@@ -99,6 +110,18 @@ export function inleveren(opties: InleverenOpties = {}): void {
     zorgVoorWachtrijLabel(repoDir);
     run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
     ok(`in de wachtrij gezet: ${prUrl}`);
+    // Zonder een integreer-agent werkt niemand de rij af: de PR blijft stil staan
+    // (de storing uit #108). Waarschuw expliciet en wijs de twee uitwegen aan.
+    // `config` is hier non-undefined: `lokaal` kan alleen waar zijn als het gelezen is.
+    if (!heeftIntegreerAgent(config.naam)) {
+      const doel = ghDoelVanUrl(prUrl) ?? config.naam;
+      waarschuwing(
+        `geen integreer-agent voor ${config.naam} — deze PR blijft in de wachtrij staan.\n` +
+          `  Installeer 'm met \`factory integreer --installeer\` (in de app-map),\n` +
+          `  of werk de rij nu af met \`factory integreer --repo=${doel}\`.`,
+      );
+      return;
+    }
     process.stdout.write(
       `\nDe factory-wachtrij integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`,
     );
@@ -114,8 +137,7 @@ export function inleveren(opties: InleverenOpties = {}): void {
   );
 }
 
-/** Of deze repo de factory-eigen wachtrij gebruikt (`factory.json`: `integratie: lokaal`). */
-function gebruiktLokaleWachtrij(repoDir: string): boolean {
-  const appDir = zoekAppDir(repoDir);
-  return appDir !== undefined && leesAppConfig(appDir).integratie === 'lokaal';
+/** `<owner>/<naam>` uit een GitHub-PR-URL, voor de `--repo`-hint in de waarschuwing. */
+function ghDoelVanUrl(prUrl: string): string | undefined {
+  return /github\.com\/([^/]+\/[^/]+)\//.exec(prUrl)?.[1];
 }
