@@ -68,8 +68,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bump="${{ github.event.inputs.bump || 'patch' }}"
-          # Alleen de versie in package.json ophogen; de volledige poort draait als
-          # `verify`-check op de PR (dat is precies de vereiste check van de ruleset).
+          # De volgende versie leiden we af van de NIEUWSTE git-tag, niet van de versie
+          # in package.json op main. Een release-PR wordt door github-actions gemaakt en
+          # zo'n bot-PR triggert `verify` niet (en er is geen echte merge-queue), dus hij
+          # blijft hangen en main's package.json advanceert nooit. Rekenen vanuit
+          # package.json bevroor de versie daardoor op de al-bestaande tag ("niets te
+          # releasen") en elke merge werd een no-op. De tag is de echte bron van "wat is
+          # de laatste release" — de apps bumpen er ook op. We zetten package.json op die
+          # tag-versie en bumpen dáárvandaan, zodat opeenvolgende merges nette,
+          # oplopende tags krijgen ook als de vorige release-PR nog openstaat.
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+          laatste="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          laatste="${laatste:-v0.0.0}"
+          npm pkg set version="${laatste#v}" >/dev/null
           pnpm version "$bump" --no-git-tag-version >/dev/null
           v="v$(node -p "require('./package.json').version")"
           if git ls-remote --tags --exit-code origin "refs/tags/$v" >/dev/null 2>&1; then
@@ -80,12 +91,19 @@ jobs:
           git add package.json
           git commit -m "release: $v"
           # Tag op de bump-commit; tags vallen buiten de branch-ruleset, dus dit mag
-          # direct. De apps kunnen hiermee meteen bumpen, ook al staat de PR nog in de queue.
+          # direct. Dit is wat telt: de apps bumpen op de tag, niet op main's
+          # package.json. De release komt dus hoe dan ook vrij, ook als de PR hieronder
+          # blijft hangen.
           git tag -a "$v" -m "Release $v"
           git push origin "release/$v"
           git push origin "$v"
+          # De PR bumpt main's package.json mee, puur voor de netheid. Hij merget alleen
+          # als iemand 'm met de hand (admin) doorzet: een bot-PR triggert `verify` niet en
+          # er is geen echte merge-queue, dus auto-merge blijft wachten. Dat blokkeert de
+          # release niet meer (de tag staat er al) — de PR is best-effort. Zie #132.
           gh pr create --base main --head "release/$v" \
             --title "release: $v" \
-            --body "Automatische versie-bump (#132). De tag $v is al gezet op de bump-commit."
-          # Auto-merge: de PR gaat de merge-queue in en merget zodra `verify` groen is.
-          gh pr merge "release/$v" --auto --merge --delete-branch
+            --body "Automatische versie-bump (#132). De tag $v is al gezet op de bump-commit." \
+            || echo "::warning::kon de release-PR niet openen — de tag $v staat er wel."
+          gh pr merge "release/$v" --auto --merge --delete-branch \
+            || echo "::warning::kon auto-merge niet inschakelen op de release-PR (tag $v staat er wel)."
