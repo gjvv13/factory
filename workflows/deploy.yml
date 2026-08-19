@@ -84,6 +84,11 @@ jobs:
       # release: verify + versie-bump + tag + push. promote acc: verse uitrol met
       # herladen env en zichtbare config. Acc heeft geen secrets nodig.
       - run: pnpm exec factory deploy acc
+      # Rooktest acc: één read-only aanroep door de kern (#121). /health zegt "ok" ook
+      # als het brein eruit ligt; dit bewijst dat de app echt antwoordt. Faalt hij, dan
+      # wordt de job rood en meldt de gefaalde-deploy-stap dat. No-op zonder een rooktest
+      # in factory.json. Acc eerst: de logische plek om een kapotte kern als eerste te zien.
+      - run: pnpm exec factory rooktest acc
       # Bepaalt na de release of prod via de goedkeurings-poort moet. De factory-
       # binary rechtstreeks (niet via `pnpm exec`): pnpm print anders een ruis-regel
       # ("Lockfile is up to date…") die de command-substitutie en daarmee
@@ -165,6 +170,10 @@ jobs:
       # release. Komt prod niet gezond op (of meldt /health een andere versie dan de
       # tag), dan faalt promote luid en geldt de proces-rollback.
       - run: pnpm exec factory deploy prod
+      # Rooktest prod: bewijst dat de kern echt antwoordt na de uitrol (#121). Faalt hij,
+      # dan wordt de prod-job rood (+ melding hieronder); terugrollen is bewust handmatig
+      # (`factory terugrol prod`), niet automatisch. No-op zonder rooktest in factory.json.
+      - run: pnpm exec factory rooktest prod
       # Zie de toelichting bij de acc-job: meldt een gefaalde prod-deploy aan de
       # assistent zodat prod niet stil op de oude versie achterblijft (#112).
       - name: Melden bij een gefaalde deploy

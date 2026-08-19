@@ -32,6 +32,16 @@ declare const appConfigSchema: z.ZodObject<{
         high: "high";
         critical: "critical";
     }>>;
+    rooktest: z.ZodOptional<z.ZodObject<{
+        pad: z.ZodString;
+        methode: z.ZodDefault<z.ZodEnum<{
+            GET: "GET";
+            POST: "POST";
+        }>>;
+        body: z.ZodOptional<z.ZodString>;
+        verwachteStatus: z.ZodDefault<z.ZodNumber>;
+        bevat: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
 }, z.core.$strip>;
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
 export interface AppConfig extends AppConfigBestand {

@@ -22,6 +22,8 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen      |
 | `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren                   |
 | `factory deploy <acc\|prod>`                      | Uitrol-orchestratie voor de runner: `acc` = release + promote acc             |
+| `factory rooktest <acc\|prod>`                    | Eén read-only aanroep door de kern na een uitrol (uit `factory.json`)         |
+| `factory terugrol <acc\|prod>`                    | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)      |
 | `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers          |
 | `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                          |
 | `factory nieuw <naam>`                            | Nieuwe applicatie uit het skeleton, met een vrij poortblok                    |
@@ -194,6 +196,22 @@ gefaalde `deploy.yml`-job anders alleen een rood vinkje in de Actions-tab achter
 meldt een `if: failure()`-stap dat aan de assistent (die naar Matrix relayt). Die stap
 draait ook als een eerdere stap omviel (bijv. de action-download) en is een no-op met
 waarschuwing zolang `DEPLOY_NOTIFY_URL` niet is gezet.
+
+**Rooktest en terugweg (#121).** `/health` "ok" bewijst niet dat de kern werkt. Zet
+daarom een rooktest in `factory.json` — één **read-only** aanroep die `factory rooktest`
+na de uitrol tegen de omgeving draait (acc én prod, acc eerst), bijvoorbeeld:
+
+```json
+"rooktest": { "pad": "/channels/http/inbound", "body": "{\"from\":\"rooktest\",\"text\":\"ping\"}", "bevat": "pong" }
+```
+
+Faalt de rooktest, dan wordt de deploy-job rood (en dat meldt zich via de
+gefaalde-deploy-melding hierboven); er wordt **niet** automatisch teruggerold — dat kan
+verrassender zijn dan het probleem. De terugweg staat klaar als los commando:
+`factory terugrol <acc|prod>` promoot de vorige tag terug (seconden werk t.o.v. vooruit
+fixen). Zonder een `rooktest`-blok is de stap een no-op, zodat de workflow 'm altijd mag
+aanroepen. De read-only garantie ligt bij jou: kies een leesactie, geen bestelling en
+geen regel in iemands lijst.
 
 ## Seriële integratie op de apps
 

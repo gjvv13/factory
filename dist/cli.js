@@ -8,7 +8,9 @@ import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
+import { rooktest } from './commands/rooktest.js';
 import { sync } from './commands/sync.js';
+import { terugrol } from './commands/terugrol.js';
 import { verify } from './commands/verify.js';
 import { toonMigratieStatus } from './migratie.js';
 import { leesArgumenten } from './argumenten.js';
@@ -21,6 +23,8 @@ const HULP = `factory — pipeline van idee tot productie
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
   factory deploy <acc|prod>              uitrol-orchestratie voor de runner (acc: release + promote)
+  factory rooktest <acc|prod>            één read-only aanroep door de kern na een uitrol (uit factory.json)
+  factory terugrol <acc|prod> [--ja]     promote de vorige tag terug naar de omgeving
   factory heeft-migratie                 print ja/nee: bevat deze release een nieuwe DB-migratie (voor de prod-poort)
   factory env <status|start|stop|reload|logs> [omgeving]
   factory flag <omgeving> [naam] [on|off]
@@ -68,6 +72,16 @@ async function main(argumenten) {
         case 'deploy': {
             const { positioneel } = leesArgumenten(rest);
             await deploy(positioneel[0]);
+            return;
+        }
+        case 'rooktest': {
+            const { positioneel } = leesArgumenten(rest);
+            await rooktest(positioneel[0]);
+            return;
+        }
+        case 'terugrol': {
+            const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--ja'] });
+            await terugrol(positioneel[0], { ja: schakelaars.has('--ja') });
             return;
         }
         case 'heeft-migratie':
