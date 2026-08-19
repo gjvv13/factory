@@ -74,20 +74,24 @@ jobs:
           # blijft hangen en main's package.json advanceert nooit. Rekenen vanuit
           # package.json bevroor de versie daardoor op de al-bestaande tag ("niets te
           # releasen") en elke merge werd een no-op. De tag is de echte bron van "wat is
-          # de laatste release" — de apps bumpen er ook op. We zetten package.json op die
-          # tag-versie en bumpen dáárvandaan, zodat opeenvolgende merges nette,
-          # oplopende tags krijgen ook als de vorige release-PR nog openstaat.
+          # de laatste release" — de apps bumpen er ook op. Door vanaf de tag te bumpen
+          # krijgen opeenvolgende merges nette, oplopende tags, ook als de vorige
+          # release-PR nog openstaat.
           git fetch --tags --force origin >/dev/null 2>&1 || true
           laatste="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
           laatste="${laatste:-v0.0.0}"
-          npm pkg set version="${laatste#v}" >/dev/null
-          pnpm version "$bump" --no-git-tag-version >/dev/null
-          v="v$(node -p "require('./package.json').version")"
+          # Reken de volgende versie rekenkundig uit de tag. Niet via `pnpm version`: dat
+          # eist een schone git-tree, en we bumpen niet vanuit package.json (die loopt
+          # achter). npm pkg set schrijft de nieuwe versie pas ná de branch-checkout, dus
+          # de tree blijft tot dan schoon.
+          nieuw="$(node -e "const [a,b,c]=process.argv[1].replace(/^v/,'').split('.').map(Number); const t=process.argv[2]; console.log(t==='major'?[a+1,0,0].join('.'):t==='minor'?[a,b+1,0].join('.'):[a,b,c+1].join('.'))" "$laatste" "$bump")"
+          v="v$nieuw"
           if git ls-remote --tags --exit-code origin "refs/tags/$v" >/dev/null 2>&1; then
             echo "::notice::$v bestaat al — niets te releasen."
             exit 0
           fi
           git checkout -b "release/$v"
+          npm pkg set version="$nieuw" >/dev/null
           git add package.json
           git commit -m "release: $v"
           # Tag op de bump-commit; tags vallen buiten de branch-ruleset, dus dit mag
