@@ -42,19 +42,17 @@ architectuur indeelt).
 
 ## Wanneer je stopt en escaleert
 
-Bij twijfel escaleer je. Twijfel telt als een treffer. In elk geval bij:
+**Lees eerst `{{FACTORY_MAP}}/skills/onbemand-werken/SKILL.md`.** Daar staat de gesloten
+lijst van dingen waarbij je stopt, wat er wél zonder vragen mag, en de vuistregel
+"twijfel telt als een treffer". Die tekst gaat boven wat hier staat.
 
-- afwijken van wat er functioneel gevraagd is, of buiten de grens van het item werken;
-- een datamodel- of migratiewijziging die niet in het item staat;
-- een nieuwe externe koppeling, of een contract dat verandert;
-- een nieuwe dependency;
-- een feature flag die in productie aan zou moeten;
-- bestanden of lagen raken die het item niet noemt;
-- de dekkings-basislijn willen verlagen;
-- wat dan ook aan productie.
+Loop die lijst **vlak voordat je je verdict geeft** punt voor punt langs — niet uit je
+hoofd, maar door hem terug te lezen. Kwam je er één tegen die je stilzwijgend hebt
+opgelost, dan is dat alsnog een escalatie.
 
 Escaleren is geen falen. Eén goede vraag is meer waard dan een uitwerking waarin een
-aanname verstopt zit die niemand meer terugvindt.
+aanname verstopt zit die niemand meer terugvindt. Je sessie wordt hervat met het
+antwoord erbij, dus je werk tot dan toe blijft staan.
 
 ## Wat je teruggeeft
 

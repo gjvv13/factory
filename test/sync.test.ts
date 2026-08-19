@@ -53,6 +53,11 @@ describe('sync', () => {
     expect(existsSync(path.join(app, '.claude', 'skills', 'coding-guidelines', 'SKILL.md'))).toBe(
       true,
     );
+    // Het onbemand-werken-contract moet mee naar élke app: een latere bouw-werker
+    // erft dan dezelfde escalatieregels zonder dat er iets herontworpen wordt (#104).
+    expect(existsSync(path.join(app, '.claude', 'skills', 'onbemand-werken', 'SKILL.md'))).toBe(
+      true,
+    );
     expect(existsSync(path.join(app, '.github', 'workflows', 'ci.yml'))).toBe(true);
     expect(existsSync(path.join(app, '.githooks', 'pre-commit'))).toBe(true);
     // Meldt elk bijgewerkt bestand terug.

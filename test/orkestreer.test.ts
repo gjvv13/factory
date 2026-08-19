@@ -2,7 +2,13 @@ import { closeSync, existsSync, mkdtempSync, openSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { orkestreer } from '../src/commands/orkestreer.js';
+import {
+  escalatieComment,
+  leesEscalatie,
+  orkestreer,
+  orkestreerAntwoord,
+  orkestreerStatus,
+} from '../src/commands/orkestreer.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
@@ -86,6 +92,25 @@ function werkerKlaar(): string {
       samenvatting: 'Premisse getoetst, drie slices.',
       slices: 3,
       body: '# Nieuwe uitwerking\n\nDit is de body.',
+    },
+    permission_denials: [],
+  });
+}
+
+/** Een werker die een vraag stelt in plaats van een uitwerking te leveren. */
+function werkerEscaleert(): string {
+  return JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+    num_turns: 7,
+    total_cost_usd: 1.1,
+    result: 'zie verdict',
+    structured_output: {
+      uitkomst: 'escalatie',
+      vraag: 'WASM of native crypto-SDK?',
+      advies: 'WASM — geen native compilatie in de bouw.',
     },
     permission_denials: [],
   });
@@ -388,5 +413,383 @@ describe('orkestreer', () => {
 
     // Blijft het slot liggen, dan staat de rij een uur stil op een run die al klaar is.
     expect(existsSync(LOCK_PAD)).toBe(false);
+  });
+});
+
+describe('escalatie-comment', () => {
+  const UITKOMST = {
+    afloop: 'escalatie' as const,
+    sessie: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+    kosten: 1.5,
+    beurten: 7,
+    weigeringen: 0,
+  };
+
+  it('is terug te lezen, ook als de vraag zelf opmaak bevat', () => {
+    const vraag = 'Via **de assistent** of via `beheer`?\n\nBeide kan.';
+    const advies = 'Via de assistent — beheer heeft geen kanaal naar buiten.';
+
+    const comment = escalatieComment(94, vraag, advies, UITKOMST, '/w/beheer');
+    const terug = leesEscalatie(comment);
+
+    // De grenzen zijn HTML-comments, dus opmaak in de tekst zelf breekt niets.
+    expect(terug?.vraag).toBe(vraag);
+    expect(terug?.advies).toBe(advies);
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
+    expect(terug?.werkmap).toBe('/w/beheer');
+  });
+
+  it('noemt het commando waarmee je antwoordt, met het juiste nummer', () => {
+    expect(escalatieComment(94, 'v', 'a', UITKOMST, '/w')).toContain(
+      'factory orkestreer antwoord 94',
+    );
+  });
+
+  it('geeft undefined bij een comment zonder sessie-markering', () => {
+    // Een handgeschreven comment is geen escalatie; die mag `antwoord` niet hervatten.
+    expect(leesEscalatie('gewoon een opmerking van een mens')).toBeUndefined();
+  });
+});
+
+describe('escalatie in de wachtrij', () => {
+  let wortel: string;
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-esc-'));
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    rmSync(LOCK_PAD, { force: true });
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    rmSync(LOCK_PAD, { force: true });
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('zet een geëscaleerd item terug in de wachtrij-kolom, met het label', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerEscaleert() }));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // Er wordt niet aan gewerkt, dus het hoort niet op "Technisch refinen" te blijven
+    // staan; het label houdt hem uit de rij tot jij antwoordt.
+    const opties = aanroepen
+      .filter((a) => a.argumenten[0] === 'project')
+      .map((a) => a.argumenten[a.argumenten.indexOf('--single-select-option-id') + 1]);
+    expect(opties).toEqual(['optie-technisch', 'optie-wachtrij']);
+    expect(ghArgs(aanroepen)).toContainEqual(
+      expect.arrayContaining(['issue', 'edit', '51', '--add-label', 'escalatie']),
+    );
+    // Geen uitwerking, dus ook geen body.
+    expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(false);
+  });
+
+  it('schrijft de vraag en het advies in de comment', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerEscaleert() }));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    expect(leesEscalatie(comment)).toMatchObject({
+      vraag: 'WASM of native crypto-SDK?',
+      advies: 'WASM — geen native compilatie in de bouw.',
+      werkmap: path.join(wortel, 'assistant'),
+    });
+  });
+});
+
+describe('orkestreer status', () => {
+  let uitvoer: string[];
+  let herstelOmgeving: () => void;
+
+  const ESCALATIE_COMMENT = escalatieComment(
+    51,
+    'WASM of native crypto-SDK?',
+    'WASM — geen native compilatie in de bouw.',
+    {
+      afloop: 'escalatie' as const,
+      sessie: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      kosten: 1.1,
+      beurten: 7,
+      weigeringen: 0,
+    },
+    '/w/assistant',
+  );
+
+  /** Zoals `gh api …/comments --jq '[.[].body] | @base64'` het teruggeeft. */
+  function commentsAntwoord(bodies: string[]): string {
+    return Buffer.from(JSON.stringify(bodies), 'utf8').toString('base64');
+  }
+
+  const BOARD = [
+    boardItem(51, 'assistant', 'Klaar voor technische refinement', '2026-08-09T00:00:00Z'),
+    boardItem(96, 'beheer', 'Technisch refinen', '2026-08-10T00:00:00Z'),
+    boardItem(119, 'assistant', 'Klaar voor technische refinement', '2026-08-18T00:00:00Z'),
+  ];
+
+  const statusBepaler: UitkomstBepaler = ({ commando, argumenten }) => {
+    if (commando === 'gh' && argumenten[1] === 'graphql') {
+      return { stdout: boardAntwoord(BOARD) };
+    }
+    if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/comments')) {
+      return { stdout: commentsAntwoord(['een mens zegt iets', ESCALATIE_COMMENT]) };
+    }
+    if (commando === 'gh' && argumenten[0] === 'api') return { stdout: '51\n' };
+    return {};
+  };
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('toont drie blokken en zet elk item in precies één', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+
+    orkestreerStatus('/repo');
+
+    const tekst = uitvoer.join('');
+    // #51 is geëscaleerd: hij staat wel in de wachtrij-kolom, maar hoort in het
+    // escalatie-blok en niet in de rij — anders lijkt het alsof hij zo aan de beurt is.
+    expect(tekst).toMatch(/wacht op jouw akkoord \(1\)/);
+    expect(tekst).toMatch(/wacht op een antwoord \(1\)/);
+    expect(tekst).toMatch(/Klaar voor technische refinement \(1\)/);
+    expect(tekst.indexOf('#96')).toBeLessThan(tekst.indexOf('#51'));
+    expect(tekst.indexOf('#51')).toBeLessThan(tekst.indexOf('#119'));
+  });
+
+  it('toont bij een escalatie de vraag, het advies en hoe je antwoordt', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+
+    orkestreerStatus('/repo');
+
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain('WASM of native crypto-SDK?');
+    expect(tekst).toContain('geen native compilatie');
+    expect(tekst).toContain('factory orkestreer antwoord 51');
+  });
+
+  it('zegt het als een escalatie geen leesbare comment heeft', () => {
+    const zonder: UitkomstBepaler = (aanroep, index) =>
+      aanroep.argumenten[1]?.includes('/comments') === true
+        ? { stdout: commentsAntwoord(['alleen menselijke tekst']) }
+        : statusBepaler(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(zonder).uitvoerder);
+
+    orkestreerStatus('/repo');
+
+    // Stil laten zou betekenen dat je een escalatie ziet die je niet kunt beantwoorden
+    // zonder te weten waarom.
+    expect(uitvoer.join('')).toContain('geen leesbare escalatie-comment');
+  });
+});
+
+describe('orkestreer antwoord', () => {
+  let herstelOmgeving: () => void;
+
+  const ESCALATIE = escalatieComment(
+    51,
+    'WASM of native?',
+    'WASM.',
+    {
+      afloop: 'escalatie' as const,
+      sessie: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      kosten: 1.1,
+      beurten: 7,
+      weigeringen: 0,
+    },
+    '/w/assistant',
+  );
+
+  function commentsAntwoord(bodies: string[]): string {
+    return Buffer.from(JSON.stringify(bodies), 'utf8').toString('base64');
+  }
+
+  /** Comment gevonden, werker levert een uitwerking. */
+  function antwoordBepaler(werker?: string): UitkomstBepaler {
+    return ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werker ?? werkerKlaar() };
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/comments')) {
+        return { stdout: commentsAntwoord([ESCALATIE]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      return {};
+    };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('hervat de sessie in de werkmap uit de comment', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    // Hervatten, niet opnieuw beginnen: gemeten $0,02 tegen $0,32, en het werk tot de
+    // escalatie blijft staan.
+    expect(claude?.argumenten[0]).toBe('--resume');
+    expect(claude?.argumenten[1]).toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
+    expect(claude?.argumenten).not.toContain('--session-id');
+    expect(claude?.cwd).toBe('/w/assistant');
+    // Het antwoord staat in de prompt, met de vraag erbij als context.
+    expect(claude?.argumenten.join(' ')).toContain('doe WASM');
+  });
+
+  it('haalt het escalatie-label weg zodra er een uitwerking staat', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+
+    expect(ghArgs(aanroepen)).toContainEqual(
+      expect.arrayContaining(['issue', 'edit', '51', '--body-file']),
+    );
+    expect(ghArgs(aanroepen)).toContainEqual(
+      expect.arrayContaining(['issue', 'edit', '51', '--remove-label', 'escalatie']),
+    );
+  });
+
+  it('begint met --opnieuw een verse sessie mét de volledige opdracht', () => {
+    const wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-opnieuw-'));
+    const metBoard: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'gh' &&
+      aanroep.argumenten[1] === 'graphql' &&
+      (aanroep.argumenten.find((a) => a.startsWith('query=')) ?? '').includes('items(first:100')
+        ? {
+            stdout: boardAntwoord([
+              boardItem(
+                51,
+                'assistant',
+                'Klaar voor technische refinement',
+                '2026-08-09T00:00:00Z',
+              ),
+            ]),
+          }
+        : antwoordBepaler()(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metBoard);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerAntwoord('51', 'doe WASM', { opnieuw: true, werkplaatsWortel: wortel }, '/repo');
+    rmSync(wortel, { recursive: true, force: true });
+
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    expect(claude?.argumenten).not.toContain('--resume');
+    // Een verse id: hergebruik van de oude faalt met "Session ID is already in use"
+    // zodra die sessie toch nog bestaat (gemeten).
+    const sessie = claude?.argumenten[claude.argumenten.indexOf('--session-id') + 1];
+    expect(sessie).not.toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
+    expect(sessie).toMatch(/^[0-9a-f-]{36}$/);
+    // En de volledige opdracht, niet alleen het antwoord: een lege sessie weet anders
+    // niet wélk issue, wélke applicatie of wat er opgeleverd moet worden.
+    const prompt = claude?.argumenten[claude.argumenten.indexOf('-p') + 1] ?? '';
+    expect(prompt).toContain('#51');
+    expect(prompt).toContain('assistant');
+    expect(prompt).toContain('doe WASM');
+    expect(prompt).toContain('WASM of native?');
+  });
+
+  it('zegt het als de sessie niet meer te hervatten is, en biedt een verse run aan', () => {
+    // Gemeten: een onbekende sessie geeft platte tekst met exit 1, geen JSON.
+    const weg: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: 'No conversation found with session ID: 5ad6e642-…' }
+        : antwoordBepaler()(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(weg).uitvoerder);
+
+    // Niet stil falen: er staat letterlijk wat je nu moet doen.
+    expect(() => {
+      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    }).toThrow(/--opnieuw/);
+  });
+
+  it('vindt de escalatie ook als er daarna nog een comment kwam', () => {
+    const laterMislukt =
+      '**Run mislukt.** iets\n\n<sub>$0.10</sub>\n<!-- orkestrator: sessie=x werkmap=/w -->';
+    const naEscalatie: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werkerKlaar() };
+      if (commando === 'gh' && argumenten[1]?.includes('/comments') === true) {
+        return { stdout: commentsAntwoord([ESCALATIE, laterMislukt]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(naEscalatie);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+
+    // De mislukt-comment draagt ook de sessie-markering maar geen vraag; alleen naar
+    // de laatste kijken zou de vraag een comment hoger onvindbaar maken.
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    expect(claude?.argumenten[1]).toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
+  });
+
+  it('weigert een issue zonder escalatie-comment', () => {
+    const leeg: UitkomstBepaler = ({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[1]?.includes('/comments') === true
+        ? { stdout: Buffer.from('[]', 'utf8').toString('base64') }
+        : {};
+    stelUitvoerderIn(maakUitvoerderOpnemer(leeg).uitvoerder);
+
+    expect(() => {
+      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    }).toThrow(/Geen escalatie gevonden/);
+  });
+
+  it('stopt op het lock, net als een gewone run', () => {
+    closeSync(openSync(LOCK_PAD, 'wx'));
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
+    stelUitvoerderIn(uitvoerder);
+
+    // Twee antwoorden tegelijk hervatten dezelfde sessie en schrijven allebei een body
+    // en een comment; de laatste wint en je houdt een dubbele comment over.
+    expect(() => {
+      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    }).toThrow(/draait al een orkestrator-run/);
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+    rmSync(LOCK_PAD, { force: true });
+  });
+
+  it('weigert een aanroep zonder nummer of tekst', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer().uitvoerder);
+
+    expect(() => {
+      orkestreerAntwoord('51', '  ', {}, '/repo');
+    }).toThrow(/Gebruik: factory orkestreer antwoord/);
   });
 });

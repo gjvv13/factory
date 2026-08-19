@@ -297,8 +297,28 @@ verdict telt. Geen verdict is een mislukking, geen "waarschijnlijk gelukt".
 **De poort blijft bij jou.** De orkestrator zet een item op **Technisch refinen** en
 laat het daar staan. Naar **Klaar voor Bouwen** verplaatsen doet hij nooit — voor een
 refinement bestaat geen `verify` die hem kan afkeuren, dus de enige poort is je akkoord.
-Mislukt een run of heeft de werker een vraag, dan krijgt het issue het label `escalatie`
-plus een comment, en wordt het niet opnieuw opgepakt.
+
+**Escaleren is geen falen.** Loopt de werker tegen iets aan waar hij niet over mag
+beslissen, dan stopt hij met een vraag én een advies. Het item gaat terug naar de
+wachtrij-kolom met het label `escalatie` — er wordt immers niet aan gewerkt — en het
+label houdt hem uit de rij tot jij antwoordt. Hetzelfde gebeurt bij een mislukte run,
+zodat dezelfde fout niet elke nacht opnieuw draait.
+
+```bash
+factory orkestreer status                        # wat wacht op jou, wat is geëscaleerd, wat staat in de rij
+factory orkestreer antwoord 94 "via de assistent"  # hervat de sessie met jouw antwoord
+```
+
+Antwoorden gaat **terug de bestaande sessie in**, dus het werk tot de escalatie blijft
+staan. Dat is ook veruit het goedkoopst: gemeten op 2026-08-19 kostte een hervatting
+$0,02 tegen $0,32 voor een verse run, want de context zit in de cache. Is de sessie er
+niet meer, dan zegt het commando dat en biedt het `--opnieuw` aan — een verse run met
+je antwoord erbij.
+
+**Het contract staat in een skill.** `skills/onbemand-werken/SKILL.md` draagt de
+gesloten lijst van dingen waarbij een werker stopt, wat er wél zonder vragen mag, en
+het uitvoerformaat. `factory sync` zet hem in elke app, zodat een latere bouw-werker
+dezelfde regels erft zonder herontwerp.
 
 **Het board wordt één keer per run gelezen.** GitHub geeft 5000 GraphQL-punten per uur
 voor het hele account, gedeeld met elke sessie. Een `gh project item-list` kost er 102,

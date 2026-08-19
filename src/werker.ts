@@ -134,6 +134,16 @@ export interface WerkerOpdracht {
   readonly werkmap: string;
   /** De sessie-id die de supervisor zelf toekent, zodat hervatten later kan. */
   readonly sessie: string;
+  /**
+   * Hervat een bestaande sessie in plaats van een nieuwe te beginnen.
+   *
+   * Gemeten op 2026-08-19: hervatten kostte $0,02 tegen $0,32 voor een verse run —
+   * de context zit in de cache. Het werk tot de escalatie blijft dus staan, en het
+   * antwoord is bijna gratis. Anders dan #104 aannam is hervatten **niet**
+   * map-gebonden: het lukte ook vanuit een andere map. De werkmap blijft wel de
+   * juiste plek om het te doen, want de werker leest daar de code.
+   */
+  readonly hervat?: boolean;
   /** Extra leesbare mappen, bijvoorbeeld de factory-spiegel met de templates. */
   readonly extraMappen?: readonly string[];
   readonly budgetUsd: number;
@@ -144,6 +154,8 @@ export type Afloop = 'klaar' | 'escalatie' | 'mislukt';
 
 export interface WerkerUitkomst {
   readonly afloop: Afloop;
+  /** Gezet als de sessie niet te hervatten was; dan helpt het antwoord-pad niet meer. */
+  readonly sessieWeg?: boolean;
   readonly sessie: string;
   readonly kosten?: number;
   readonly beurten?: number;
@@ -157,12 +169,14 @@ export interface WerkerUitkomst {
 /** De argumenten voor de `claude`-aanroep. Apart, zodat een test ze kan nalopen. */
 export function werkerArgumenten(opdracht: WerkerOpdracht): string[] {
   return [
+    // Hervatten of beginnen: `--resume` neemt de sessie-id van de bestaande sessie,
+    // `--session-id` kent hem toe aan een nieuwe.
+    ...(opdracht.hervat === true ? ['--resume', opdracht.sessie] : []),
     '-p',
     opdracht.prompt,
     '--output-format',
     'json',
-    '--session-id',
-    opdracht.sessie,
+    ...(opdracht.hervat === true ? [] : ['--session-id', opdracht.sessie]),
     '--model',
     opdracht.model,
     '--max-budget-usd',
@@ -197,6 +211,13 @@ export function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst {
   try {
     ruw = JSON.parse(uitkomst.stdout) as unknown;
   } catch {
+    const alles = `${uitkomst.stdout}\n${uitkomst.stderr}`;
+    if (alles.includes('No conversation found with session ID')) {
+      // Geen JSON, maar wel een duidelijke reden. Gemeten: een onbekende sessie geeft
+      // deze regel in platte tekst met exit 1 — de aanroeper moet dat kunnen zien,
+      // want een verse run is dan het enige pad dat nog werkt.
+      return { ...mislukt(opdracht.sessie, 'de sessie bestaat niet meer'), sessieWeg: true };
+    }
     const staart = (uitkomst.stderr === '' ? uitkomst.stdout : uitkomst.stderr).trim().slice(-300);
     return mislukt(opdracht.sessie, `claude gaf geen leesbare JSON terug: ${staart}`);
   }

@@ -89,6 +89,16 @@ export interface WerkerOpdracht {
     readonly werkmap: string;
     /** De sessie-id die de supervisor zelf toekent, zodat hervatten later kan. */
     readonly sessie: string;
+    /**
+     * Hervat een bestaande sessie in plaats van een nieuwe te beginnen.
+     *
+     * Gemeten op 2026-08-19: hervatten kostte $0,02 tegen $0,32 voor een verse run —
+     * de context zit in de cache. Het werk tot de escalatie blijft dus staan, en het
+     * antwoord is bijna gratis. Anders dan #104 aannam is hervatten **niet**
+     * map-gebonden: het lukte ook vanuit een andere map. De werkmap blijft wel de
+     * juiste plek om het te doen, want de werker leest daar de code.
+     */
+    readonly hervat?: boolean;
     /** Extra leesbare mappen, bijvoorbeeld de factory-spiegel met de templates. */
     readonly extraMappen?: readonly string[];
     readonly budgetUsd: number;
@@ -97,6 +107,8 @@ export interface WerkerOpdracht {
 export type Afloop = 'klaar' | 'escalatie' | 'mislukt';
 export interface WerkerUitkomst {
     readonly afloop: Afloop;
+    /** Gezet als de sessie niet te hervatten was; dan helpt het antwoord-pad niet meer. */
+    readonly sessieWeg?: boolean;
     readonly sessie: string;
     readonly kosten?: number;
     readonly beurten?: number;
