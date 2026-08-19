@@ -54,6 +54,27 @@ const appConfigSchema = z.object({
   audit: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
   /** Vanaf welke ernst de audit meetelt. Default `high`: lager is in de praktijk ruis. */
   auditNiveau: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
+  /**
+   * Een rooktest die `factory rooktest` na een uitrol tegen de omgeving draait: één
+   * echte, **read-only** aanroep door de kern, zodat een groene deploy met een kapot
+   * brein niet ongemerkt live gaat (#121). `/health` zegt "ok" ook als het hart eruit
+   * ligt; deze aanroep bewijst dat de app echt antwoordt. De read-only garantie ligt bij
+   * de app-auteur: kies een leesactie (geen bestelling, geen regel in een lijst).
+   */
+  rooktest: z
+    .object({
+      /** Pad op de app, bijv. `/channels/http/inbound`. */
+      pad: z.string().min(1),
+      /** HTTP-methode; default POST (een inbound bericht). */
+      methode: z.enum(['GET', 'POST']).default('POST'),
+      /** Optionele JSON-body als string, bijv. `{"from":"rooktest","text":"ping"}`. */
+      body: z.string().optional(),
+      /** Verwachte statuscode; default 200. */
+      verwachteStatus: z.number().int().min(100).max(599).default(200),
+      /** Optioneel: de antwoordtekst moet deze string bevatten (app-agnostische inhoudscheck). */
+      bevat: z.string().optional(),
+    })
+    .optional(),
 });
 
 export type AppConfigBestand = z.infer<typeof appConfigSchema>;
