@@ -19,6 +19,11 @@ name: deploy
 #   - een repo-secret `PROD_SECRETS_ENV` met de volledige inhoud van
 #     environments/prod.secrets.env (die staat niet in git; de verse checkout van de
 #     runner heeft 'm nodig om prod met secrets te starten).
+#
+# Optioneel, voor de melding bij een gefaalde deploy (#112): een repo-variabele
+# `DEPLOY_NOTIFY_URL` (het assistent-endpoint dat naar Matrix relayt) en een
+# repo-secret `DEPLOY_NOTIFY_TOKEN`. Zonder die variabele slaat de meldstap
+# over met een waarschuwing — de deploy zelf verandert er niet door.
 
 on:
   push:
@@ -85,6 +90,29 @@ jobs:
       # $GITHUB_OUTPUT breekt. tail -n1 pakt puur de laatste regel (ja/nee).
       - id: migratie
         run: echo "nieuw=$(node_modules/.bin/factory heeft-migratie | tail -n1)" >> "$GITHUB_OUTPUT"
+      # Meldt een gefaalde deploy aan de assistent (die relayt naar Matrix), zodat een
+      # stille mislukking prod niet ongemerkt op de oude versie laat staan (#112). Faalt
+      # de acc-stap, dan draait de prod-job niet en blijft prod dus óók achter — vandaar
+      # ook hier. Draait met if:failure() ook als een eerdere stap omviel (bijv. de
+      # action-download, #122); het heeft de checkout niet nodig. No-op met een
+      # waarschuwing als DEPLOY_NOTIFY_URL niet is gezet.
+      - name: Melden bij een gefaalde deploy
+        if: failure()
+        env:
+          NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
+          NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          bericht="⚠ ${{ github.repository }}: deploy (acc) mislukt — prod draait mogelijk nog de oude versie. Run: $run_url"
+          if [ -z "$NOTIFY_URL" ]; then
+            echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
+            exit 0
+          fi
+          curl -fsS -m 10 -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "{\"tekst\":\"$bericht\"}" \
+            || echo "::warning::kon de deploy-melding niet aan de assistent versturen."
 
   # Alleen zónder migratie automatisch naar prod. Migraties rollen niet terug, dus
   # bij een nieuwe migratie draait i.p.v. deze job de `migratie-melding`-job hieronder.
@@ -134,8 +162,28 @@ jobs:
           PROD_SECRETS_ENV: ${{ secrets.PROD_SECRETS_ENV }}
         run: printf '%s' "$PROD_SECRETS_ENV" > environments/prod.secrets.env
       # deploy prod promoveert de bestaande (nieuwste) tag naar prod; geen nieuwe
-      # release. Komt prod niet gezond op, dan geldt promote's proces-rollback.
+      # release. Komt prod niet gezond op (of meldt /health een andere versie dan de
+      # tag), dan faalt promote luid en geldt de proces-rollback.
       - run: pnpm exec factory deploy prod
+      # Zie de toelichting bij de acc-job: meldt een gefaalde prod-deploy aan de
+      # assistent zodat prod niet stil op de oude versie achterblijft (#112).
+      - name: Melden bij een gefaalde deploy
+        if: failure()
+        env:
+          NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
+          NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          bericht="⚠ ${{ github.repository }}: prod-deploy mislukt — prod draait mogelijk nog de oude versie. Run: $run_url"
+          if [ -z "$NOTIFY_URL" ]; then
+            echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
+            exit 0
+          fi
+          curl -fsS -m 10 -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "{\"tekst\":\"$bericht\"}" \
+            || echo "::warning::kon de deploy-melding niet aan de assistent versturen."
 
   # Migratie-poort zonder betaald environment. Environment-required-reviewers zijn op
   # private persoonlijke repos niet beschikbaar (Team/Enterprise-only), dus we rollen

@@ -182,6 +182,15 @@ met backoff). Eén ding valt buiten deze retry: het **downloaden van een action*
 omhullen — faalt dat op de blip, dan is de remedie `gh run rerun --failed` (of, later,
 een runner-cache van de actions).
 
+**Een gefaalde deploy is niet meer stil (#112).** `/health` meldt "ok" ook als een
+uitrol niet aankwam en de oude versie nog draait; daarom toetst `promote` na de swap
+of de gemelde `version` de beoogde tag is, en faalt het luid (met proces-rollback) bij
+een afwijking — een deploy is pas groen als de juiste versie echt draait. En omdat een
+gefaalde `deploy.yml`-job anders alleen een rood vinkje in de Actions-tab achterlaat,
+meldt een `if: failure()`-stap dat aan de assistent (die naar Matrix relayt). Die stap
+draait ook als een eerdere stap omviel (bijv. de action-download) en is een no-op met
+waarschuwing zolang `DEPLOY_NOTIFY_URL` niet is gezet.
+
 ## Seriële integratie op de apps
 
 `factory inleveren` integreert een branch. Op de publieke factory-repo gebruikt het de
