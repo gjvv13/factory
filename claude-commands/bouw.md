@@ -20,9 +20,9 @@ Doe dit zo:
 --json state` — is het gesloten, dan is de slice waarschijnlijk al af. Kijk ook naar
      de kolom op het board (`gh project item-list 2 --owner gjvv13 --format json
 --limit 200`, veld `status`): staat het op **Done** of **Uitrollen**, stop en
-     meld het. Staat het op **In aanbouw**, dan werkt er mogelijk al iemand aan.
-     Staat het nog vóór **Bouwen** — op **Akkoord** of eerder — dan is het nog niet
-     goedgekeurd: stop en meld het, ook als de refinement er compleet uitziet.
+     meld het. Staat het op **Bouwen**, dan werkt er mogelijk al iemand aan. Staat het
+     nog vóór **Klaar voor Bouwen** — op **Technisch refinen** of eerder — dan is het
+     nog niet goedgekeurd: stop en meld het, ook als de refinement er compleet uitziet.
    - **Bestaat er al een slice-branch?** In de repo waar je bouwt:
      `git branch --list 'slice/<issuenummer>-*'` én
      `git ls-remote --heads origin 'slice/<issuenummer>-*'`.
@@ -49,7 +49,7 @@ Doe dit zo:
    `coding-guidelines`-skill langs. Rood is niet af, maar groen alleen ook niet.
 9. Commit in kleine stappen. Vink de acceptatiecriteria van deze slice af in het
    issue zodra je het gedrag hebt zien werken (in de GitHub-UI of met
-   `gh issue edit`). Zet de kolom op **In aanbouw** zolang je bezig bent, en sluit het
+   `gh issue edit`). Zet de kolom op **Bouwen** zolang je bezig bent, en sluit het
    issue niet: **Done** komt pas als de laatste slice op productie draait — stap 8 van
    de pijplijn in `WORKFLOW.md`.
 10. Sluit af met: wat werkt er nu, hoe kan ik het zelf proberen (concreet commando

@@ -11,17 +11,23 @@ wat je uitwerkt en waar je eindigt. Lees hem met
 `gh project item-list 2 --owner gjvv13 --format json --limit 200` en zoek het
 issuenummer op; het veld heet `status`.
 
-| Kolom bij binnenkomst | Wat je doet                                            | Kolom bij afloop               |
-| --------------------- | ------------------------------------------------------ | ------------------------------ |
-| **Idee**              | de volledige refinement: functioneel én technisch      | **Bouwen**                     |
-| **Technisch refinen** | alleen de technische helft; het functionele is gegeven | **Technisch refinen** (blijft) |
+| Kolom bij binnenkomst                | Wat je doet                                            | Kolom bij afloop      |
+| ------------------------------------ | ------------------------------------------------------ | --------------------- |
+| **Idee**                             | de volledige refinement: functioneel én technisch      | **Klaar voor Bouwen** |
+| **Klaar voor technische refinement** | alleen de technische helft; het functionele is gegeven | **Technisch refinen** |
 
-Dat de tweede ingang in dezelfde kolom eindigt, is geen vergissing: het item wacht
-daarna op het akkoord van de gebruiker, en dát akkoord is het verplaatsen naar
-**Bouwen**. Alleen de gebruiker doet die stap.
+Zet het item **meteen bij aanvang** op **Technisch refinen** als je uit de wachtrij
+komt. Dat is niet boekhouding: zolang het in de wachtrij staat, mag een tweede werker
+het oppakken, en dan doen jullie hetzelfde werk dubbel.
 
-Staat het item in **Bouwen**, **In aanbouw**, **Uitrollen** of **Done**, meld dat
-dan en stop: er is al aan gewerkt.
+Bij afloop laat je het op **Technisch refinen** staan. Het wacht dan op de goedkeuring
+van de gebruiker, en dát akkoord is het verplaatsen naar **Klaar voor Bouwen**. Alleen
+de gebruiker doet die stap; verplaats je het zelf, dan verdwijnt de enige poort die een
+refinement heeft.
+
+Staat het item in **Technisch refinen**, **Klaar voor Bouwen**, **Bouwen**,
+**Uitrollen** of **Done**, meld dat dan en stop: er wordt al aan gewerkt, of het is al
+gedaan.
 
 Doe dit zo:
 
@@ -61,14 +67,13 @@ Doe dit zo:
    `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
    Zet daarna de kolom die bij jouw ingang hoort:
    - vanaf **Idee**:
-     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value Bouwen`
-   - vanaf **Technisch refinen**:
-     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value Akkoord`
-     Verplaats het **niet** door naar Bouwen — dat is het akkoord van de gebruiker,
-     niet van jou.
+     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value "Klaar voor Bouwen"`
+   - vanaf **Klaar voor technische refinement**: laat het op **Technisch refinen**
+     staan, waar je het bij aanvang al neerzette. Verplaats het **niet** door naar
+     Klaar voor Bouwen — dat is het akkoord van de gebruiker, niet van jou.
 9. Sluit af met de slices op één regel per stuk, en zeg wat de volgende stap is:
    - vanaf **Idee**: `cd ../<app>` en daar `/bouw <nummer> 1`.
-   - vanaf **Technisch refinen**: het item wacht op mijn akkoord — bouwen kan zodra
-     ik het naar **Bouwen** verplaats.
+   - vanaf **Klaar voor technische refinement**: het item wacht op mijn akkoord —
+     bouwen kan zodra ik het naar **Klaar voor Bouwen** verplaats.
 
 Schrijf nog geen applicatiecode.
