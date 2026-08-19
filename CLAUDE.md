@@ -152,10 +152,14 @@ ophalen. Deze repo is daarom publiek — er staat geen enkel geheim in, alleen d
 pipeline en een generiek skelet.
 
 Een verbetering aan de pipeline bereikt een applicatie **automatisch** (#132): een
-merge naar factory-`main` triggert `release.yml`, die de versie bumpt op een
-`release/<tag>`-branch en die via een **auto-merge-PR** door de merge-queue laat lopen
-(main is ruleset-beschermd, dus geen directe push; de tag zet hij wél meteen op de
-bump-commit). Elke app draait een `bump-factory.yml` die de nieuwste tag oppikt,
+merge naar factory-`main` triggert `release.yml`, die de volgende versie afleidt van de
+**nieuwste git-tag** (niet van `package.json` op main, dat kan achterlopen), de tag
+meteen zet (buiten de ruleset om — dit is wat de apps oppikken) en main's `package.json`
+via een **auto-merge-PR** bijwerkt. Die PR wordt met een PAT (`RELEASE_PAT`) aangemaakt,
+niet met `github.token`: een GITHUB_TOKEN-PR triggert `ci.yml` niet, dus `verify`
+verschijnt nooit en de auto-merge zou blijven hangen (#163). Zonder de PAT slaat de
+PR-stap over — de tag komt hoe dan ook vrij, alleen loopt main's `package.json` dan
+achter. Elke app draait een `bump-factory.yml` die de nieuwste tag oppikt,
 `factory sync` doet (CLI én workflows, skills, hook komen mee) en via de gewone pijplijn
 naar prod rolt. Slash commands en de git hook moeten fysiek in de app-repo staan;
 `factory sync` doet dat, en de auto-bump draait 'm voor je.
