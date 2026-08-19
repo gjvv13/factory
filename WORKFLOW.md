@@ -91,6 +91,29 @@ Eén board bundelt alles: **"Backlog — alle applicaties"**
 voor één applicatie, op `Status` voor een fase, of op `type:` voor epics vs. klein
 werk. Groepeer je op `Status`, dan is het board een kanban van de pijplijn hierboven.
 
+## Epics en slices: ouder en kind
+
+Heeft een refinement meer dan één slice, dan wordt **elke slice een eigen issue**, als
+sub-issue van de epic. Dat is niet cosmetisch: de kolom hangt aan het ding waaraan
+gewerkt wordt, en dat is een slice, niet een epic.
+
+|                  | Wat erin staat                                                            | Kolom                    |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------ |
+| **Ouder** (epic) | samenvatting, functionele en technische architectuur, risico's, besluiten | **geen**                 |
+| **Kind** (slice) | doel, acceptatiecriteria, tests, testdata, flag                           | de kolom van de pijplijn |
+
+De ouder draagt geen kolomwaarde zodra hij kinderen heeft: er wordt nooit aan een epic
+gewerkt. Zijn voortgang staat in het board-veld `Sub-issues progress`, dat zichzelf
+bijhoudt. Wil je de epics apart zien, maak dan een tweede board-view gefilterd op
+`type:epic`.
+
+De branchnaam blijft `slice/<issuenummer>-<n>`, waarbij het nummer nu dat van het kind
+is. Daardoor blijft het automatisch bijwerken van het board (`factory inleveren` en
+`factory promote prod`) ongewijzigd werken.
+
+Je akkoord geef je **per slice**: je verplaatst een kind naar **Klaar voor Bouwen**.
+Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
+
 ## De pijplijn
 
 | Stap           | Commando                 | Waar             | Wat er met het issue gebeurt                                          |
