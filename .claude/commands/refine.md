@@ -6,16 +6,22 @@ Refine dit backlog-item: $ARGUMENTS (formaat: `<issuenummer>`)
 
 De backlog is één set GitHub Issues in `gjvv13/factory`; zie `WORKFLOW.md`.
 
-**Twee ingangen.** Kijk eerst naar het `status:`-label; dat bepaalt wat je uitwerkt
-en waar je eindigt:
+**Twee ingangen.** Kijk eerst naar de kolom van het item op het board; die bepaalt
+wat je uitwerkt en waar je eindigt. Lees hem met
+`gh project item-list 2 --owner gjvv13 --format json --limit 200` en zoek het
+issuenummer op; het veld heet `status`.
 
-| Staat bij binnenkomst | Wat je doet                                            | Staat bij afloop   |
-| --------------------- | ------------------------------------------------------ | ------------------ |
-| `status:idea`         | de volledige refinement: functioneel én technisch      | `status:refined`   |
-| `status:functioneel`  | alleen de technische helft; het functionele is gegeven | `status:technisch` |
+| Kolom bij binnenkomst | Wat je doet                                            | Kolom bij afloop               |
+| --------------------- | ------------------------------------------------------ | ------------------------------ |
+| **Idee**              | de volledige refinement: functioneel én technisch      | **Bouwen**                     |
+| **Technisch refinen** | alleen de technische helft; het functionele is gegeven | **Technisch refinen** (blijft) |
 
-Staat het op iets anders (`technisch`, `refined`, `done`), meld dat dan en stop:
-er is al aan gewerkt.
+Dat de tweede ingang in dezelfde kolom eindigt, is geen vergissing: het item wacht
+daarna op het akkoord van de gebruiker, en dát akkoord is het verplaatsen naar
+**Bouwen**. Alleen de gebruiker doet die stap.
+
+Staat het item in **Bouwen**, **In aanbouw**, **Uitrollen** of **Done**, meld dat
+dan en stop: er is al aan gewerkt.
 
 Doe dit zo:
 
@@ -37,9 +43,9 @@ Doe dit zo:
    richting vóór je verder uitwerkt. Een backlog-item kan verouderd of op een
    verkeerd beeld gebaseerd zijn.
 4. De functionele architectuur — hier verschillen de twee ingangen:
-   - **Vanaf `status:idea`:** bepaal hem zelf. Welk gedrag komt erbij, welke
+   - **Vanaf Idee:** bepaal hem zelf. Welk gedrag komt erbij, welke
      randgevallen, en wat het expliciet niet doet.
-   - **Vanaf `status:functioneel`:** hij staat er al en hij is van mij. Neem
+   - **Vanaf Technisch refinen:** hij staat er al en hij is van mij. Neem
      `Samenvatting`, `Gedrag`, `Natuurlijke taal`, `Regels en randgevallen` en
      `Wat het expliciet níet doet` **letterlijk** over in de nieuwe body — herschrijf
      ze niet, ook niet om ze strakker te maken. Zie je er een echt probleem in, stel
@@ -51,14 +57,16 @@ Doe dit zo:
 7. Leg keuzes waar je twijfelt aan mij voor met concrete opties en jouw advies.
    Verzin geen aannames over wat ik wil.
 8. Schrijf de uitwerking volgens de template naar een tijdelijk bestand en werk het
-   issue bij, met de labels die bij jouw ingang horen:
-   - vanaf `status:idea`:
-     `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand> --add-label "status:refined" --remove-label "status:idea"`
-   - vanaf `status:functioneel`:
-     `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand> --add-label "status:technisch" --remove-label "status:functioneel"`
+   issue bij:
+   `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
+   Zet daarna de kolom die bij jouw ingang hoort:
+   - vanaf **Idee**:
+     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value Bouwen`
+   - vanaf **Technisch refinen**: laat de kolom staan. Verplaats het item **niet**
+     naar Bouwen — dat is het akkoord van de gebruiker, niet van jou.
 9. Sluit af met de slices op één regel per stuk, en zeg wat de volgende stap is:
-   - vanaf `status:idea`: `cd ../<app>` en daar `/bouw <nummer> 1`.
-   - vanaf `status:functioneel`: het item wacht op mijn akkoord — bouwen kan zodra
-     ik het op `status:refined` zet.
+   - vanaf **Idee**: `cd ../<app>` en daar `/bouw <nummer> 1`.
+   - vanaf **Technisch refinen**: het item wacht op mijn akkoord — bouwen kan zodra
+     ik het naar **Bouwen** verplaats.
 
 Schrijf nog geen applicatiecode.

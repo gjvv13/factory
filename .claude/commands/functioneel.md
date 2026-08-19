@@ -14,11 +14,11 @@ Alles wat een productbeslissing is — welke acties een vrije-taal-ingang krijge
 
 Doe dit zo:
 
-1. Lees het issue: `gh issue view <nummer> -R gjvv13/factory`. Het moet op
-   `status:idea` staan; staat het al verder, meld dat dan en stop. Welke applicatie
-   het betreft staat in het `App`-veld op het board, niet in een label; vind het item
-   met `gh project item-list 2 --owner gjvv13 --format json --limit 100` en lees daar
-   het `App`-veld van dit issuenummer. Lees `templates/refinement.md`.
+1. Lees het issue: `gh issue view <nummer> -R gjvv13/factory`. Het moet in de kolom
+   **Idee** of **Functioneel uitwerken** staan; staat het verder, meld dat dan en
+   stop. De kolom en de applicatie zijn velden op het board, geen labels; vind het
+   item met `gh project item-list 2 --owner gjvv13 --format json --limit 200` en lees
+   daar `status` en `app` van dit issuenummer. Lees `templates/refinement.md`.
 2. Verken de code van de applicatie (`../<app>/`) — maar alleen zo ver als nodig om
    goede vragen te stellen en te weten wat er al is. Ontwerp hier nog niets.
 3. **Toets de premisse van het issue tegen de code.** Klopt wat het issue beweert —
@@ -38,8 +38,10 @@ Doe dit zo:
      `coding-guidelines`-skill. Wijk je daarvan af, motiveer dat dan onder
      _Wat het expliciet níet doet_.
    - `Wat het expliciet níet doet` mag niet leeg blijven. Grenzen zijn hier het punt.
-6. Schrijf de tekst naar een tijdelijk bestand en werk het issue bij:
-   `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand> --add-label "status:functioneel" --remove-label "status:idea"`
+6. Schrijf de tekst naar een tijdelijk bestand en werk het issue bij, en zet daarna
+   de kolom op **Technisch refinen** — daar wacht het op de technische uitwerking:
+   `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
+   `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value "Technisch refinen"`
 7. Vat in twee regels samen wat er nu vastligt en wat je bewust hebt opengelaten.
    Volgende stap: `/refine <nummer>` werkt de technische helft uit — met de hand, of
    onbemand zodra de orkestrator draait.

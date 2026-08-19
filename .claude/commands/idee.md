@@ -28,17 +28,17 @@ type:epic`) en voeg de beslissing toe als een "Open beslissingen"-regel in de bo
    drie, en alleen als het antwoord echt niet uit het idee volgt. Een backlog-item
    mag onvolledig zijn; dat is waar de refinement voor is.
 7. Schrijf de omschrijving volgens de template naar een tijdelijk bestand, in het
-   Nederlands, met de datum van vandaag. Maak dan het issue aan — mét de `type:`- en
-   `status:`-labels, maar **zonder** een `app:`-label (de applicatie is nu een veld):
-   `URL=$(gh issue create -R gjvv13/factory --title "<titel>" --body-file <tijdelijk bestand> --label "type:<soort>" --label "status:idea")`
-   Zet daarna de applicatie via het App-veld op het board. Haal eenmalig de ids op met
-   `gh project view 2 --owner gjvv13 --format json` (`.id` = project-id) en
-   `gh project field-list 2 --owner gjvv13 --format json` (het veld `App` geeft het
-   field-id en per optie een `id`), en doe dan:
-   `ITEM=$(gh project item-add 2 --owner gjvv13 --url "$URL" --format json | jq -r .id)`
-   `gh project item-edit --id "$ITEM" --project-id <project-id> --field-id <App-field-id> --single-select-option-id <optie-id van de gekozen applicatie>`
+   Nederlands, met de datum van vandaag. Maak dan het issue aan met alléén het
+   `type:`-label — de applicatie en de fase zijn velden op het board, geen labels:
+   `URL=$(gh issue create -R gjvv13/factory --title "<titel>" --body-file <tijdelijk bestand> --label "type:<soort>")`
+   Zet daarna het item op het board, met de applicatie en de kolom `Idee`:
+   `gh project item-add 2 --owner gjvv13 --url "$URL"`
+   `gh project item-edit 2 --owner gjvv13 --url "$URL" --field App --value <applicatie>`
+   `gh project item-edit 2 --owner gjvv13 --url "$URL" --field Status --value Idee`
+   Die vorm werkt op naam; ids opzoeken hoeft niet.
 8. Vat in twee regels samen wat er nu op de backlog staat, noem het issuenummer én
-   het type. Volgende stap: een `type:epic` gaat via `/refine <issuenummer>`; een
-   duidelijke `type:task` of `type:bug` mag direct naar `/bouw` in de applicatie.
+   het type. Volgende stap: een `type:epic` gaat eerst via `/functioneel
+<issuenummer>`; een duidelijke `type:task` of `type:bug` mag rechtstreeks naar
+   `/refine <issuenummer>`.
 
 Bouw nog niets. Dit is alleen vastleggen.
