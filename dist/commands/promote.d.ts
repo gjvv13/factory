@@ -8,3 +8,5 @@ export interface PromoteOpties {
     readonly ja?: boolean;
 }
 export declare function promote(omgevingArgument: string | undefined, tagArgument: string | undefined, opties?: PromoteOpties): Promise<void>;
+/** De versie uit een /health-JSON-body, of undefined als die er niet (geldig) in staat. */
+export declare function versieUitHealth(body: string): string | undefined;

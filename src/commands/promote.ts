@@ -183,17 +183,29 @@ export async function promote(
   const healthUrl = `http://127.0.0.1:${String(poort)}/health`;
   kop(`Controleren of ${omgeving} leeft`);
   const gezondheid = await wachtOpGezond(healthUrl, 30);
-  if (gezondheid !== undefined) {
-    ok(`${omgeving} is gezond: ${gezondheid}`);
+  // Health-ok is niet genoeg: /health meldt "ok" ook als de uitrol niet aankwam en de
+  // oude versie nog draait (#112). Alleen de beoogde versie telt als geslaagd. Meldt
+  // health geen versie (een oudere app), dan blokkeren we niet — dan is health-ok de norm.
+  const verwachteVersie = tag.replace(/^v/, '');
+  const draaiendeVersie = gezondheid === undefined ? undefined : versieUitHealth(gezondheid);
+  const versieKlopt = draaiendeVersie === undefined || draaiendeVersie === verwachteVersie;
+  if (gezondheid !== undefined && versieKlopt) {
+    ok(`${omgeving} draait ${draaiendeVersie ?? 'gezond'}: ${gezondheid}`);
     return;
   }
 
-  // Post-swap health faalt: de nieuwe versie draait maar komt niet gezond op. Rol
-  // het proces terug naar de vorige tag. Migraties draaien we niet terug — het
-  // oude proces draait dus tegen een mogelijk nieuwer schema; dat melden we.
+  // Post-swap faalt: óf de nieuwe versie komt niet gezond op, óf hij is gezond maar
+  // meldt een andere versie dan de tag (de uitrol kwam niet aan). Beide zijn een
+  // mislukte deploy, geen groen vinkje. Rol het proces terug naar de vorige tag.
+  // Migraties draaien we niet terug — het oude proces draait dus tegen een mogelijk
+  // nieuwer schema; dat melden we.
+  const reden =
+    gezondheid === undefined
+      ? `${tag} werd niet gezond`
+      : `${omgeving} kwam gezond op maar meldt versie ${draaiendeVersie ?? '?'} i.p.v. ${verwachteVersie} — de uitrol kwam niet aan`;
   if (vorigeTag === undefined) {
     throw new GebruikersFout(
-      `${tag} werd niet gezond en er is geen vorige versie om naar terug te rollen; ${omgeving} draait mogelijk niet. Handmatig ingrijpen nodig.`,
+      `${reden} en er is geen vorige versie om naar terug te rollen; ${omgeving} draait mogelijk niet. Handmatig ingrijpen nodig.`,
     );
   }
 
@@ -216,6 +228,16 @@ export async function promote(
     );
   }
   throw new GebruikersFout(
-    `Afgebroken: ${tag} werd niet gezond. ${omgeving} draait weer op ${vorigeTag}. Let op: migraties zijn niet teruggedraaid.`,
+    `Afgebroken: ${reden}. ${omgeving} draait weer op ${vorigeTag}. Let op: migraties zijn niet teruggedraaid.`,
   );
+}
+
+/** De versie uit een /health-JSON-body, of undefined als die er niet (geldig) in staat. */
+export function versieUitHealth(body: string): string | undefined {
+  try {
+    const data = JSON.parse(body) as { version?: unknown };
+    return typeof data.version === 'string' ? data.version : undefined;
+  } catch {
+    return undefined;
+  }
 }
