@@ -33,7 +33,7 @@ app toe en de console neemt hem mee in het overzicht en de flag-bediening.
 | 1. Backlog     | `/idee <beschrijving>`               | hier (factory)   |
 | 2. Functioneel | `/functioneel <issue#>`              | hier (factory)   |
 | 3. Technisch   | `/refine <issue#>`                   | hier (factory)   |
-| 4. Akkoord     | kolom naar **Bouwen**                | hier (factory)   |
+| 4. Akkoord     | kolom **Akkoord** → **Bouwen**       | hier (factory)   |
 | 5. Bouwen      | `/bouw <issue#> <slice>`             | in de applicatie |
 | 6. Testen      | `pnpm verify`                        | in de applicatie |
 | 7. Releasen    | `pnpm release [patch\|minor\|major]` | in de applicatie |

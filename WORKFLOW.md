@@ -23,15 +23,16 @@ Labels-kolom schoon en groepeer je het board in één oogopslag per applicatie.
 Waar een item in de pijplijn staat, is **de kolom op het board** — het veld
 `Status`. Dat is de bron van waarheid; er bestaat geen `status:`-label meer.
 
-| Kolom                     | Betekent                                                         | Wie is aan zet          |
-| ------------------------- | ---------------------------------------------------------------- | ----------------------- |
-| **Idee**                  | Ruw vastgelegd, nog niet uitgewerkt                              | —                       |
-| **Functioneel uitwerken** | Staat klaar voor het gesprek over wát er gevraagd wordt          | jij, via `/functioneel` |
-| **Technisch refinen**     | Functioneel vast; wacht op een werker, en daarna op jouw akkoord | werker, dan jij         |
-| **Bouwen**                | Door jou akkoord bevonden, klaar om gebouwd te worden            | de bouwer               |
-| **In aanbouw**            | Er wordt nu aan gebouwd                                          | de bouwer               |
-| **Uitrollen**             | Ingeleverd, onderweg naar acc en prod                            | machinaal               |
-| **Done**                  | Draait op prod, gezien                                           | —                       |
+| Kolom                     | Betekent                                                           | Wie is aan zet          |
+| ------------------------- | ------------------------------------------------------------------ | ----------------------- |
+| **Idee**                  | Ruw vastgelegd, nog niet uitgewerkt                                | —                       |
+| **Functioneel uitwerken** | Staat klaar voor het gesprek over wát er gevraagd wordt            | jij, via `/functioneel` |
+| **Technisch refinen**     | Functioneel vast; wacht op een werker die de architectuur uitwerkt | werker                  |
+| **Akkoord**               | Uitgewerkt; wacht op jouw goedkeuring                              | jij                     |
+| **Bouwen**                | Door jou akkoord bevonden, klaar om gebouwd te worden              | de bouwer               |
+| **In aanbouw**            | Er wordt nu aan gebouwd                                            | de bouwer               |
+| **Uitrollen**             | Ingeleverd, onderweg naar acc en prod                              | machinaal               |
+| **Done**                  | Draait op prod, gezien                                             | —                       |
 
 Zetten doe je met één regel, zonder GraphQL-ids:
 
@@ -86,16 +87,16 @@ werk. Groepeer je op `Status`, dan is het board een kanban van de pijplijn hierb
 
 ## De pijplijn
 
-| Stap           | Commando                 | Waar             | Wat er met het issue gebeurt                                           |
-| -------------- | ------------------------ | ---------------- | ---------------------------------------------------------------------- |
-| 1. Idee        | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**   |
-| 2. Functioneel | `/functioneel <issue#>`  | factory          | Wát het moet doen ligt vast; → kolom **Technisch refinen**             |
-| 3. Technisch   | `/refine <issue#>`       | factory          | Architectuur en slices; blijft in **Technisch refinen**, nu op akkoord |
-| 4. Akkoord     | kolom omzetten           | factory          | **Technisch refinen** → **Bouwen** — alleen jij                        |
-| 5. Bouwen      | `/bouw <issue#> <slice>` | in de applicatie | → kolom **In aanbouw**; acceptatiecriteria afvinken in het issue       |
-| 6. Testen      | `pnpm verify`            | in de applicatie | —                                                                      |
-| 7. Releasen    | `pnpm release`           | in de applicatie | → kolom **Uitrollen**                                                  |
-| 8. Promoveren  | `pnpm promote`           | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                         |
+| Stap           | Commando                 | Waar             | Wat er met het issue gebeurt                                         |
+| -------------- | ------------------------ | ---------------- | -------------------------------------------------------------------- |
+| 1. Idee        | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee** |
+| 2. Functioneel | `/functioneel <issue#>`  | factory          | Wát het moet doen ligt vast; → kolom **Technisch refinen**           |
+| 3. Technisch   | `/refine <issue#>`       | factory          | Architectuur en slices; → kolom **Akkoord**                          |
+| 4. Akkoord     | kolom omzetten           | factory          | **Akkoord** → **Bouwen** — alleen jij                                |
+| 5. Bouwen      | `/bouw <issue#> <slice>` | in de applicatie | → kolom **In aanbouw**; acceptatiecriteria afvinken in het issue     |
+| 6. Testen      | `pnpm verify`            | in de applicatie | —                                                                    |
+| 7. Releasen    | `pnpm release`           | in de applicatie | → kolom **Uitrollen**                                                |
+| 8. Promoveren  | `pnpm promote`           | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                       |
 
 `/status` geeft het overzicht via het board (per `App`-veld en per kolom).
 
@@ -110,8 +111,14 @@ Die knip is er niet voor de vorm: hij maakt stap 3 uitbesteedbaar aan een onbema
 werker (de orkestrator, #104) zonder dat er ooit een idee ongezien code wordt. **De
 kolom is de riem.** Een werker pakt alleen items op uit de kolom die hij mag
 behandelen; blijft een item in **Idee** staan, dan gebeurt er niets. En alleen jij
-verplaatst naar **Bouwen** — voor een refinement bestaat geen `verify` die hem kan
-afkeuren, dus die poort kan alleen bij jou liggen. Dat verplaatsen ís het akkoord.
+verplaatst van **Akkoord** naar **Bouwen** — voor een refinement bestaat geen `verify`
+die hem kan afkeuren, dus die poort kan alleen bij jou liggen. Dat verplaatsen ís het
+akkoord.
+
+Daarom zijn **Technisch refinen** en **Akkoord** twee kolommen en niet één. Het
+verschil is niet cosmetisch: een onbemande werker moet kunnen zien wélke items hij nog
+moet oppakken. Zou "uitgewerkt, wacht op akkoord" in dezelfde kolom staan als "wacht op
+een werker", dan zou hij een al gerefined item opnieuw doen.
 
 Voor kleine, duidelijke `type:task`- en `type:bug`-items mag je stap 2 overslaan:
 `/refine` op een item uit **Idee** doet beide helften in één keer en eindigt in

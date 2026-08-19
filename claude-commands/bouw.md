@@ -21,6 +21,8 @@ Doe dit zo:
      de kolom op het board (`gh project item-list 2 --owner gjvv13 --format json
 --limit 200`, veld `status`): staat het op **Done** of **Uitrollen**, stop en
      meld het. Staat het op **In aanbouw**, dan werkt er mogelijk al iemand aan.
+     Staat het nog vóór **Bouwen** — op **Akkoord** of eerder — dan is het nog niet
+     goedgekeurd: stop en meld het, ook als de refinement er compleet uitziet.
    - **Bestaat er al een slice-branch?** In de repo waar je bouwt:
      `git branch --list 'slice/<issuenummer>-*'` én
      `git ls-remote --heads origin 'slice/<issuenummer>-*'`.
