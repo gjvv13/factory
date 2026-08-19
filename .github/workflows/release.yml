@@ -144,6 +144,10 @@ jobs:
   # hoort dat te staan waar ik toch al kijk — de ops-room — en niet alleen als een groene
   # regel in een log. Precies dat liet de kolom Uitrollen zes items diep vollopen.
   #
+  # "Niet bijwerken" is breder dan een ontbrekend token: op v1.15.15 was het token er wél,
+  # maar zonder de scope `project` — dan vindt de opzoeking het board niet en bleef het net
+  # zo stil. Elke mislukte beweging telt daarom mee, niet alleen het ontbrekende secret.
+  #
   # Draait op de mini, niet op de release-runner: het meld-endpoint van de assistent
   # luistert op loopback en een GitHub-hosted runner komt daar niet bij. Nodig zijn de
   # repo-variabele `DEPLOY_NOTIFY_URL` en het secret `DEPLOY_NOTIFY_TOKEN` (zoals
@@ -166,7 +170,7 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          bericht="⚠ factory-release $TAG: het board is niet bijgewerkt (geen PROJECT_TOKEN). Niet naar Done gezet: $OVERGESLAGEN. Run: $run_url"
+          bericht="⚠ factory-release $TAG: het board is niet bijgewerkt. Niet naar Done gezet: $OVERGESLAGEN. Kijk eerst naar PROJECT_TOKEN — classic PAT, scope project. Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then
             echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
             exit 0
