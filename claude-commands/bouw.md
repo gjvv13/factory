@@ -48,6 +48,10 @@ Doe dit zo:
    testdata gaat in `app/test/fixtures/`.
 8. Draai `pnpm verify` tot alles groen is, en loop daarna de _Klaar_-lijst uit de
    `coding-guidelines`-skill langs. Rood is niet af, maar groen alleen ook niet.
+   Draai daarna `/code-review` met deze opdracht erbij: **toets of de tests de
+   acceptatiecriteria van de slice bewaken** — per criterium welke test het dekt, en of
+   die test rood zou worden als het gedrag verdwijnt. Groen zegt alleen dat de tests
+   kloppen met de code; dit zegt of ze kloppen met wat er gevraagd was.
 9. Commit in kleine stappen. Vink de acceptatiecriteria van deze slice af in het
    issue zodra je het gedrag hebt zien werken (in de GitHub-UI of met
    `gh issue edit`). Zet de kolom op **Bouwen** zolang je bezig bent, en sluit het

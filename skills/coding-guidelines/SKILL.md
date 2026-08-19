@@ -131,6 +131,15 @@ naam herhaalt. Wel commentaar bij een keuze die een lezer zou willen aanvechten.
   vastlegt. Alleen het gereedschap verschilt.
 
 - **End to end** (`app/test/e2e/`): tegen een echt gestarte applicatie over HTTP.
+- **Een test hoort bij een acceptatiecriterium, niet bij een functie.** Voor elk
+  criterium van de slice is aanwijsbaar wélke test het toetst. Andersom geldt het ook:
+  een test die niets uit de criteria toetst, toetst waarschijnlijk de implementatie.
+- **Toets nooit alleen de laag waar je zelf in staat.** Een unit-test die de buitenwereld
+  wegstubt bewijst dat jouw code de stub aankan, niet dat de stub klopt. Raakt een
+  wijziging een buitengrens (een commando, een API, een schema), dan hoort daar een test
+  bij die die grens écht raakt — een contract-test of een e2e. Op 2026-08-19 was een
+  jq-expressie in de factory-CLI kapot terwijl alle unit-tests groen stonden: de stub
+  verving juist het stuk dat fout was.
 - Testdata staat in `app/test/fixtures/` en wordt vóór elke test opnieuw
   ingelezen. Tests mogen nooit afhangen van wat een vorige test achterliet.
 - Test gedrag, niet implementatie. De naam van een test beschrijft het gedrag
@@ -211,6 +220,9 @@ over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
 
 - [ ] De acceptatiecriteria van de slice staan afgevinkt in het issue, en ze staan
       afgevinkt omdat je het gedrag hébt zien werken — niet omdat de code er staat.
+- [ ] Bij elk afgevinkt criterium weet je welke test het bewaakt, en die test zou
+      rood worden als het gedrag verdwijnt. Dit is ook wat een review als eerste
+      naloopt: niet of de tests groen zijn, maar of ze het criterium toetsen.
 - [ ] De actie is bereikbaar in natuurlijke taal (zie _Natuurlijke taal_), of de
       refinement legt onder _Wat het expliciet níet doet_ uit waarom niet.
 - [ ] Nieuw gedrag zit achter een flag die uit staat in productie, en je weet
