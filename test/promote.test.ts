@@ -308,6 +308,55 @@ describe('promote', () => {
     });
   }
 
+  /** Als boardOpnemer, maar met een ouder-epic en een instelbare voortgang. */
+  function ouderOpnemer(voortgang: string): ReturnType<typeof maakUitvoerderOpnemer> {
+    return maakUitvoerderOpnemer((a) => {
+      if (a.commando === 'git' && a.argumenten[0] === 'describe') return { stdout: 'v0.9.0' };
+      if (a.commando === 'git' && a.argumenten[0] === 'log') {
+        return { stdout: 'Merge pull request #7 from gjvv13/slice/128-2' };
+      }
+      if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.includes('.parent_issue_url')) {
+          return { stdout: 'https://api.github.com/repos/gjvv13/factory/issues/26' };
+        }
+        if (a.argumenten.some((x) => x.includes('sub_issues_summary'))) {
+          return { stdout: voortgang };
+        }
+        return { stdout: BOARD_ANTWOORD };
+      }
+      return {};
+    });
+  }
+
+  it('sluit de epic zodra zijn laatste slice op prod draait (#127)', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = ouderOpnemer('3/3');
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"1.0.0"}');
+
+    await promote('prod', 'v1.0.0', { ja: true });
+
+    const gesloten = aanroepen
+      .filter((a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close')
+      .map((a) => a.argumenten[2]);
+    // Eerst de slice zelf, daarna de epic.
+    expect(gesloten).toEqual(['128', '26']);
+  });
+
+  it('laat de epic open zolang er nog een slice openstaat', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = ouderOpnemer('1/3');
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"1.0.0"}');
+
+    await promote('prod', 'v1.0.0', { ja: true });
+
+    const gesloten = aanroepen
+      .filter((a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close')
+      .map((a) => a.argumenten[2]);
+    expect(gesloten).toEqual(['128']);
+  });
+
   it('zet de items uit het tagbereik op Done na een geslaagde prod-promote (#128)', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = boardOpnemer();

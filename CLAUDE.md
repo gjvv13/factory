@@ -58,7 +58,7 @@ vetgedrukt, waardoor prettier de placeholder zou omschrijven.
 | 2. Functioneel | `/functioneel <issue#>`              | hier             |
 | 3. Technisch   | `/refine <issue#>`                   | hier             |
 | 4. Akkoord     | → kolom **Klaar voor Bouwen**        | hier             |
-| 5. Bouwen      | `/bouw <issue#> <slice>`             | in de applicatie |
+| 5. Bouwen      | `/bouw <issue#>`                     | in de applicatie |
 | 6. Testen      | `pnpm verify`                        | in de applicatie |
 | 7. Releasen    | `pnpm release [patch\|minor\|major]` | in de applicatie |
 | 8. Promoveren  | `pnpm promote acc\|prod [tag]`       | in de applicatie |
