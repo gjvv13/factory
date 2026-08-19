@@ -62,18 +62,36 @@ Doe dit zo:
    productie. Twee tot vier slices is normaal; is één slice genoeg, zeg dat dan.
 7. Leg keuzes waar je twijfelt aan mij voor met concrete opties en jouw advies.
    Verzin geen aannames over wat ik wil.
-8. Schrijf de uitwerking volgens de template naar een tijdelijk bestand en werk het
-   issue bij:
-   `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
-   Zet daarna de kolom die bij jouw ingang hoort:
-   - vanaf **Idee**:
-     `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value "Klaar voor Bouwen"`
-   - vanaf **Klaar voor technische refinement**: laat het op **Technisch refinen**
-     staan, waar je het bij aanvang al neerzette. Verplaats het **niet** door naar
-     Klaar voor Bouwen — dat is het akkoord van de gebruiker, niet van jou.
-9. Sluit af met de slices op één regel per stuk, en zeg wat de volgende stap is:
-   - vanaf **Idee**: `cd ../<app>` en daar `/bouw <nummer> 1`.
-   - vanaf **Klaar voor technische refinement**: het item wacht op mijn akkoord —
-     bouwen kan zodra ik het naar **Klaar voor Bouwen** verplaats.
+8. Schrijf de uitwerking weg. **Meer dan één slice? Dan wordt elke slice een
+   sub-issue** — dat is wat een slice bouwbaar maakt zonder dat iemand eerst een body
+   moet lezen (#127).
+   - **Bij één slice:** één issue, zoals altijd. Geen kind, geen extra ruis.
+     `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
+   - **Bij meer slices:** de ouder houdt samenvatting, functionele en technische
+     architectuur, risico's en besluiten. Per slice maak je een kind met de doel-,
+     acceptatiecriteria-, tests-, testdata- en flag-secties — dáár wordt op gebouwd.
+     ```bash
+     URL=$(gh issue create -R gjvv13/factory --title "<prefix> · <slicetitel>" \
+       --body-file <slicebestand> --label "type:task")
+     DBID=$(gh api repos/gjvv13/factory/issues/${URL##*/} --jq .id)
+     gh api -X POST repos/gjvv13/factory/issues/<ouder>/sub_issues -F sub_issue_id=$DBID
+     ITEM=$(gh project item-add 2 --owner gjvv13 --url "$URL" --format json | jq -r .id)
+     ```
+     `<prefix>` is het deel vóór `·` in de titel van de ouder, of anders de naam van
+     de applicatie met een hoofdletter. Zet op elk kind hetzelfde `App`-veld als de
+     ouder en de kolom waar de ouder stond, en **wis daarna de kolom van de ouder**:
+     er wordt nooit aan een epic gewerkt, alleen aan een slice. De voortgang van de
+     ouder leest af aan `Sub-issues progress`.
+   - Zet daarna de kolom die bij jouw ingang hoort — op de kinderen als die er zijn,
+     anders op het issue zelf:
+     - vanaf **Idee**: `Klaar voor Bouwen`
+     - vanaf **Klaar voor technische refinement**: laat ze op **Technisch refinen**
+       staan. Verplaats niets door naar Klaar voor Bouwen — dat is het akkoord van de
+       gebruiker, niet van jou, en die geeft het per slice.
+9. Sluit af met de slices op één regel per stuk — mét hun issuenummers als je
+   kinderen hebt gemaakt — en zeg wat de volgende stap is:
+   - vanaf **Idee**: `cd ../<app>` en daar `/bouw <nummer>`.
+   - vanaf **Klaar voor technische refinement**: het wacht op mijn akkoord — bouwen
+     kan zodra ik een slice naar **Klaar voor Bouwen** verplaats.
 
 Schrijf nog geen applicatiecode.

@@ -83,6 +83,14 @@ Elke slice is zelfstandig af: werkt, is getest, kan naar productie — zie _Klaa
 de `coding-guidelines`-skill voor de volledige lijst. Als een slice alleen zin
 heeft samen met de volgende, is de opdeling verkeerd.
 
+**Eén slice?** Dan blijft alles in dit ene issue staan en gebruik je de vorm hieronder
+rechtstreeks.
+
+**Meer slices?** Dan wordt elke slice een **sub-issue** en blijft in dit issue alleen
+een verwijzing staan — GitHub toont de kinderen met hun voortgang boven de body. De
+secties hierboven (samenvatting, architectuur) en hieronder (risico's, besluiten)
+gelden voor alle slices samen; de vorm hieronder is dan de body van één kind.
+
 ### Slice 1 — <naam>
 
 - **Doel:** <wat werkt er daarna>
@@ -91,10 +99,6 @@ heeft samen met de volgende, is de opdeling verkeerd.
 - **Tests:** unit: <wat> · contract: <wat of n.v.t.> · e2e: <wat>
 - **Testdata:** welke fixtures erbij komen of veranderen
 - **Flag:** <naam of geen>
-
-### Slice 2 — <naam>
-
-...
 
 ## Risico's
 
