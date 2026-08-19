@@ -233,7 +233,7 @@ over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
 - [ ] Je hebt het zelf gedaan op een omgeving waar het écht draait — acc na
       `promote acc`, of prod. "CI was groen" is geen waarneming.
 
-**Wanneer het issue dicht gaat.** Afvinken doe je tijdens het bouwen; `status:done`
-en het sluiten van het issue horen bij de laatste stap van de pijplijn, als de
+**Wanneer het issue dicht gaat.** Afvinken doe je tijdens het bouwen; de kolom
+**Done** en het sluiten van het issue horen bij de laatste stap van de pijplijn, als de
 laatste slice op productie draait en je hem daar gezien hebt. Een gesloten issue
 betekent "het werkt", niet "het is gemerged".
