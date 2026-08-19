@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { promote } from '../src/commands/promote.js';
+import { promote, versieUitHealth } from '../src/commands/promote.js';
 import * as shell from '../src/shell.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
@@ -190,6 +190,38 @@ describe('promote', () => {
     expect(bevestigSpy).not.toHaveBeenCalled();
   });
 
+  it('meldt geslaagd als de omgeving na de swap de beoogde versie draait (#112)', async () => {
+    process.chdir(maakApp());
+    stelUitvoerderIn(maakUitvoerderOpnemer().uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"1.0.0"}');
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).resolves.toBeUndefined();
+  });
+
+  it('rolt terug als de omgeving na de swap een andere versie meldt dan de tag (#112)', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { stdout: 'v0.3.0' } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    // Health is "ok", maar de oude versie draait nog: de swap kwam niet aan. Na de
+    // rollback naar v0.3.0 is de omgeving weer gezond.
+    vi.spyOn(shell, 'wachtOpGezond')
+      .mockResolvedValueOnce('{"status":"ok","version":"0.3.0"}')
+      .mockResolvedValueOnce('{"status":"ok","version":"0.3.0"}');
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(
+      /versie 0\.3\.0 i\.p\.v\. 1\.0\.0/i,
+    );
+    // De vorige tag is opnieuw uitgecheckt (terugrol).
+    expect(aanroepen).toContainEqual(
+      expect.objectContaining({
+        commando: 'git',
+        argumenten: expect.arrayContaining(['checkout', 'v0.3.0']),
+      }),
+    );
+  });
+
   it('rolt terug naar de vorige tag als de nieuwe versie na de swap niet gezond wordt', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
@@ -237,5 +269,16 @@ describe('promote', () => {
     vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue(undefined);
 
     await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/handmatig ingrijpen/i);
+  });
+});
+
+describe('versieUitHealth', () => {
+  it('leest de versie uit een /health-body', () => {
+    expect(versieUitHealth('{"status":"ok","version":"1.2.3"}')).toBe('1.2.3');
+  });
+
+  it('geeft undefined als er geen versie in staat of de body geen JSON is', () => {
+    expect(versieUitHealth('{"status":"ok"}')).toBeUndefined();
+    expect(versieUitHealth('niet-json')).toBeUndefined();
   });
 });
