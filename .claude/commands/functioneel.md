@@ -39,9 +39,9 @@ Doe dit zo:
      _Wat het expliciet níet doet_.
    - `Wat het expliciet níet doet` mag niet leeg blijven. Grenzen zijn hier het punt.
 6. Schrijf de tekst naar een tijdelijk bestand en werk het issue bij, en zet daarna
-   de kolom op **Technisch refinen** — daar wacht het op de technische uitwerking:
+   de kolom op **Klaar voor technische refinement** — daar wacht het op een werker:
    `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`
-   `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value "Technisch refinen"`
+   `gh project item-edit 2 --owner gjvv13 --url <issue-url> --field Status --value "Klaar voor technische refinement"`
 7. Vat in twee regels samen wat er nu vastligt en wat je bewust hebt opengelaten.
    Volgende stap: `/refine <nummer>` werkt de technische helft uit — met de hand, of
    onbemand zodra de orkestrator draait.
