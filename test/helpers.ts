@@ -41,3 +41,40 @@ export function maakUitvoerderOpnemer(bepaal?: UitkomstBepaler): Opnemer {
   };
   return { uitvoerder, aanroepen };
 }
+
+/**
+ * Maakt de board-poort uit `src/board.ts` voorspelbaar, ongeacht wáár de test draait.
+ *
+ * Die poort kijkt naar `GITHUB_ACTIONS` en `PROJECT_TOKEN`, en in CI draaien de tests
+ * zélf in een workflow — dan zou hij het board overslaan en falen tests die juist de
+ * bord-aanroepen controleren. Lokaal zijn die variabelen niet gezet, dus zonder deze
+ * helper is de uitkomst afhankelijk van de omgeving.
+ *
+ * Levert een functie op die de oorspronkelijke waarden terugzet.
+ */
+export function zetBoardOmgeving(waarden: {
+  readonly inWorkflow?: boolean;
+  readonly pat?: string;
+}): () => void {
+  const oud = { acties: process.env.GITHUB_ACTIONS, pat: process.env.PROJECT_TOKEN };
+  const zetActies = (waarde: string | undefined): void => {
+    if (waarde === undefined) {
+      delete process.env.GITHUB_ACTIONS;
+    } else {
+      process.env.GITHUB_ACTIONS = waarde;
+    }
+  };
+  const zetPat = (waarde: string | undefined): void => {
+    if (waarde === undefined) {
+      delete process.env.PROJECT_TOKEN;
+    } else {
+      process.env.PROJECT_TOKEN = waarde;
+    }
+  };
+  zetActies(waarden.inWorkflow === true ? 'true' : undefined);
+  zetPat(waarden.pat);
+  return () => {
+    zetActies(oud.acties);
+    zetPat(oud.pat);
+  };
+}

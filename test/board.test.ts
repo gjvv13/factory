@@ -1,10 +1,15 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { issuesUitBereik, issueUitBranch, plaatsComment, zetKolom } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
+import {
+  maakUitvoerderOpnemer,
+  zetBoardOmgeving,
+  type ProcesAanroep,
+  type UitkomstBepaler,
+} from './helpers.js';
 
 const ITEM = 'PVTI_test';
 const PROJECT = 'PVT_test';
@@ -76,7 +81,16 @@ describe('issueUitBranch', () => {
 });
 
 describe('zetKolom', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    // De tests draaien in CI zélf in een workflow; zonder dit slaat de poort in
+    // board.ts het bord over en meten we het verkeerde.
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
   afterEach(() => {
+    herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
   });
@@ -150,7 +164,14 @@ describe('zetKolom', () => {
 });
 
 describe('plaatsComment', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
   afterEach(() => {
+    herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
   });
@@ -227,16 +248,16 @@ describe('issuesUitBereik', () => {
 });
 
 describe('token in een workflow', () => {
-  const oudeEnv = { ...process.env };
+  let herstelOmgeving = (): void => undefined;
 
   afterEach(() => {
+    herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
-    process.env = { ...oudeEnv };
   });
 
   it('gebruikt PROJECT_TOKEN als GH_TOKEN voor de gh-aanroepen', () => {
-    process.env['PROJECT_TOKEN'] = 'pat-geheim';
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true, pat: 'pat-geheim' });
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
     stelUitvoerderIn(uitvoerder);
 
@@ -251,8 +272,7 @@ describe('token in een workflow', () => {
 
   it('slaat het board over in een workflow zonder PROJECT_TOKEN, met een waarschuwing', () => {
     const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
-    delete process.env['PROJECT_TOKEN'];
-    process.env['GITHUB_ACTIONS'] = 'true';
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
     stelUitvoerderIn(uitvoerder);
 
@@ -263,8 +283,7 @@ describe('token in een workflow', () => {
   });
 
   it('plaatst ook geen comment in een workflow zonder PROJECT_TOKEN', () => {
-    delete process.env['PROJECT_TOKEN'];
-    process.env['GITHUB_ACTIONS'] = 'true';
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
     stelUitvoerderIn(uitvoerder);
 
@@ -276,8 +295,7 @@ describe('token in een workflow', () => {
   });
 
   it('werkt lokaal gewoon zonder PROJECT_TOKEN', () => {
-    delete process.env['PROJECT_TOKEN'];
-    delete process.env['GITHUB_ACTIONS'];
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
     stelUitvoerderIn(uitvoerder);
 

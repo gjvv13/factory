@@ -16,7 +16,12 @@ import { inleveren } from '../src/commands/inleveren.js';
 import { heeftIntegreerAgent } from '../src/commands/integreer.js';
 import { verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
+import {
+  maakUitvoerderOpnemer,
+  zetBoardOmgeving,
+  type ProcesAanroep,
+  type UitkomstBepaler,
+} from './helpers.js';
 
 const BRANCH = 'slice/58-1';
 const PR_URL = 'https://github.com/gjvv13/factory/pull/1';
@@ -88,6 +93,7 @@ function argsVan(aanroepen: ProcesAanroep[], commando: string): string[][] {
 
 describe('inleveren', () => {
   let oorspronkelijkeCwd: string;
+  let herstelOmgeving: () => void;
 
   beforeEach(() => {
     oorspronkelijkeCwd = process.cwd();
@@ -95,6 +101,9 @@ describe('inleveren', () => {
     vi.mocked(verify).mockReset();
     // Default: agent aanwezig, dus geen waarschuwing — dat de bestaande tests niet raakt.
     vi.mocked(heeftIntegreerAgent).mockReturnValue(true);
+    // In CI draaien deze tests zélf in een workflow; dan zou de bord-poort alles
+    // overslaan. Meet het lokale gedrag, ongeacht waar de test draait.
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
   });
 
   /** Vangt alles op wat inleveren naar stdout schrijft, voor de waarschuwings-tests. */
@@ -108,6 +117,7 @@ describe('inleveren', () => {
   }
 
   afterEach(() => {
+    herstelOmgeving();
     process.chdir(oorspronkelijkeCwd);
     herstelUitvoerder();
   });
