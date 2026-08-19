@@ -129,4 +129,31 @@ export function plaatsComment(issue, tekst, cwd) {
         waarschuwing(`kon geen comment op #${String(issue)} plaatsen.`);
     }
 }
+/**
+ * De backlog-issues die tussen twee tags zijn gemerged, uit de merge-commits.
+ *
+ * GitHub schrijft de branchnaam in het onderwerp van een merge-commit
+ * ("Merge pull request #140 from gjvv13/slice/128-1"), dus de koppeling issue↔release
+ * ligt al vast in de git-historie en hoeft nergens apart bijgehouden te worden.
+ * Branches zonder slice-vorm leveren niets op — dat is bedoeld: van de tien merges in
+ * v1.15.1 waren er vijf een fix- of docs-branch.
+ */
+export function issuesUitBereik(vorigeTag, tag, cwd) {
+    const log = uitvoerVan('git', ['log', '--format=%s', `${vorigeTag}..${tag}`], cwd);
+    if (log === undefined || log === '') {
+        return [];
+    }
+    const gevonden = new Set();
+    for (const regel of log.split('\n')) {
+        const match = /^Merge pull request #\d+ from [^/]+\/slice\/(\d+)-\d+$/.exec(regel.trim());
+        if (match?.[1] === undefined) {
+            continue;
+        }
+        const nummer = Number.parseInt(match[1], 10);
+        if (Number.isSafeInteger(nummer) && nummer > 0) {
+            gevonden.add(nummer);
+        }
+    }
+    return [...gevonden].sort((a, b) => a - b);
+}
 //# sourceMappingURL=board.js.map

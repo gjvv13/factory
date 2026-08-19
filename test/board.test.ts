@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { issueUitBranch, plaatsComment, zetKolom } from '../src/board.js';
+import { issuesUitBereik, issueUitBranch, plaatsComment, zetKolom } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
 
@@ -176,5 +179,49 @@ describe('plaatsComment', () => {
     plaatsComment(128, 'hallo');
 
     expect(schrijf.mock.calls.map(String).join('')).toMatch(/geen comment op #128/);
+  });
+});
+
+describe('issuesUitBereik', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  /** De echte merge-onderwerpen van v1.15.0..v1.15.1, als fixture. */
+  function echteHistorie(): string {
+    const hier = path.dirname(fileURLToPath(import.meta.url));
+    return readFileSync(path.join(hier, 'fixtures', 'merge-commits.txt'), 'utf8').trim();
+  }
+
+  it('haalt de issuenummers uit de merge-commits en laat de rest liggen', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: echteHistorie() })).uitvoerder);
+
+    // Vijf slice-branches; de fix-, docs- en losse branches horen bij geen item.
+    expect(issuesUitBereik('v1.15.0', 'v1.15.1')).toEqual([108, 112, 121, 122, 132]);
+  });
+
+  it('vraagt het bereik op met git log tussen de twee tags', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(() => ({ stdout: '' }));
+    stelUitvoerderIn(uitvoerder);
+
+    issuesUitBereik('v1.0.0', 'v1.1.0');
+
+    expect(aanroepen[0]?.argumenten).toEqual(['log', '--format=%s', 'v1.0.0..v1.1.0']);
+  });
+
+  it('levert niets op bij een leeg bereik', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '' })).uitvoerder);
+
+    expect(issuesUitBereik('v1.15.1', 'v1.15.1')).toEqual([]);
+  });
+
+  it('telt hetzelfde issue niet dubbel als er twee slices in één release zitten', () => {
+    const historie = [
+      'Merge pull request #1 from gjvv13/slice/128-1',
+      'Merge pull request #2 from gjvv13/slice/128-2',
+    ].join('\n');
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: historie })).uitvoerder);
+
+    expect(issuesUitBereik('v1.0.0', 'v1.1.0')).toEqual([128]);
   });
 });
