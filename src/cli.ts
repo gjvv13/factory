@@ -6,6 +6,7 @@ import { flag } from './commands/flag.js';
 import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
+import { orkestreer } from './commands/orkestreer.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -34,6 +35,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
+  factory orkestreer <--dry|--eenmalig>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
 `;
 
 async function main(argumenten: string[]): Promise<void> {
@@ -119,6 +121,11 @@ async function main(argumenten: string[]): Promise<void> {
     case 'werkplek': {
       const { schakelaars, positioneel } = leesArgumenten(rest, { schakelaars: ['--op'] });
       werkplek(positioneel[0], { op: schakelaars.has('--op') });
+      return;
+    }
+    case 'orkestreer': {
+      const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--dry', '--eenmalig'] });
+      orkestreer({ dry: schakelaars.has('--dry'), eenmalig: schakelaars.has('--eenmalig') });
       return;
     }
     case 'sync': {

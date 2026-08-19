@@ -1,0 +1,18 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "5ad6e642-9e2a-4b4b-8af0-ecf40f956335",
+  "num_turns": 2,
+  "total_cost_usd": 0.31973399999999996,
+  "result": "{\"uitkomst\":\"klaar\",\"samenvatting\":\"proefrun voor de contracttest\",\"slices\":3,\"body\":\"# Proefrun\\n\\n- Stap 1: fixture aangemaakt\\n- Stap 2: contracttest uitgevoerd\\n- Stap 3: resultaat gevalideerd\"}",
+  "structured_output": {
+    "uitkomst": "klaar",
+    "samenvatting": "proefrun voor de contracttest",
+    "slices": 3,
+    "body": "# Proefrun\n\n- Stap 1: fixture aangemaakt\n- Stap 2: contracttest uitgevoerd\n- Stap 3: resultaat gevalideerd"
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "api_error_status": null
+}

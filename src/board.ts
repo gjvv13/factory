@@ -349,3 +349,258 @@ export function sluitIssue(issue: number, cwd?: string): void {
     waarschuwing(`kon #${String(issue)} niet sluiten.`);
   }
 }
+
+// --- De wachtrij: welke items staan in een kolom -----------------------------
+
+/** Eén item op het board, met alles wat een werker nodig heeft om te beginnen. */
+export interface BacklogItem {
+  readonly issue: number;
+  readonly titel: string;
+  /** Het `App`-veld; undefined als het niet gezet is (dan weet de werker niet waar hij moet kijken). */
+  readonly app?: string;
+  readonly kolom: string;
+  readonly aangemaakt: string;
+}
+
+const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
+  user(login:$eigenaar){ projectV2(number:$project){
+    items(first:100, after:$na){
+      pageInfo{ hasNextPage endCursor }
+      nodes{
+        status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        content{ ... on Issue { number title state createdAt } } } } } }
+}`;
+
+interface WachtrijAntwoord {
+  readonly data?: {
+    readonly user?: {
+      readonly projectV2?: {
+        readonly items?: {
+          readonly pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+          readonly nodes?: {
+            status?: { name?: string } | null;
+            app?: { name?: string } | null;
+            content?: {
+              number?: number;
+              title?: string;
+              state?: string;
+              createdAt?: string;
+            } | null;
+          }[];
+        };
+      };
+    };
+  };
+}
+
+/**
+ * Alle open items in één kolom, oudste eerst.
+ *
+ * Dit is de dure kant van het board, en daarom **één document per pagina** in plaats
+ * van `gh project item-list`: gemeten op 2026-08-19 kost deze query 2 punten en die
+ * andere 102. Voor een onbemande batch is dat het verschil tussen "past ruim" en "het
+ * account ligt een uur plat" — zie #104.
+ *
+ * De pagina's worden echt doorgelopen. Het board had op 2026-08-19 al meer dan 100
+ * items, dus stoppen bij de eerste pagina zou stilletjes items overslaan, en een
+ * wachtrij die iets weglaat ziet er precies uit als een lege wachtrij.
+ *
+ * Levert undefined als het board niet gelezen kon worden — dat is iets anders dan
+ * "er staat niets in", en de aanroeper hoort dat verschil te merken.
+ */
+export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return undefined;
+  }
+  const gevonden: BacklogItem[] = [];
+  let na: string | undefined;
+  // Ruime bovengrens: 50 pagina's is 5000 items, ver boven alles wat deze backlog ooit
+  // wordt. De grens staat er zodat een kapotte `endCursor` geen oneindige lus wordt.
+  for (let pagina = 0; pagina < 50; pagina += 1) {
+    const ruw = uitvoerMetEnv(
+      'gh',
+      [
+        'api',
+        'graphql',
+        '-f',
+        `query=${WACHTRIJ_QUERY}`,
+        '-f',
+        `eigenaar=${EIGENAAR}`,
+        '-F',
+        `project=${String(PROJECT_NUMMER)}`,
+        ...(na === undefined ? [] : ['-f', `na=${na}`]),
+      ],
+      cwd,
+      omgeving.env,
+    );
+    if (ruw === undefined || ruw === '') {
+      return undefined;
+    }
+    let antwoord: WachtrijAntwoord;
+    try {
+      antwoord = JSON.parse(ruw) as WachtrijAntwoord;
+    } catch {
+      return undefined;
+    }
+    const items = antwoord.data?.user?.projectV2?.items;
+    if (items === undefined) {
+      return undefined;
+    }
+    for (const knoop of items.nodes ?? []) {
+      const inhoud = knoop.content;
+      const nummer = inhoud?.number;
+      if (nummer === undefined || inhoud?.state !== 'OPEN' || knoop.status?.name !== kolom) {
+        continue;
+      }
+      const app = knoop.app?.name;
+      gevonden.push({
+        issue: nummer,
+        titel: inhoud.title ?? '',
+        kolom,
+        aangemaakt: inhoud.createdAt ?? '',
+        ...(app === undefined ? {} : { app }),
+      });
+    }
+    const volgende = items.pageInfo?.endCursor;
+    if (items.pageInfo?.hasNextPage !== true || volgende === undefined || volgende === null) {
+      return gevonden.sort((a, b) => a.aangemaakt.localeCompare(b.aangemaakt) || a.issue - b.issue);
+    }
+    na = volgende;
+  }
+  waarschuwing('board heeft meer dan 50 paginas; wachtrij mogelijk onvolledig.');
+  return gevonden.sort((a, b) => a.aangemaakt.localeCompare(b.aangemaakt) || a.issue - b.issue);
+}
+
+/** Het label waaraan een geëscaleerd item te herkennen is. */
+export const ESCALATIE_LABEL = 'escalatie';
+
+/**
+ * De open backlog-issues met het escalatie-label, of undefined als het niet gelezen
+ * kon worden.
+ *
+ * Dat verschil is niet academisch. Een lege verzameling bij een mislukte aanroep zou
+ * betekenen dat de escalatie-rem stil wegvalt: een item dat gisteren een vraag stelde
+ * wordt dan opnieuw opgepakt, stelt dezelfde vraag, en kost weer een run. #104 sluit
+ * dat expliciet uit.
+ *
+ * Via REST, niet via het board: labels lezen kan prima met `gh api repos/...`, en dat
+ * telt tegen de aparte REST-pot die vrijwel ongebruikt blijft. De GraphQL-punten
+ * bewaren we voor Projects v2, dat geen alternatief heeft.
+ */
+export function escalaties(cwd?: string): Set<number> | undefined {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return undefined;
+  }
+  const ruw = uitvoerMetEnv(
+    'gh',
+    [
+      'api',
+      `repos/${EIGENAAR}/${BACKLOG_REPO}/issues?state=open&labels=${ESCALATIE_LABEL}&per_page=100`,
+      '--jq',
+      '.[].number',
+    ],
+    cwd,
+    omgeving.env,
+  );
+  if (ruw === undefined) {
+    return undefined;
+  }
+  if (ruw === '') {
+    // Wél gelezen, niets gevonden: dat is een geldige lege wachtrij.
+    return new Set();
+  }
+  const nummers = ruw
+    .split('\n')
+    .map((regel) => Number.parseInt(regel.trim(), 10))
+    .filter((nummer) => Number.isSafeInteger(nummer) && nummer > 0);
+  return new Set(nummers);
+}
+
+/**
+ * Maakt het escalatie-label aan als het nog niet bestaat (idempotent).
+ *
+ * `gh issue edit --add-label` faalt op een label dat niet bestaat, en `zetLabel` faalt
+ * zacht — samen zou dat betekenen dat een escalatie stil niet gemarkeerd wordt en het
+ * item elke run opnieuw opgepakt wordt. Zelfde patroon als `zorgVoorWachtrijLabel`.
+ */
+export function zorgVoorEscalatieLabel(cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  run(
+    'gh',
+    [
+      'label',
+      'create',
+      ESCALATIE_LABEL,
+      '--repo',
+      `${EIGENAAR}/${BACKLOG_REPO}`,
+      '--description',
+      'Werker is gestopt met een vraag, of de run mislukte',
+      '--color',
+      'D93F0B',
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+}
+
+/** Zet een label op een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
+export function zetLabel(issue: number, label: string, cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  const uitkomst = run(
+    'gh',
+    ['issue', 'edit', String(issue), '--repo', `${EIGENAAR}/${BACKLOG_REPO}`, '--add-label', label],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon label '${label}' niet op #${String(issue)} zetten.`);
+  }
+}
+
+/** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
+export function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return false;
+  }
+  const uitkomst = run(
+    'gh',
+    [
+      'issue',
+      'edit',
+      String(issue),
+      '--repo',
+      `${EIGENAAR}/${BACKLOG_REPO}`,
+      '--body-file',
+      bodyBestand,
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon de body van #${String(issue)} niet bijwerken.`);
+    return false;
+  }
+  return true;
+}

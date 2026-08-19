@@ -27,8 +27,10 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory terugrol <acc\|prod>`                    | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)       |
 | `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers           |
 | `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                           |
+| `factory backup <acc\|prod> [aantal]`             | Consistente SQLite-backup met rotatie, optioneel off-site                      |
 | `factory nieuw <naam>`                            | Nieuwe applicatie uit het skeleton, met een vrij poortblok                     |
 | `factory sync`                                    | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo  |
+| `factory orkestreer <--dry\|--eenmalig>`          | Onbemande werker op de wachtrij _Klaar voor technische refinement_             |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze
@@ -249,6 +251,51 @@ niet.
 
 Een bordfout houdt nooit een uitrol tegen: de pijplijn levert software af, de
 administratie is bijvangst.
+
+## De onbemande werker
+
+`factory orkestreer` is de supervisor uit [#104](https://github.com/gjvv13/factory/issues/104):
+hij pakt het oudste item uit de kolom **Klaar voor technische refinement** en laat er
+één headless `claude -p` op los die de technische helft van de refinement schrijft.
+
+```bash
+factory orkestreer --dry        # toont de wachtrij en wat hij zou doen; schrijft niets
+factory orkestreer --eenmalig   # werkt één item af
+```
+
+Een kaal `factory orkestreer` doet niets: er is nog geen automatiek, en een commando
+dat ongevraagd een werker start is precies de verrassing die je bij onbemand werk niet
+wilt.
+
+**Waar de werker draait.** In een spiegel onder `~/OrkestratorWerk/<app>`, buiten
+`~/Documents`. Dat is geen beleefdheid: macOS schermt `~/Documents` met TCC af voor
+achtergrondprocessen (dezelfde reden waarom `factory integreer` die map mijdt), en er
+lopen parallelle sessies in de werkkopieën. De spiegel wordt vóór elke run hard
+teruggezet op `origin/main` en is wegwerpbaar. De factory-spiegel gaat als extra
+leesmap mee, zodat de werker de templates, `WORKFLOW.md` en de coding-guidelines kan
+lezen.
+
+**De werker schrijft niets.** Hij leest code en het issue en levert de uitwerking terug
+als data (`--json-schema`); de CLI zet die op GitHub. Daarmee heeft hij geen enkel
+schrijfrecht nodig — en dat is ook zo afgedwongen, met een **toestemmingslijst** en niet
+alleen een verbodslijst. Gemeten op 2026-08-19: met alléén `Write` en `Edit` verboden
+schrijft het model gewoon via `Bash(echo … > bestand)`.
+
+**De uitkomst komt uit de JSON, nooit uit de exitcode.** Ook gemeten: een run die niets
+deed omdat elk recht geweigerd werd eindigde met `exit 0`, `is_error: false` én
+`subtype: "success"`; een run die zijn budget overschreed juist mét `exit 1`. Alleen het
+verdict telt. Geen verdict is een mislukking, geen "waarschijnlijk gelukt".
+
+**De poort blijft bij jou.** De orkestrator zet een item op **Technisch refinen** en
+laat het daar staan. Naar **Klaar voor Bouwen** verplaatsen doet hij nooit — voor een
+refinement bestaat geen `verify` die hem kan afkeuren, dus de enige poort is je akkoord.
+Mislukt een run of heeft de werker een vraag, dan krijgt het issue het label `escalatie`
+plus een comment, en wordt het niet opnieuw opgepakt.
+
+**Het board wordt één keer per run gelezen.** GitHub geeft 5000 GraphQL-punten per uur
+voor het hele account, gedeeld met elke sessie. Een `gh project item-list` kost er 102,
+de gerichte query in `board.ts` kost er 2. De supervisor leest het board dus één keer en
+geeft elke werker zijn app, kolom en issuenummer mee; een werker zoekt niets op.
 
 ## Seriële integratie op de apps
 
