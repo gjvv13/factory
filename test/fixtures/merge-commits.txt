@@ -1,0 +1,13 @@
+release: v1.15.1
+Merge pull request #137 from gjvv13/fix/release-via-pr
+laat de auto-release via een auto-merge-PR lopen i.p.v. direct naar main te pushen
+Merge pull request #138 from gjvv13/docs/kolommen-wachtrij2
+maak van elke stap een wachtrij plus een werkkolom
+Merge pull request #136 from gjvv13/fix/release-node-cli
+Merge pull request #135 from gjvv13/docs/akkoord-kolom
+Merge pull request #134 from gjvv13/board-is-de-bron
+Merge pull request #133 from gjvv13/slice/132-1
+Merge pull request #130 from gjvv13/slice/121-1
+Merge pull request #129 from gjvv13/slice/122-1
+Merge pull request #125 from gjvv13/slice/112-1
+Merge pull request #124 from gjvv13/slice/108-1

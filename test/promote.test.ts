@@ -270,6 +270,92 @@ describe('promote', () => {
 
     await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/handmatig ingrijpen/i);
   });
+
+  /** Antwoord van de board-opzoeking; het item staat nog op Uitrollen. */
+  const BOARD_ANTWOORD = JSON.stringify({
+    data: {
+      user: {
+        projectV2: {
+          id: 'PVT_test',
+          field: { id: 'PVTSSF_test', options: [{ id: 'optie-done', name: 'Done' }] },
+        },
+      },
+      repository: {
+        issue: {
+          projectItems: {
+            nodes: [
+              { id: 'PVTI_test', project: { number: 2 }, fieldValueByName: { name: 'Uitrollen' } },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  /** git describe geeft de draaiende tag; git log één slice-merge in het bereik. */
+  function boardOpnemer(): ReturnType<typeof maakUitvoerderOpnemer> {
+    return maakUitvoerderOpnemer((a) => {
+      if (a.commando === 'git' && a.argumenten[0] === 'describe') return { stdout: 'v0.9.0' };
+      if (a.commando === 'git' && a.argumenten[0] === 'log') {
+        return { stdout: 'Merge pull request #7 from gjvv13/slice/128-2' };
+      }
+      if (a.commando === 'gh' && a.argumenten[0] === 'api') return { stdout: BOARD_ANTWOORD };
+      return {};
+    });
+  }
+
+  it('zet de items uit het tagbereik op Done na een geslaagde prod-promote (#128)', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = boardOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"1.0.0"}');
+
+    await promote('prod', 'v1.0.0', { ja: true });
+
+    expect(aanroepen.map((a) => a.argumenten)).toContainEqual([
+      'log',
+      '--format=%s',
+      'v0.9.0..v1.0.0',
+    ]);
+    expect(aanroepen.find((a) => a.argumenten[0] === 'project')?.argumenten).toContain(
+      'optie-done',
+    );
+    // 128 uit de branchnaam, niet 7 uit "pull request #7": het PR-nummer zegt niets
+    // over welk backlog-item erbij hoort.
+    const comment = aanroepen.find((a) => a.argumenten[0] === 'issue');
+    expect(comment?.argumenten.slice(0, 5)).toEqual([
+      'issue',
+      'comment',
+      '128',
+      '--repo',
+      'gjvv13/factory',
+    ]);
+    expect(comment?.argumenten[6]).toContain('1.0.0');
+  });
+
+  it('schrijft niets op de backlog bij een promote naar acc', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = boardOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"1.0.0"}');
+
+    await promote('acc', 'v1.0.0');
+
+    // Acc is een tussenstation zonder eigen kolom.
+    expect(aanroepen.some((a) => a.commando === 'gh')).toBe(false);
+  });
+
+  it('schrijft niets op de backlog als de uitrol niet aankwam', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = boardOpnemer();
+    stelUitvoerderIn(uitvoerder);
+    // Health is ok maar meldt de oude versie: mislukte deploy, dus niets afboeken.
+    vi.spyOn(shell, 'wachtOpGezond').mockResolvedValue('{"status":"ok","version":"0.9.0"}');
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow();
+
+    expect(aanroepen.some((a) => a.commando === 'gh')).toBe(false);
+  });
 });
 
 describe('versieUitHealth', () => {

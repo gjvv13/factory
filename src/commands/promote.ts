@@ -8,6 +8,7 @@ import {
   type AppConfig,
   type Omgeving,
 } from '../app-config.js';
+import { issuesUitBereik, plaatsComment, zetKolom } from '../board.js';
 import {
   bevestig,
   GebruikersFout,
@@ -191,6 +192,9 @@ export async function promote(
   const versieKlopt = draaiendeVersie === undefined || draaiendeVersie === verwachteVersie;
   if (gezondheid !== undefined && versieKlopt) {
     ok(`${omgeving} draait ${draaiendeVersie ?? 'gezond'}: ${gezondheid}`);
+    if (omgeving === 'prod') {
+      meldOpBacklog(vorigeTag, tag, verwachteVersie, repoDir);
+    }
     return;
   }
 
@@ -239,5 +243,41 @@ export function versieUitHealth(body: string): string | undefined {
     return typeof data.version === 'string' ? data.version : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Zet de backlog-items die met deze tag op prod terechtkomen op Done (#128).
+ *
+ * Alleen ná een geslaagde prod-promote, dus ná de versie-check uit #112: een uitrol
+ * die niet aankwam mag niets afboeken. Acc schrijft niets — dat is een tussenstation
+ * zonder eigen kolom.
+ *
+ * Het issue wordt bewust **niet** gesloten. De pijplijn weet niet of dit de laatste
+ * slice was; dat weet hij pas als slices sub-issues zijn (#127). Zou hij het wel doen,
+ * dan was #112 na slice 1 gesloten terwijl de meldingskant nog ontbrak.
+ */
+function meldOpBacklog(
+  vorigeTag: string | undefined,
+  tag: string,
+  versie: string,
+  repoDir: string,
+): void {
+  if (vorigeTag === undefined) {
+    // Eerste uitrol: er is geen bereik om de historie mee af te bakenen.
+    return;
+  }
+  // `git describe` geeft een suffix als de werkmap niet exact op een tag staat.
+  const vanaf = vorigeTag.replace(/-\d+-g[0-9a-f]+$/, '');
+  if (vanaf === tag) {
+    return;
+  }
+  for (const issue of issuesUitBereik(vanaf, tag, repoDir)) {
+    if (zetKolom(issue, 'Done', repoDir)) {
+      // Geen eigen tijdstempel: GitHub zet er zelf een op de comment, en de
+      // Clock-regel uit de guidelines verbiedt new Date() hier terecht.
+      plaatsComment(issue, `Prod draait \`${versie}\`.`, repoDir);
+      ok(`#${String(issue)} staat op Done`);
+    }
   }
 }

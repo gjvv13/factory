@@ -20,3 +20,13 @@ export declare function zetKolom(issue: number, kolom: Kolom, cwd?: string): boo
  * dus een fout is een waarschuwing.
  */
 export declare function plaatsComment(issue: number, tekst: string, cwd?: string): void;
+/**
+ * De backlog-issues die tussen twee tags zijn gemerged, uit de merge-commits.
+ *
+ * GitHub schrijft de branchnaam in het onderwerp van een merge-commit
+ * ("Merge pull request #140 from gjvv13/slice/128-1"), dus de koppeling issue↔release
+ * ligt al vast in de git-historie en hoeft nergens apart bijgehouden te worden.
+ * Branches zonder slice-vorm leveren niets op — dat is bedoeld: van de tien merges in
+ * v1.15.1 waren er vijf een fix- of docs-branch.
+ */
+export declare function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[];
