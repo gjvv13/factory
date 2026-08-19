@@ -1170,6 +1170,10 @@ describe('orkestreer --installeer en --verwijder', () => {
       if (commando === 'npm' && argumenten[0] === 'prefix') {
         return { stdout: '/opt/homebrew\n' };
       }
+      if (argumenten[0] === 'help') {
+        // De globaal geïnstalleerde bin die `--nacht` wél kent.
+        return { stdout: 'factory orkestreer <--dry|--eenmalig|--nacht>\n' };
+      }
       if (commando === 'npm' && argumenten[0] === 'root') {
         return opties.globaleVersie === undefined ? { code: 1 } : { stdout: '/opt/homebrew/lib' };
       }
@@ -1269,6 +1273,25 @@ describe('orkestreer --installeer en --verwijder', () => {
       false,
     );
     expect(uitvoer.join('')).toMatch(/staat al globaal/);
+  });
+
+  it('weigert een agent te plannen op een bin die --nacht niet kent', () => {
+    metToken();
+    const oudeBin: UitkomstBepaler = (aanroep, index) =>
+      aanroep.argumenten[0] === 'help'
+        ? { stdout: 'factory orkestreer <--dry|--eenmalig>\n' }
+        : machine()(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(oudeBin);
+    stelUitvoerderIn(uitvoerder);
+
+    // De globale bin komt uit de nieuwste tag, en die loopt achter op de branch waarin
+    // --nacht net gebouwd is. Zo'n agent ketst om 04:00 stil af.
+    expect(() => {
+      orkestreer({ installeer: true, paden });
+    }).toThrow(/nog niet is/);
+
+    expect(existsSync(paden.agentPad)).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
   });
 
   it('verwijdert de agent, ook als hij er niet staat', () => {

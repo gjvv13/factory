@@ -678,6 +678,7 @@ function installeerAgent(paden) {
     }
     const prefix = uitvoerVan('npm', ['prefix', '-g'], cwd) ?? '/usr/local';
     const bin = path.join(prefix, 'bin', 'factory');
+    vereisNachtModus(bin);
     kop('LaunchAgent laden');
     const pad = paden.agentPad;
     mkdirSync(path.dirname(pad), { recursive: true });
@@ -686,6 +687,25 @@ function installeerAgent(paden) {
     run('launchctl', ['load', pad]);
     schrijfLog(paden, `${new Date(Date.now()).toISOString()} agent geladen (${tag}, ${bin})`);
     ok(`geladen; \`factory orkestreer --nacht\` draait elke nacht om ${String(NACHT_UUR).padStart(2, '0')}:00 (log: ${paden.logPad}).`);
+}
+/**
+ * Weigert een agent te plannen op een bin die `--nacht` niet kent.
+ *
+ * De globale bin komt uit de nieuwste **tag**, en die loopt per definitie achter op de
+ * branch waarin `--nacht` net gebouwd is: installeer je voordat deze slice gereleased
+ * is, dan staat er een agent klaar die om 04:00 afketst op "Onbekend commando" — in een
+ * log dat je pas dagen later leest. Dit is precies het soort stille misstand als het
+ * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
+ */
+function vereisNachtModus(bin) {
+    const hulp = uitvoerVan(bin, ['help']) ?? '';
+    if (hulp.includes('--nacht')) {
+        return;
+    }
+    throw new GebruikersFout(`De globale factory (${bin}) kent \`orkestreer --nacht\` niet.\n` +
+        '  Die zit in een release die er nog niet is; een agent hierop afketst vannacht stil.\n' +
+        '  Lever deze slice eerst in en laat hem releasen, en draai daarna opnieuw:\n' +
+        '    factory orkestreer --installeer');
 }
 /** Haalt de LaunchAgent weg. Idempotent: staat hij er niet, dan is dit een no-op. */
 function verwijderAgent(paden) {
