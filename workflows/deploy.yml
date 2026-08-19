@@ -110,9 +110,33 @@ jobs:
         env:
           NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
           NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+          OMGEVING: acc
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          bericht="⚠ ${{ github.repository }}: deploy (acc) mislukt — prod draait mogelijk nog de oude versie. Run: $run_url"
+          # De melding draagt (acceptatie #112) app, run-id, draaiende versie en beoogde
+          # tag. Beoogde tag = de versie in package.json van deze checkout (de release die
+          # had moeten draaien); draaiende versie = wat /health nú op de omgeving meldt —
+          # precies het gat waar "ok" op de oude versie stil bleef. Beide defensief: faalde
+          # de deploy al vóór de checkout (action-download, #122), dan ontbreekt package.json
+          # en kan de app-poort stilliggen; dan blijft het "onbekend" i.p.v. dat de meldstap
+          # zelf omvalt.
+          beoogd=onbekend
+          if [ -f package.json ]; then
+            beoogd="v$(node -p "require('./package.json').version" 2>/dev/null || echo '?')"
+          fi
+          draaiend=onbekend
+          if [ -f factory.json ]; then
+            poort="$(node -p "require('./factory.json').poorten.$OMGEVING" 2>/dev/null || echo '')"
+            if [ -n "$poort" ]; then
+              draaiend="$(curl -fsS -m 5 "http://127.0.0.1:$poort/health" 2>/dev/null \
+                | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).version || 'onbekend'" 2>/dev/null \
+                || echo onbereikbaar)"
+            fi
+          fi
+          # /health meldt een kale versie; geef 'm net als de tag een v-prefix, maar laat
+          # de "kon-niet-bepalen"-woorden (onbekend/onbereikbaar) met rust.
+          case "$draaiend" in onbekend | onbereikbaar) ;; *) draaiend="v$draaiend" ;; esac
+          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — draait nog $draaiend, beoogde tag $beoogd is niet uitgerold. Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then
             echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
             exit 0
@@ -185,9 +209,28 @@ jobs:
         env:
           NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
           NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+          OMGEVING: prod
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          bericht="⚠ ${{ github.repository }}: prod-deploy mislukt — prod draait mogelijk nog de oude versie. Run: $run_url"
+          # Zie de acc-job: de melding draagt app, run-id, draaiende versie (uit /health op
+          # de prod-poort) en beoogde tag (uit package.json). Beide defensief.
+          beoogd=onbekend
+          if [ -f package.json ]; then
+            beoogd="v$(node -p "require('./package.json').version" 2>/dev/null || echo '?')"
+          fi
+          draaiend=onbekend
+          if [ -f factory.json ]; then
+            poort="$(node -p "require('./factory.json').poorten.$OMGEVING" 2>/dev/null || echo '')"
+            if [ -n "$poort" ]; then
+              draaiend="$(curl -fsS -m 5 "http://127.0.0.1:$poort/health" 2>/dev/null \
+                | node -pe "JSON.parse(require('fs').readFileSync(0,'utf8')).version || 'onbekend'" 2>/dev/null \
+                || echo onbereikbaar)"
+            fi
+          fi
+          # /health meldt een kale versie; geef 'm net als de tag een v-prefix, maar laat
+          # de "kon-niet-bepalen"-woorden (onbekend/onbereikbaar) met rust.
+          case "$draaiend" in onbekend | onbereikbaar) ;; *) draaiend="v$draaiend" ;; esac
+          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — draait nog $draaiend, beoogde tag $beoogd is niet uitgerold. Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then
             echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
             exit 0
