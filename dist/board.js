@@ -1,4 +1,4 @@
-import { run, uitvoerVan, waarschuwing } from './shell.js';
+import { ok, run, uitvoerVan, waarschuwing } from './shell.js';
 /**
  * De backlog staat als GitHub Issues in één repo, met het board als bron van waarheid
  * voor de fase (#131). Dit is de enige plek die dat board aanraakt.
@@ -34,6 +34,22 @@ export const KOLOMMEN = [
     'Uitrollen',
     'Done',
 ];
+/**
+ * Of de huidige repo de backlog-repo (`gjvv13/factory`) zelf is.
+ *
+ * De board-beweging naar Done leest de lokale git-historie; buiten de backlog-repo
+ * zou hij backlog-items verplaatsen op grond van een ándere repo's merges. Deze guard
+ * houdt `factory afronden` (#185) beperkt tot de factory zelf — een app bereikt Done
+ * langs `promote prod`. We kijken naar de `origin`-remote, niet naar een API: dat is
+ * goedkoop en werkt ook zonder netwerk.
+ */
+export function isBacklogRepo(cwd) {
+    const url = uitvoerVan('git', ['remote', 'get-url', 'origin'], cwd);
+    if (url === undefined) {
+        return false;
+    }
+    return new RegExp(`[:/]${EIGENAAR}/${BACKLOG_REPO}(\\.git)?/?$`).test(url.trim());
+}
 /**
  * Het issuenummer waar een branch bij hoort, of undefined als het er geen is.
  * Alleen de slice-vorm telt: `fix/…`, `docs/…` en `chore/factory-…` horen niet bij
@@ -453,5 +469,32 @@ export function schrijfBody(issue, bodyBestand, cwd) {
         return false;
     }
     return true;
+}
+/**
+ * Zet elk backlog-item uit een tagbereik op **Done**, plaatst een comment en sluit het;
+ * sluit de ouder-epic mee zodra al zijn slices dicht zijn.
+ *
+ * Dit is de beweging die `promote prod` (#128) al deed, hier uitgetrokken zodat ook de
+ * factory-release (#185) hem kan aanroepen — de factory draait geen `promote`, maar haar
+ * tag ís haar productie. `zetKolom` is idempotent (een item dat al op Done staat levert
+ * niets op), dus twee runs over hetzelfde bereik zijn veilig. Faalt zacht als de rest van
+ * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
+ */
+export function zetItemsUitBereikOpDone(vanaf, tag, itemMelding, ouderMelding, cwd) {
+    for (const issue of issuesUitBereik(vanaf, tag, cwd)) {
+        if (!zetKolom(issue, 'Done', cwd)) {
+            continue;
+        }
+        plaatsComment(issue, itemMelding, cwd);
+        sluitIssue(issue, cwd);
+        ok(`#${String(issue)} staat op Done`);
+        // Was dit de laatste slice, dan is de epic zelf ook af.
+        const ouder = ouderVan(issue, cwd);
+        if (ouder !== undefined && alleKinderenDicht(ouder, cwd)) {
+            plaatsComment(ouder, ouderMelding, cwd);
+            sluitIssue(ouder, cwd);
+            ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
+        }
+    }
 }
 //# sourceMappingURL=board.js.map

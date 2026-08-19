@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
-import { alleKinderenDicht, issuesUitBereik, ouderVan, plaatsComment, sluitIssue, zetKolom, } from '../board.js';
+import { zetItemsUitBereikOpDone } from '../board.js';
 import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
 import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
@@ -182,22 +182,8 @@ function meldOpBacklog(vorigeTag, tag, versie, repoDir) {
     if (vanaf === tag) {
         return;
     }
-    for (const issue of issuesUitBereik(vanaf, tag, repoDir)) {
-        if (!zetKolom(issue, 'Done', repoDir)) {
-            continue;
-        }
-        // Geen eigen tijdstempel: GitHub zet er zelf een op de comment, en de
-        // Clock-regel uit de guidelines verbiedt new Date() hier terecht.
-        plaatsComment(issue, `Prod draait \`${versie}\`.`, repoDir);
-        sluitIssue(issue, repoDir);
-        ok(`#${String(issue)} staat op Done`);
-        // Was dit de laatste slice, dan is de epic zelf ook af.
-        const ouder = ouderVan(issue, repoDir);
-        if (ouder !== undefined && alleKinderenDicht(ouder, repoDir)) {
-            plaatsComment(ouder, `Alle slices draaien op prod (\`${versie}\`).`, repoDir);
-            sluitIssue(ouder, repoDir);
-            ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
-        }
-    }
+    // Geen eigen tijdstempel: GitHub zet er zelf een op de comment, en de
+    // Clock-regel uit de guidelines verbiedt new Date() hier terecht.
+    zetItemsUitBereikOpDone(vanaf, tag, `Prod draait \`${versie}\`.`, `Alle slices draaien op prod (\`${versie}\`).`, repoDir);
 }
 //# sourceMappingURL=promote.js.map

@@ -241,6 +241,14 @@ board (#128): naar **Uitrollen** bij het inleveren, naar **Done** zodra prod de 
 draait. Welke items dat zijn komt uit de branchnaam (`slice/<issue>-<n>`) en uit de
 merge-commits in het tagbereik — er wordt niets apart bijgehouden.
 
+**De factory zelf draait geen `promote prod`** — ze is gereedschap, geen app, en haar
+"productie" is de git-tag die de apps oppikken. Factory-eigen items zouden zo eeuwig op
+Uitrollen blijven staan (#185). Daarom roept `release.yml` na de tag `factory afronden
+<vorigeTag> <tag>` aan: dezelfde Done-beweging als `promote prod`, maar getriggerd door de
+factory-release. Dat commando werkt alleen in de backlog-repo zelf (een app bereikt Done
+via `promote prod`) en heeft, net als de andere board-stappen, `PROJECT_TOKEN` nodig;
+ontbreekt het, dan waarschuwt het en blijft de release groen.
+
 Lokaal werkt dat met je eigen `gh`-auth. **In een workflow niet**, en dat is geen bug
 van ons: het ingebouwde `GITHUB_TOKEN` is gebonden aan het repo waarin de workflow
 draait, terwijl het board onder een persoonlijk account hangt en de backlog in een

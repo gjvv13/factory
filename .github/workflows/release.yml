@@ -73,6 +73,10 @@ jobs:
           # `verify`-check verschijnt nooit en de auto-merge hangt eeuwig (#163). Een
           # PAT-PR triggert de checks wél en merget dus vanzelf.
           RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+          # Het board hangt onder een persoonlijk account en de backlog in dit repo; het
+          # ingebouwde GITHUB_TOKEN komt daar niet bij. `factory afronden` (#185) gebruikt
+          # deze PAT via board.ts; ontbreekt hij, dan slaat de board-stap zacht over.
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         run: |
           bump="${{ github.event.inputs.bump || 'patch' }}"
           # De volgende versie leiden we af van de NIEUWSTE git-tag, niet van de versie
@@ -106,6 +110,12 @@ jobs:
           # vrijkomt — ook als de PR-kant hieronder ontbreekt of faalt.
           git tag -a "$v" -m "Release $v"
           git push origin "$v"
+          # Factory-eigen backlog-items uit dit tagbereik naar Done (#185). De factory
+          # draait geen `promote prod`, dus de release-tag ís haar Done-moment. Dit staat
+          # vóór het RELEASE_PAT-afsplitspunt hieronder, zodat het ook gebeurt als er geen
+          # release-PR komt. Een bordfout mag de release nooit rood maken — vandaar de `||`.
+          node dist/cli.js afronden "$laatste" "$v" \
+            || echo "::warning::kon het board niet bijwerken voor $v (zie #185); de tag $v staat er wel."
           # De PR bumpt main's package.json mee, zodat main gelijk blijft lopen met de
           # tags. Hij merget alleen vanzelf als hij met een PAT wordt aangemaakt (zie de
           # env-comment). Zonder RELEASE_PAT slaan we de PR bewust over — dan zou hij toch
