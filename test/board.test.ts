@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   alleKinderenDicht,
+  isBacklogRepo,
   issuesUitBereik,
   issueUitBranch,
   ouderVan,
   plaatsComment,
   sluitIssue,
+  zetItemsUitBereikOpDone,
   zetKolom,
 } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -376,5 +378,104 @@ describe('ouder en kind', () => {
     sluitIssue(147);
 
     expect(aanroepen[0]?.argumenten).toEqual(['issue', 'close', '147', '--repo', 'gjvv13/factory']);
+  });
+});
+
+describe('isBacklogRepo', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('herkent de backlog-repo aan een https-remote', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(() => ({ stdout: 'https://github.com/gjvv13/factory.git' })).uitvoerder,
+    );
+
+    expect(isBacklogRepo()).toBe(true);
+  });
+
+  it('herkent de backlog-repo aan een ssh-remote', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(() => ({ stdout: 'git@github.com:gjvv13/factory.git' })).uitvoerder,
+    );
+
+    expect(isBacklogRepo()).toBe(true);
+  });
+
+  it('wijst een andere repo af', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(() => ({ stdout: 'https://github.com/gjvv13/assistant.git' }))
+        .uitvoerder,
+    );
+
+    expect(isBacklogRepo()).toBe(false);
+  });
+
+  it('is false zonder origin-remote', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ code: 1 })).uitvoerder);
+
+    expect(isBacklogRepo()).toBe(false);
+  });
+});
+
+describe('zetItemsUitBereikOpDone', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelUitvoerder();
+    herstelOmgeving();
+  });
+
+  const boardMetDone = JSON.stringify({
+    data: {
+      user: {
+        projectV2: {
+          id: 'PVT_test',
+          field: { id: 'PVTSSF_test', options: [{ id: 'optie-done', name: 'Done' }] },
+        },
+      },
+      repository: {
+        issue: {
+          projectItems: {
+            nodes: [
+              { id: 'PVTI_test', project: { number: 2 }, fieldValueByName: { name: 'Uitrollen' } },
+            ],
+          },
+        },
+      },
+    },
+  });
+
+  it('zet elk item uit het bereik op Done met de meegegeven melding', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) => {
+      if (a.commando === 'git' && a.argumenten[0] === 'log') {
+        return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+      }
+      if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+        return { stdout: boardMetDone };
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+
+    zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar met v1.1.0.', 'Epic klaar.');
+
+    expect(aanroepen.find((a) => a.argumenten[0] === 'project')?.argumenten).toContain(
+      'optie-done',
+    );
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comment?.argumenten[2]).toBe('185');
+    expect(comment?.argumenten[6]).toBe('Klaar met v1.1.0.');
+    const gesloten = aanroepen.filter(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close',
+    );
+    expect(gesloten.map((a) => a.argumenten[2])).toEqual(['185']);
   });
 });

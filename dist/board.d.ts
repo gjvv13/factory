@@ -2,6 +2,16 @@
 export declare const KOLOMMEN: readonly ["Idee", "Functioneel uitwerken", "Klaar voor technische refinement", "Technisch refinen", "Klaar voor Bouwen", "Bouwen", "Uitrollen", "Done"];
 export type Kolom = (typeof KOLOMMEN)[number];
 /**
+ * Of de huidige repo de backlog-repo (`gjvv13/factory`) zelf is.
+ *
+ * De board-beweging naar Done leest de lokale git-historie; buiten de backlog-repo
+ * zou hij backlog-items verplaatsen op grond van een ándere repo's merges. Deze guard
+ * houdt `factory afronden` (#185) beperkt tot de factory zelf — een app bereikt Done
+ * langs `promote prod`. We kijken naar de `origin`-remote, niet naar een API: dat is
+ * goedkoop en werkt ook zonder netwerk.
+ */
+export declare function isBacklogRepo(cwd?: string): boolean;
+/**
  * Het issuenummer waar een branch bij hoort, of undefined als het er geen is.
  * Alleen de slice-vorm telt: `fix/…`, `docs/…` en `chore/factory-…` horen niet bij
  * een backlog-item, en die stil overslaan is het gewenste gedrag — niet een fout.
@@ -98,3 +108,14 @@ export declare function zorgVoorEscalatieLabel(cwd?: string): void;
 export declare function zetLabel(issue: number, label: string, cwd?: string): void;
 /** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
 export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean;
+/**
+ * Zet elk backlog-item uit een tagbereik op **Done**, plaatst een comment en sluit het;
+ * sluit de ouder-epic mee zodra al zijn slices dicht zijn.
+ *
+ * Dit is de beweging die `promote prod` (#128) al deed, hier uitgetrokken zodat ook de
+ * factory-release (#185) hem kan aanroepen — de factory draait geen `promote`, maar haar
+ * tag ís haar productie. `zetKolom` is idempotent (een item dat al op Done staat levert
+ * niets op), dus twee runs over hetzelfde bereik zijn veilig. Faalt zacht als de rest van
+ * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
+ */
+export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): void;

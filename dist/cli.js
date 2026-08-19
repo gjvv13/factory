@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { afronden } from './commands/afronden.js';
 import { backup } from './commands/backup.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
@@ -35,6 +36,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
+  factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
 async function main(argumenten) {
     const [commando, ...rest] = argumenten;
@@ -128,6 +130,11 @@ async function main(argumenten) {
         case 'sync': {
             const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--check'] });
             sync({ check: schakelaars.has('--check') });
+            return;
+        }
+        case 'afronden': {
+            const { positioneel } = leesArgumenten(rest);
+            afronden(positioneel[0], positioneel[1]);
             return;
         }
         case undefined:
