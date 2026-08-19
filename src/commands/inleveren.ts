@@ -10,6 +10,7 @@ import {
   ok,
   pakketbeheerder,
   run,
+  runMetHerhaling,
   uitvoerVan,
   waarschuwing,
 } from '../shell.js';
@@ -65,14 +66,15 @@ export function inleveren(opties: InleverenOpties = {}): void {
   // Vóór de dure stappen: botst deze branch met de main van nu? Dan is rebasen
   // onvermijdelijk en moet verify daarna tóch opnieuw. Eerst een halfuur poort draaien
   // om dat daarna weg te gooien is precies de verspilling die we hier wegnemen.
-  git(['fetch', '-q', 'origin', 'main'], repoDir);
+  runMetHerhaling('git', ['fetch', '-q', 'origin', 'main'], { cwd: repoDir }, { wat: 'git fetch' });
   const botsing = conflictMetMain(repoDir);
   if (botsing !== undefined) {
     throw new GebruikersFout(
-      `main is verder gelopen en botst met ${branch} (${botsing}).\n` +
+      `main is verder gelopen en botst met ${branch} (${botsing.join(', ')}).\n` +
         '  Rebase erop, los het één keer op, en lever daarna opnieuw in:\n' +
         '    git rebase origin/main\n' +
         '    # los de conflicten op, dan: git add <bestand> && git rebase --continue\n' +
+        lockfileHint(botsing) +
         '    factory inleveren\n' +
         '  De kwaliteitspoort draait dan opnieuw, over het samengevoegde resultaat.',
     );
@@ -187,7 +189,7 @@ export function inleveren(opties: InleverenOpties = {}): void {
  * genomen een benadering — maar botst de merge, dan botst de rebase ook, en dat is
  * precies wat we op tijd willen weten.
  */
-function conflictMetMain(repoDir: string): string | undefined {
+function conflictMetMain(repoDir: string): string[] | undefined {
   const uitkomst = git(
     ['merge-tree', '--write-tree', '--name-only', 'origin/main', 'HEAD'],
     repoDir,
@@ -204,9 +206,29 @@ function conflictMetMain(repoDir: string): string | undefined {
     return undefined;
   }
   // Eerste regel is de tree-oid, daarna de bestanden tot de lege regel voor de meldingen.
+  // Ontbreekt die lege regel, dan lopen de bestanden tot het eind — `indexOf` geeft dan
+  // -1, en `slice(0, -1)` zou stilletjes het láátste botsende bestand weglaten.
   const regels = uitkomst.stdout.split('\n').slice(1);
-  const bestanden = regels.slice(0, regels.indexOf('')).filter((regel) => regel !== '');
-  return bestanden.length === 0 ? 'onbekend welk bestand' : bestanden.join(', ');
+  const einde = regels.indexOf('');
+  const bestanden = (einde === -1 ? regels : regels.slice(0, einde)).filter(
+    (regel) => regel !== '',
+  );
+  return bestanden.length === 0 ? ['onbekend welk bestand'] : bestanden;
+}
+
+/**
+ * Een extra regel voor de lockfile, want die mag je niet met de hand samenvoegen.
+ *
+ * `pnpm-lock.yaml` is het bestand dat het vaakst botst en het bestand waar handmatig
+ * mergen het meeste kapotmaakt: het resultaat ziet er goed uit maar klopt niet meer met
+ * `package.json`, en dan valt CI om op `--frozen-lockfile`. Regenereren is het antwoord.
+ */
+function lockfileHint(bestanden: string[]): string {
+  return bestanden.includes('pnpm-lock.yaml')
+    ? '    # pnpm-lock.yaml niet met de hand mergen maar opnieuw laten maken:\n' +
+        '    #   git checkout --ours pnpm-lock.yaml && pnpm install --lockfile-only\n' +
+        '    #   git add pnpm-lock.yaml && git rebase --continue\n'
+    : '';
 }
 
 /** `<owner>/<naam>` uit een GitHub-PR-URL, voor de `--repo`-hint in de waarschuwing. */

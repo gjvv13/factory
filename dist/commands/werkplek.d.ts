@@ -20,9 +20,11 @@ export declare function repoWortelVan(cwd: string): string;
 /**
  * Het pad van de werkplek waar deze sessie in staat, of undefined in een gewone kloon.
  *
- * `--show-toplevel` geeft de map van de huidige worktree; wijkt die af van de
- * hoofdkloon, dan staan we in een aangehaakte worktree. Zo weet `inleveren` of er na
- * de PR iets op te ruimen valt.
+ * De toets is `--git-dir` ≠ `--git-common-dir`: dát is wat een aangehaakte worktree
+ * definieert. "Ligt de toplevel ergens anders dan de git-map" zou er ook uitzien als
+ * een worktree bij een kloon met een losse git-map (`--separate-git-dir`, of een repo
+ * die als submodule is opgenomen) — dan zou `inleveren` de hoofdkloon proberen op te
+ * ruimen en elke inlevering eindigen met een onterechte waarschuwing.
  */
 export declare function werkplekVanSessie(cwd: string): string | undefined;
 /** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */

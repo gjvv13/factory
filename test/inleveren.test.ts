@@ -381,6 +381,37 @@ describe('inleveren', () => {
       }).toThrow(/src\/cli\.ts, README\.md/);
     });
 
+    it('noemt ook het laatste bestand als het meldingenblok ontbreekt', () => {
+      process.chdir(maakRepo());
+      // Zonder lege scheidingsregel geeft indexOf('') -1, en slice(0, -1) zou dan
+      // stilletjes het laatste botsende bestand weglaten.
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.argumenten[0] === 'merge-tree'
+          ? { code: 1, stdout: ['92d6da3', 'src/cli.ts', 'README.md'].join('\n') }
+          : gelukkig(aanroep, index);
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/src\/cli\.ts, README\.md/);
+    });
+
+    it('stuurt bij een lockfile-conflict naar regenereren, niet naar handmatig mergen', () => {
+      process.chdir(maakRepo());
+      // pnpm-lock.yaml botst het vaakst en is het gevaarlijkst om met de hand te
+      // mergen: het resultaat klopt niet meer met package.json en CI valt om op
+      // --frozen-lockfile.
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.argumenten[0] === 'merge-tree'
+          ? { code: 1, stdout: ['92d6da3', 'pnpm-lock.yaml', '', 'CONFLICT'].join('\n') }
+          : gelukkig(aanroep, index);
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/pnpm install --lockfile-only/);
+    });
+
     it('blokkeert niet als merge-tree zelf faalt', () => {
       process.chdir(maakRepo());
       // Exitcode 1 betekent óók "kon die refs niet mergen" (geen origin/main bijv.).
@@ -407,10 +438,18 @@ describe('inleveren', () => {
       return { wortel, werkplek };
     }
 
-    /** Antwoordt op de drie rev-parse-vormen zoals git dat in een worktree doet. */
+    /**
+     * Antwoordt op de rev-parse-vragen zoals git dat in een aangehaakte worktree doet:
+     * één gecombineerde vraag (git-dir, git-common-dir, toplevel) en de losse vraag naar
+     * de hoofdkloon. In een worktree wijst git-dir naar `.git/worktrees/<naam>`.
+     */
     function inWerkplek(wortel: string, werkplek: string): UitkomstBepaler {
       return (aanroep, index) => {
-        if (aanroep.argumenten.includes('--show-toplevel')) return { stdout: werkplek };
+        if (aanroep.argumenten.includes('--show-toplevel')) {
+          return {
+            stdout: [`${wortel}/.git/worktrees/58`, `${wortel}/.git`, werkplek].join('\n'),
+          };
+        }
         if (aanroep.argumenten.includes('--git-common-dir')) return { stdout: `${wortel}/.git` };
         return gelukkig(aanroep, index);
       };
@@ -468,16 +507,37 @@ describe('inleveren', () => {
       expect(existsSync(werkplek)).toBe(true);
     });
 
+    /** Een kloon met git-dir == git-common-dir: dát is wat "geen worktree" betekent. */
+    function inKloon(repo: string, gitDir: string): UitkomstBepaler {
+      return (aanroep, index) => {
+        if (aanroep.argumenten.includes('--show-toplevel')) {
+          return { stdout: [gitDir, gitDir, repo].join('\n') };
+        }
+        if (aanroep.argumenten.includes('--git-common-dir')) return { stdout: gitDir };
+        return gelukkig(aanroep, index);
+      };
+    }
+
     it('raakt een gewone kloon niet aan', () => {
       const repo = maakRepo();
       process.chdir(repo);
-      // In een gewone kloon wijst --show-toplevel naar dezelfde map als --git-common-dir.
-      const bepaal: UitkomstBepaler = (aanroep, index) => {
-        if (aanroep.argumenten.includes('--show-toplevel')) return { stdout: repo };
-        if (aanroep.argumenten.includes('--git-common-dir')) return { stdout: `${repo}/.git` };
-        return gelukkig(aanroep, index);
-      };
-      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(inKloon(repo, `${repo}/.git`));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(aanroepen.some((a) => a.argumenten[0] === 'worktree')).toBe(false);
+    });
+
+    it('raakt een kloon met een losse git-map ook niet aan', () => {
+      const repo = maakRepo();
+      process.chdir(repo);
+      // `git clone --separate-git-dir` (of een repo als submodule): de git-map ligt
+      // buiten de werkmap. Dat lijkt op een worktree als je naar de paden kijkt, maar
+      // git-dir en git-common-dir zijn hier gelijk — het is gewoon de hoofdkloon.
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        inKloon(repo, '/elders/gitmappen/proefrepo'),
+      );
       stelUitvoerderIn(uitvoerder);
 
       inleveren();
