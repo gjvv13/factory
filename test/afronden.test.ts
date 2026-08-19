@@ -36,7 +36,16 @@ function boardAntwoord(huidig = 'Uitrollen'): string {
  * board-aanroepen (`gh api`) beantwoordt. Standaard: backlog-repo, één slice-merge van
  * #185 in het bereik, geen ouder.
  */
-function opnemer(opties: { origin?: string; log?: string; huidig?: string; ouder?: string } = {}) {
+function opnemer(
+  opties: {
+    origin?: string;
+    log?: string;
+    huidig?: string;
+    ouder?: string;
+    /** Board bestaat, maar het issue hangt er niet in (of mag niet gelezen worden). */
+    boardLeeg?: boolean;
+  } = {},
+) {
   return maakUitvoerderOpnemer((a) => {
     if (a.commando === 'git' && a.argumenten[0] === 'remote') {
       return { stdout: opties.origin ?? BACKLOG_URL };
@@ -53,7 +62,7 @@ function opnemer(opties: { origin?: string; log?: string; huidig?: string; ouder
       if (a.argumenten.some((x) => x.includes('sub_issues_summary'))) {
         return { stdout: opties.ouder ?? '' };
       }
-      return { stdout: boardAntwoord(opties.huidig) };
+      return { stdout: opties.boardLeeg === true ? '' : boardAntwoord(opties.huidig) };
     }
     return {};
   });
@@ -169,6 +178,20 @@ describe('afronden', () => {
     expect(readFileSync(uitvoerBestand, 'utf8')).toBe('bord_overgeslagen=#185\n');
     // En het board is niet aangeraakt: geen half werk met een token dat het niet kan.
     expect(aanroepen.some((a) => a.commando === 'gh')).toBe(false);
+  });
+
+  it('meldt ook wanneer het token er wél is maar het board niet gevonden wordt', () => {
+    // De situatie van release v1.15.15: PROJECT_TOKEN gezet, maar zonder de scope
+    // `project`. Toen bleef de melding uit omdat "overgeslagen" alleen het ontbrekende
+    // secret dekte; nu telt elke mislukte beweging mee (#195, slice 2).
+    herstelOmgeving();
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: true, pat: 'pat-zonder-project-scope' });
+    const uitvoerBestand = maakUitvoerBestand();
+    stelUitvoerderIn(opnemer({ boardLeeg: true }).uitvoerder);
+
+    afronden('v1.15.14', 'v1.15.15');
+
+    expect(readFileSync(uitvoerBestand, 'utf8')).toBe('bord_overgeslagen=#185\n');
   });
 
   it('schrijft geen uitvoer wanneer alle items zijn verzet', () => {

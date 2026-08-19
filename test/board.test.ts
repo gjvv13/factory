@@ -11,6 +11,7 @@ import {
   plaatsComment,
   sluitIssue,
   zetItemsUitBereikOpDone,
+  zetKolomUitkomst,
   zetKolom,
 } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -304,6 +305,19 @@ describe('token in een workflow', () => {
     expect(aanroepen).toHaveLength(0);
   });
 
+  it('scheidt verzet, al-goed en mislukt', () => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepalerMet('Bouwen')).uitvoerder);
+    expect(zetKolomUitkomst(128, 'Uitrollen')).toBe('verzet');
+
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepalerMet('Uitrollen')).uitvoerder);
+    expect(zetKolomUitkomst(128, 'Uitrollen')).toBe('al-goed');
+
+    // Opzoeking levert niets: item niet op het board, of een token dat het niet mag lezen.
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '' })).uitvoerder);
+    expect(zetKolomUitkomst(128, 'Uitrollen')).toBe('mislukt');
+  });
+
   it('werkt lokaal gewoon zonder PROJECT_TOKEN', () => {
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepalerMet('Bouwen'));
@@ -478,6 +492,64 @@ describe('zetItemsUitBereikOpDone', () => {
     expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
       verzet: [],
       overgeslagen: [185],
+    });
+  });
+
+  it('meldt een item dat het board niet kon vinden als overgeslagen', () => {
+    // Dit ging mis op release v1.15.15: het token was er wél, maar zonder de scope
+    // `project`, dus de opzoeking gaf niets terug. Dat mag niet als "stond al goed"
+    // wegvallen — dan blijft de release stil groen en loopt de kolom achter (#195).
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((a) => {
+        if (a.commando === 'git' && a.argumenten[0] === 'log') {
+          return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+        }
+        if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+          // Het board bestaat, maar het issue hangt er niet in (of mag niet gelezen worden).
+          return {
+            stdout: JSON.stringify({
+              data: {
+                user: {
+                  projectV2: {
+                    id: 'PVT_test',
+                    field: { id: 'PVTSSF_test', options: [{ id: 'optie-done', name: 'Done' }] },
+                  },
+                },
+                repository: { issue: { projectItems: { nodes: [] } } },
+              },
+            }),
+          };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [],
+      overgeslagen: [185],
+    });
+  });
+
+  it('houdt een item dat al op Done staat buiten de melding', () => {
+    // Idempotent is geen storing: een tweede run over hetzelfde bereik mag geen bericht
+    // opleveren.
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((a) => {
+        if (a.commando === 'git' && a.argumenten[0] === 'log') {
+          return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+        }
+        if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+          return { stdout: boardMetDone.replace('Uitrollen', 'Done') };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [],
+      overgeslagen: [],
     });
   });
 

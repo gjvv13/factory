@@ -31,6 +31,24 @@ export declare function bordBereikbaar(): boolean;
  * tegenhouden. Een leeg board, een rate-limit of een ontbrekend item geeft een
  * waarschuwing en gaat door — anders valt een uitrol om op boekhouding.
  */
+/**
+ * Wat een poging tot verplaatsen opleverde.
+ *
+ * `al-goed` en `mislukt` zijn allebei "niet verzet", maar ze vragen het tegenovergestelde:
+ * het eerste is de idempotente rust van een tweede run, het tweede is een gat waar iemand
+ * naar moet kijken (#195). Ze in één `false` samenvatten was precies waarom een release
+ * stil groen kon blijven terwijl de kolom achterliep.
+ */
+export type KolomUitkomst = 'verzet' | 'al-goed' | 'mislukt';
+/** Zet de kolom en vertel welke van de drie uitkomsten het was. */
+export declare function zetKolomUitkomst(issue: number, kolom: Kolom, cwd?: string): KolomUitkomst;
+/**
+ * Zet de kolom; `true` als het item daadwerkelijk verplaatst is.
+ *
+ * De bestaande aanroepers willen precies deze vraag beantwoord ("heb ik iets veranderd?"),
+ * dus die houden hun boolean. Wie het verschil tussen "stond al goed" en "mislukt" nodig
+ * heeft, gebruikt `zetKolomUitkomst`.
+ */
 export declare function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean;
 /**
  * Plaatst één comment op een backlog-issue. Ook dit mag de pijplijn niet ophouden,
@@ -139,9 +157,10 @@ export interface AfrondUitkomst {
  * dit bestand: een bordfout houdt een uitrol of release nooit tegen.
  *
  * Ontbreekt het token, dan gaat de reeks in één keer over de kop in plaats van per item:
- * dat scheelt een waarschuwing per issue, en de aanroeper krijgt de nummers terug zodat
- * hij ze kan mélden (#195) — een stille overslag met exit 0 liet de kolom Uitrollen
- * vollopen zonder dat iemand het zag.
+ * dat scheelt een waarschuwing per issue. Lukt een enkele beweging niet — token zonder
+ * project-scope, item niet op het board, geweigerde mutatie — dan komt dat item er ook bij.
+ * De aanroeper krijgt de nummers terug zodat hij ze kan mélden (#195): een stille overslag
+ * met exit 0 liet de kolom Uitrollen vollopen zonder dat iemand het zag.
  */
 export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, itemMelding: string, ouderMelding: string, cwd?: string): AfrondUitkomst;
 /**
