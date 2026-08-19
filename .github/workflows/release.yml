@@ -3,11 +3,15 @@ name: release
 # Auto-release van de factory zelf (#132). De apps rollen al automatisch uit bij een
 # merge; de factory deed dat niet, want ze is gereedschap en geen draaiende app — er
 # was alleen een handmatige `factory release`. Deze workflow zet bij elke merge naar
-# main een nieuwe tag, zodat een pijplijn-verbetering vanzelf vrijkomt. De apps pikken
-# die tag daarna zelf op via `bump-factory.yml`.
+# main een nieuwe versie, zodat een pijplijn-verbetering vanzelf vrijkomt. De apps
+# pikken die tag daarna zelf op via `bump-factory.yml`.
 #
-# Draait op een GitHub-hosted runner: `factory release` heeft geen prod nodig (alleen
-# verify + versie-bump + tag + push), en zo raakt de release de mini-DNS-blip niet.
+# main is beschermd door de ruleset "main merge queue" (wijzigingen alleen via een PR
+# met een groene `verify`). Daarom pusht deze release NIET direct: hij bumpt de versie
+# op een `release/<tag>`-branch en laat die via een auto-merge-PR door de queue lopen.
+# De tag zet hij wél meteen (tags vallen buiten de branch-ruleset) op de bump-commit,
+# zodat de apps meteen kunnen bumpen. Draait op een GitHub-hosted runner: het is puur
+# git + gh, geen prod nodig.
 
 on:
   push:
@@ -26,12 +30,17 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
-    # De release-commit is zelf een push naar main; sla die over, anders tagt de
-    # release zichzelf in een lus. Een handmatige dispatch draait altijd.
-    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'release:') }}
+    # Niet opnieuw releasen op de merge van een release-PR (voorkomt een lus): die
+    # merge-commit noemt de `gjvv13/release/*`-bronbranch. Een `release:`-commit slaan
+    # we ook over. Een handmatige dispatch draait altijd.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+      ( !startsWith(github.event.head_commit.message, 'release:')
+      && !contains(github.event.head_commit.message, 'gjvv13/release/') ) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -50,14 +59,33 @@ jobs:
           done
           echo "::error::pnpm install bleef falen na 3 pogingen"
           exit 1
-      - name: Git-identiteit voor de release-commit
+      - name: Git-identiteit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-      # factory release draait de volledige poort, bumpt de versie, commit, tagt en
-      # pusht main + tag. De `release:`-commit triggert deze workflow niet opnieuw.
-      # Rechtstreeks via de gebouwde CLI (niet `pnpm exec factory`): de factory-repo
-      # hangt niet van zichzelf af, dus er is geen node_modules/.bin/factory — net als
-      # het `verify`-script draait dit op de meegeleverde dist/.
-      - name: Releasen
-        run: node dist/cli.js release "${{ github.event.inputs.bump || 'patch' }}"
+      - name: Bump op een release-branch, tag, en open een auto-merge-PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bump="${{ github.event.inputs.bump || 'patch' }}"
+          # Alleen de versie in package.json ophogen; de volledige poort draait als
+          # `verify`-check op de PR (dat is precies de vereiste check van de ruleset).
+          pnpm version "$bump" --no-git-tag-version >/dev/null
+          v="v$(node -p "require('./package.json').version")"
+          if git ls-remote --tags --exit-code origin "refs/tags/$v" >/dev/null 2>&1; then
+            echo "::notice::$v bestaat al — niets te releasen."
+            exit 0
+          fi
+          git checkout -b "release/$v"
+          git add package.json
+          git commit -m "release: $v"
+          # Tag op de bump-commit; tags vallen buiten de branch-ruleset, dus dit mag
+          # direct. De apps kunnen hiermee meteen bumpen, ook al staat de PR nog in de queue.
+          git tag -a "$v" -m "Release $v"
+          git push origin "release/$v"
+          git push origin "$v"
+          gh pr create --base main --head "release/$v" \
+            --title "release: $v" \
+            --body "Automatische versie-bump (#132). De tag $v is al gezet op de bump-commit."
+          # Auto-merge: de PR gaat de merge-queue in en merget zodra `verify` groen is.
+          gh pr merge "release/$v" --auto --merge --delete-branch

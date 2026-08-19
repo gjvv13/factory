@@ -152,11 +152,13 @@ ophalen. Deze repo is daarom publiek — er staat geen enkel geheim in, alleen d
 pipeline en een generiek skelet.
 
 Een verbetering aan de pipeline bereikt een applicatie **automatisch** (#132): een
-merge naar factory-`main` tagt vanzelf via `release.yml`, en elke app draait een
-`bump-factory.yml` die de nieuwste tag oppikt, `factory sync` doet (CLI én workflows,
-skills, hook komen mee) en via de gewone pijplijn naar prod rolt. Slash commands en de
-git hook moeten fysiek in de app-repo staan; `factory sync` doet dat, en de auto-bump
-draait 'm voor je.
+merge naar factory-`main` triggert `release.yml`, die de versie bumpt op een
+`release/<tag>`-branch en die via een **auto-merge-PR** door de merge-queue laat lopen
+(main is ruleset-beschermd, dus geen directe push; de tag zet hij wél meteen op de
+bump-commit). Elke app draait een `bump-factory.yml` die de nieuwste tag oppikt,
+`factory sync` doet (CLI én workflows, skills, hook komen mee) en via de gewone pijplijn
+naar prod rolt. Slash commands en de git hook moeten fysiek in de app-repo staan;
+`factory sync` doet dat, en de auto-bump draait 'm voor je.
 
 **Eenmalige bootstrap.** Het auto-bump-bestand moet de eerste keer met de hand in een
 app landen: bump de factory-dep, `pnpm install`, `factory sync`, en lever in. Vanaf dan
