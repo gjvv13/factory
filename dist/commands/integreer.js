@@ -245,8 +245,11 @@ export function minstensVersie(a, b) {
     }
     return true;
 }
-/** Versie van de globaal geïnstalleerde factory, of undefined als er geen (werkende) staat. */
-function globaleFactoryVersie() {
+/**
+ * Versie van de globaal geïnstalleerde factory, of undefined als er geen (werkende)
+ * staat. Ook `orkestreer --installeer` leunt hierop: die zet dezelfde gedeelde bin op.
+ */
+export function globaleFactoryVersie() {
     const root = uitvoerVan('npm', ['root', '-g']);
     if (root === undefined || root === '')
         return undefined;

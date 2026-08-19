@@ -157,6 +157,7 @@ export function draaiWerker(opdracht) {
         cwd: opdracht.werkmap,
         capture: true,
         toleranter: true,
+        ...(opdracht.env === undefined ? {} : { env: opdracht.env }),
     });
     let ruw;
     try {

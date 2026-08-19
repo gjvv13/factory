@@ -37,6 +37,11 @@ export declare function tarballVanDep(dep: string): {
 };
 /** `a >= b`, per numeriek versie-onderdeel (vX.Y.Z). */
 export declare function minstensVersie(a: string, b: string): boolean;
+/**
+ * Versie van de globaal geïnstalleerde factory, of undefined als er geen (werkende)
+ * staat. Ook `orkestreer --installeer` leunt hierop: die zet dezelfde gedeelde bin op.
+ */
+export declare function globaleFactoryVersie(): string | undefined;
 export interface IntegreerOpties {
     /** Installeert de LaunchAgent die `integreer` periodiek draait. */
     readonly installeer?: boolean;

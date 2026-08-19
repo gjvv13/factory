@@ -36,7 +36,8 @@ const HULP = `factory — pipeline van idee tot productie
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
-  factory orkestreer <--dry|--eenmalig>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
+  factory orkestreer <--dry|--eenmalig|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
+  factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
@@ -129,7 +130,7 @@ async function main(argumenten: string[]): Promise<void> {
     }
     case 'orkestreer': {
       const { schakelaars, positioneel } = leesArgumenten(rest, {
-        schakelaars: ['--dry', '--eenmalig', '--opnieuw'],
+        schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
       });
       if (positioneel[0] === 'status') {
         orkestreerStatus(process.cwd());
@@ -144,7 +145,13 @@ async function main(argumenten: string[]): Promise<void> {
       if (positioneel[0] !== undefined) {
         throw new GebruikersFout(`Onbekend subcommando '${positioneel[0]}'. Zie: factory help`);
       }
-      orkestreer({ dry: schakelaars.has('--dry'), eenmalig: schakelaars.has('--eenmalig') });
+      orkestreer({
+        dry: schakelaars.has('--dry'),
+        eenmalig: schakelaars.has('--eenmalig'),
+        nacht: schakelaars.has('--nacht'),
+        installeer: schakelaars.has('--installeer'),
+        verwijder: schakelaars.has('--verwijder'),
+      });
       return;
     }
     case 'sync': {

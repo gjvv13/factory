@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bordItems, escalaties, ESCALATIE_LABEL, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { bordItems, escalaties, ESCALATIE_LABEL, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { boekRun, kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, logRun, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
-import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
+import { globaleFactoryVersie, minstensVersie } from './integreer.js';
+import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 /**
@@ -22,8 +24,6 @@ const WERK_KOLOM = 'Technisch refinen';
 const EIGENAAR = 'gjvv13';
 /** Eén model voor alle refinements — gemeten, zie het modelkeuze-besluit in #104. */
 const MODEL = 'claude-opus-4-6';
-/** Harde kostenrem per run. Wordt overschreden voordat hij afkapt, dus ruim nemen. */
-const BUDGET_USD = 4;
 // --- Lock: één orkestrator-run tegelijk, zelfde patroon als `factory integreer` ---
 const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
 const LOCK_VERVALT_MS = 60 * 60 * 1000;
@@ -104,16 +104,32 @@ export function bouwPrompt(item, werkmap, factoryMap) {
 }
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export function orkestreer(opties = {}) {
-    if (opties.dry === true && opties.eenmalig === true) {
-        // Stil één van de twee kiezen laat iemand denken dat de run gestart is.
-        throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
+    const paden = opties.paden ?? standaardPaden();
+    if (opties.installeer === true) {
+        installeerAgent(paden);
+        return;
     }
-    if (opties.dry !== true && opties.eenmalig !== true) {
-        // Er is in deze fase nog geen automatiek. Een kaal commando dat tóch een werker
-        // start is precies het soort verrassing dat je bij onbemand werk niet wilt.
-        throw new GebruikersFout('Gebruik: factory orkestreer --dry (tonen) of factory orkestreer --eenmalig (één item).');
+    if (opties.verwijder === true) {
+        verwijderAgent(paden);
+        return;
+    }
+    const modi = [opties.dry, opties.eenmalig, opties.nacht].filter((modus) => modus === true);
+    if (modi.length > 1) {
+        // Stil één van de modi kiezen laat iemand denken dat de run gestart is.
+        throw new GebruikersFout('--dry, --eenmalig en --nacht sluiten elkaar uit; kies er één.');
+    }
+    if (modi.length === 0) {
+        // Een kaal commando dat tóch een werker start is precies het soort verrassing dat
+        // je bij onbemand werk niet wilt — ook nu er een LaunchAgent bestaat die het wél
+        // vanzelf doet. Die staat in de plist als `--nacht`, expliciet en na te lezen.
+        throw new GebruikersFout('Gebruik: factory orkestreer --dry (tonen), --eenmalig (één item) of --nacht (tot het dagmaximum).');
     }
     const cwd = process.cwd();
+    const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
+    if (opties.nacht === true) {
+        draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
+        return;
+    }
     const wachtrij = bouwWachtrij(cwd);
     kop(`Wachtrij: ${WACHTRIJ_KOLOM}`);
     if (wachtrij.length === 0) {
@@ -129,7 +145,9 @@ export function orkestreer(opties = {}) {
         return;
     }
     if (opties.dry === true) {
-        process.stdout.write(`\nZou nu draaien: #${String(eerste.issue)} (${eerste.app}), in ${werkplaatsVan(eerste.app, opties.werkplaatsWortel ?? werkplaatsWortel)}.\n` +
+        // Bewust vóór het lezen van de instellingen: `--dry` raakt niets aan, ook geen
+        // bestand in de home-map, en moet dus ook werken als daar niets staat.
+        process.stdout.write(`\nZou nu draaien: #${String(eerste.issue)} (${eerste.app}), in ${werkplaatsVan(eerste.app, wortel)}.\n` +
             `Er is niets geschreven — niet naar GitHub en niet naar de werkplaats.\n`);
         return;
     }
@@ -138,14 +156,94 @@ export function orkestreer(opties = {}) {
             '  Wacht tot die klaar is, of verwijder het slot als er zeker niets meer draait.');
     }
     try {
-        werkAf(eerste, cwd, opties.werkplaatsWortel ?? werkplaatsWortel);
+        // Met de hand: het budget uit de instellingen, maar geen token vereist — dan draait
+        // `claude` op de gewone keychain-auth van de terminal waarin je dit typt.
+        werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun });
+    }
+    finally {
+        geefLockVrij();
+    }
+}
+/**
+ * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
+ *
+ * De wachtrij wordt per ronde opnieuw gelezen. Dat is een board-lezing per item en dus
+ * niet gratis (#104 rekent voor hoe schaars het GraphQL-budget is), maar de vorige run
+ * heeft het board net veranderd: het item dat hij afwerkte staat nu op een andere
+ * kolom, of draagt een escalatie-label. Doorwerken op de oude lijst zou hetzelfde item
+ * een tweede keer oppakken.
+ */
+function draaiNacht(cwd, wortel, paden, nu) {
+    const instellingen = leesInstellingen(paden);
+    // De token eerst: een nacht die pas bij de eerste `claude`-aanroep struikelt heeft
+    // dan al een item uit de wachtrij gehaald en een kolom verzet.
+    const token = vereisToken(instellingen, paden);
+    const draaiOpties = {
+        budgetUsd: instellingen.budgetPerRun,
+        env: { ...process.env, [TOKEN_SLEUTEL]: token },
+    };
+    kop(`Nacht van ${kalenderdag(nu)}`);
+    let gestart = leesStaat(paden, nu).gestart;
+    if (gestart >= instellingen.dagmaximum) {
+        // Meerdere runs op één kalenderdag delen hetzelfde maximum; anders is een handmatige
+        // extra run 's avonds een gratis verdubbeling van wat ik moet beoordelen.
+        ok(`dagmaximum al bereikt (${String(gestart)}/${String(instellingen.dagmaximum)}); niets gedaan.`);
+        return;
+    }
+    if (!neemLock()) {
+        throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+    }
+    const gedaan = new Set();
+    try {
+        while (gestart < instellingen.dagmaximum) {
+            const eerste = bouwWachtrij(cwd)[0];
+            if (eerste === undefined) {
+                ok('wachtrij leeg; klaar voor vannacht.');
+                break;
+            }
+            // Vangnet tegen een lus, zoals `integreer` dat ook heeft. Een geslaagde run haalt
+            // het item normaal uit de wachtrij-kolom, maar `zetKolom` faalt zacht — een
+            // board-hik of een opgesoupeerd GraphQL-budget is genoeg. Dan zou de nacht
+            // hetzelfde issue tot vier keer refinen: vier keer betalen voor één uitwerking.
+            if (gedaan.has(eerste.issue)) {
+                waarschuwing(`#${String(eerste.issue)} staat na de run nog in de wachtrij; gestopt om een lus te voorkomen.`);
+                break;
+            }
+            gedaan.add(eerste.issue);
+            // Boeken vóór de run: een run die omvalt heeft wél geld gekost.
+            gestart = boekRun(paden, nu);
+            let uitkomst;
+            try {
+                uitkomst = werkAf(eerste, cwd, wortel, draaiOpties);
+            }
+            catch (fout) {
+                // Ook een run die de CLI omvertrekt hoort in het log. Anders staat de teller op
+                // 1 en het log op niets, en dat is precies de stilte die je 's ochtends niet
+                // kunt lezen. Daarna alsnog doorgooien: dit is een probleem van de machine, en
+                // elke volgende run loopt er net zo goed op stuk.
+                logRun(paden, new Date(Date.now()), {
+                    issue: eerste.issue,
+                    app: eerste.app,
+                    uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+                });
+                throw fout;
+            }
+            logRun(paden, new Date(Date.now()), {
+                issue: eerste.issue,
+                app: eerste.app,
+                uitkomst: uitkomst.afloop,
+                ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+                ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+            });
+            ok(`${String(gestart)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
+        }
     }
     finally {
         geefLockVrij();
     }
 }
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
-function werkAf(item, cwd, wortel) {
+function werkAf(item, cwd, wortel, draai) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
@@ -176,10 +274,17 @@ function werkAf(item, cwd, wortel) {
             werkmap,
             sessie,
             extraMappen: [factoryMap],
-            budgetUsd: BUDGET_USD,
+            budgetUsd: draai.budgetUsd,
             model: MODEL,
+            ...(draai.env === undefined ? {} : { env: draai.env }),
         });
-        verwerk(item, uitkomst, werkmap, cwd);
+        // De afloop komt uit `verwerk` en niet uit de werker: schrijft de body niet weg,
+        // dan is 'klaar' onwaar, en het log hoort te zeggen wat er echt gebeurde.
+        return {
+            afloop: verwerk(item, uitkomst, werkmap, cwd),
+            ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+            ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+        };
     }
     catch (fout) {
         terugInWachtrij();
@@ -259,7 +364,7 @@ function tussen(tekst, van, tot) {
         .replace(/^\s*\*\*(Vraag|Advies):\*\*\s*/, '')
         .trim();
 }
-/** Vertaalt de uitkomst van de werker naar wat er op GitHub gebeurt. */
+/** Vertaalt de uitkomst van de werker naar wat er op GitHub gebeurt, en hoe het afliep. */
 function verwerk(item, uitkomst, werkmap, cwd) {
     if (uitkomst.afloop === 'mislukt') {
         // Escalatie, niet opnieuw proberen: dezelfde fout elke nacht opnieuw draaien kost
@@ -268,22 +373,22 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         blokkeer(item, cwd);
         plaatsComment(item.issue, `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
         waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
-        return;
+        return 'mislukt';
     }
     const verdict = uitkomst.verdict;
     if (verdict?.uitkomst === 'escalatie') {
         blokkeer(item, cwd);
         plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap), cwd);
         ok(`#${String(item.issue)} geëscaleerd — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
-        return;
+        return 'escalatie';
     }
     if (verdict?.uitkomst !== 'klaar') {
         // Onbereikbaar zolang `afloop` en `verdict` uit dezelfde bron komen, maar het
         // alternatief is stil doorgaan met een lege body.
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
-        return;
+        return 'mislukt';
     }
-    rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd);
+    return rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd);
 }
 /** Zet een item stil: terug in de wachtrij-kolom, met het label dat het overslaat. */
 function blokkeer(item, cwd) {
@@ -301,7 +406,7 @@ function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
         // De uitwerking is er wel maar staat nergens; dat is een mislukking, geen succes.
         blokkeer({ issue }, cwd);
         plaatsComment(issue, `**Uitwerking kon niet weggeschreven worden.**\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
-        return;
+        return 'mislukt';
     }
     zetKolom(issue, WERK_KOLOM, cwd);
     haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
@@ -309,6 +414,7 @@ function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
         `${samenvatting}\n\nHet item staat op **${WERK_KOLOM}** en wacht op je akkoord; ` +
         `dat akkoord is het verplaatsen naar **Klaar voor Bouwen**.\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
     ok(`#${String(issue)} uitgewerkt en op ${WERK_KOLOM}`);
+    return 'klaar';
 }
 /**
  * De voetnoot onder elke comment: kosten, beurten en de sessie.
@@ -416,7 +522,11 @@ function werkAntwoordAf(issue, tekst, escalatie, opties, cwd) {
             sessie: escalatie.sessie,
             hervat: true,
         };
-    const uitkomst = draaiWerker({ ...opdracht, budgetUsd: BUDGET_USD, model: MODEL });
+    const uitkomst = draaiWerker({
+        ...opdracht,
+        budgetUsd: leesInstellingen(opties.paden ?? standaardPaden()).budgetPerRun,
+        model: MODEL,
+    });
     if (uitkomst.sessieWeg === true) {
         // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
         // hier letterlijk. Het werk tot de escalatie is dan wel verloren.
@@ -473,5 +583,136 @@ function vervolgPrompt(escalatie, tekst) {
         'Werk hiermee verder en geef opnieuw een verdict. Loop vóór je antwoord de gesloten ' +
         'lijst uit de onbemand-werken-skill nog een keer langs; kom je er nog een tegen, dan ' +
         'escaleer je opnieuw in plaats van hem zelf op te lossen.');
+}
+// --- De LaunchAgent: één keer per nacht, zonder dat ik een terminal open ------
+/** Het uur waarop de nacht draait — 04:00, zoals #104 het schetste. */
+const NACHT_UUR = 4;
+/**
+ * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
+ *
+ * Drie keuzes die een lezer zou willen aanvechten:
+ *
+ * **`StartCalendarInterval` en niet `StartInterval`.** De integreer-agent tikt elke
+ * minuut een wachtrij af; die kost niets. Deze start werkers die geld kosten, dus hij
+ * hoort op een moment te draaien en niet op een frequentie.
+ *
+ * **Geen `RunAtLoad`.** Anders begint `--installeer` meteen aan een nacht werk, en dan
+ * is het installeren van de automatiek zelf de verrassing die de hele opzet wil
+ * vermijden. De eerste run is vannacht.
+ *
+ * **Geen token in de plist.** Een plist in `~/Library/LaunchAgents` is gewoon
+ * leesbaar; de token staat in een 0600-bestand dat de run zelf leest.
+ */
+export function bouwOrkestreerPlist(opzet) {
+    // De PATH van de installerende shell meebakken: launchd start anders met een kale
+    // PATH en vindt node, gh of claude dan niet.
+    const pad = process.env.PATH ?? '/usr/bin:/bin';
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LAUNCH_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${opzet.bin}</string>
+    <string>orkestreer</string>
+    <string>--nacht</string>
+  </array>
+  <key>WorkingDirectory</key><string>${opzet.werkmap}</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>${String(NACHT_UUR)}</integer><key>Minute</key><integer>0</integer></dict>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>${pad}</string></dict>
+  <key>StandardOutPath</key><string>${opzet.logPad}</string>
+  <key>StandardErrorPath</key><string>${opzet.logPad}</string>
+</dict>
+</plist>
+`;
+}
+/**
+ * De nieuwste release-tag van de factory, waaruit de globale bin geïnstalleerd wordt.
+ *
+ * De tag en niet `package.json` op main: de tag is de bron van waarheid over "wat is
+ * de laatste release", en main's versie kan tijdelijk achterlopen terwijl de
+ * release-PR nog in de lucht is (dezelfde reden als in `release.yml`, zie #132).
+ */
+function nieuwsteTag(cwd) {
+    run('git', ['fetch', '--tags', '--force', 'origin'], { cwd, capture: true, toleranter: true });
+    const tags = uitvoerVan('git', ['tag', '--list', 'v*', '--sort=-v:refname'], cwd);
+    const tag = tags?.split('\n')[0]?.trim();
+    if (tag === undefined || tag === '') {
+        throw new GebruikersFout('Geen release-tag (v*) gevonden; er is niets om globaal te installeren.');
+    }
+    return tag;
+}
+/**
+ * Zet de LaunchAgent op. Idempotent: een bestaande agent wordt eerst ontladen en dan
+ * vers geladen, en een bestaand instellingenbestand blijft ongemoeid.
+ */
+function installeerAgent(paden) {
+    const cwd = process.cwd();
+    if (!isBacklogRepo(cwd)) {
+        // De globale bin komt uit de tags van dít repo; buiten de factory zou hij uit een
+        // ander repo geïnstalleerd worden, of uit niets.
+        throw new GebruikersFout('Draai dit in de factory-repo: de globale bin komt uit de release-tags daarvan.');
+    }
+    kop('Instellingen en token');
+    zorgVoorEnvBestand(paden);
+    const instellingen = leesInstellingen(paden);
+    // Vóór de install en niet erna: een geladen agent zonder token draait vannacht een
+    // ronde die op niets uitloopt, en dat merk je dan pas morgen.
+    vereisToken(instellingen, paden);
+    ok(`dagmaximum ${String(instellingen.dagmaximum)}, budget $${String(instellingen.budgetPerRun)} per run (${paden.envPad}).`);
+    kop('Factory globaal installeren');
+    const tag = nieuwsteTag(cwd);
+    const versie = tag.replace(/^v/, '');
+    const globaal = globaleFactoryVersie();
+    if (globaal !== undefined && minstensVersie(globaal, versie)) {
+        ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
+    }
+    else {
+        run('npm', ['install', '-g', `https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/${tag}`], {
+            capture: true,
+        });
+        ok(`factory ${versie} globaal geïnstalleerd.`);
+    }
+    const prefix = uitvoerVan('npm', ['prefix', '-g'], cwd) ?? '/usr/local';
+    const bin = path.join(prefix, 'bin', 'factory');
+    vereisNachtModus(bin);
+    kop('LaunchAgent laden');
+    const pad = paden.agentPad;
+    mkdirSync(path.dirname(pad), { recursive: true });
+    writeFileSync(pad, bouwOrkestreerPlist({ bin, werkmap: os.homedir(), logPad: paden.logPad }));
+    run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+    run('launchctl', ['load', pad]);
+    schrijfLog(paden, `${new Date(Date.now()).toISOString()} agent geladen (${tag}, ${bin})`);
+    ok(`geladen; \`factory orkestreer --nacht\` draait elke nacht om ${String(NACHT_UUR).padStart(2, '0')}:00 (log: ${paden.logPad}).`);
+}
+/**
+ * Weigert een agent te plannen op een bin die `--nacht` niet kent.
+ *
+ * De globale bin komt uit de nieuwste **tag**, en die loopt per definitie achter op de
+ * branch waarin `--nacht` net gebouwd is: installeer je voordat deze slice gereleased
+ * is, dan staat er een agent klaar die om 04:00 afketst op "Onbekend commando" — in een
+ * log dat je pas dagen later leest. Dit is precies het soort stille misstand als het
+ * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
+ */
+function vereisNachtModus(bin) {
+    const hulp = uitvoerVan(bin, ['help']) ?? '';
+    if (hulp.includes('--nacht')) {
+        return;
+    }
+    throw new GebruikersFout(`De globale factory (${bin}) kent \`orkestreer --nacht\` niet.\n` +
+        '  Die zit in een release die er nog niet is; een agent hierop afketst vannacht stil.\n' +
+        '  Lever deze slice eerst in en laat hem releasen, en draai daarna opnieuw:\n' +
+        '    factory orkestreer --installeer');
+}
+/** Haalt de LaunchAgent weg. Idempotent: staat hij er niet, dan is dit een no-op. */
+function verwijderAgent(paden) {
+    kop('LaunchAgent verwijderen');
+    const pad = paden.agentPad;
+    run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+    rmSync(pad, { force: true });
+    ok('verwijderd; er draait niets meer vanzelf.');
 }
 //# sourceMappingURL=orkestreer.js.map

@@ -1,14 +1,32 @@
-import { closeSync, existsSync, mkdtempSync, openSync, rmSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  bouwOrkestreerPlist,
   escalatieComment,
   leesEscalatie,
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
 } from '../src/commands/orkestreer.js';
+import {
+  leesStaat,
+  standaardPaden,
+  TOKEN_SLEUTEL,
+  type OrkestratorPaden,
+} from '../src/orkestrator-instellingen.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
@@ -18,6 +36,11 @@ import {
 } from './helpers.js';
 
 const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
+
+/** Pad naar een opgenomen `claude`-respons in `test/fixtures`. */
+function fixture(naam: string): string {
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', naam);
+}
 
 /** Eén item zoals het board het teruggeeft. */
 function boardItem(
@@ -791,5 +814,497 @@ describe('orkestreer antwoord', () => {
     expect(() => {
       orkestreerAntwoord('51', '  ', {}, '/repo');
     }).toThrow(/Gebruik: factory orkestreer antwoord/);
+  });
+});
+
+describe('orkestreer --nacht', () => {
+  let uitvoer: string[];
+  let wortel: string;
+  let home: string;
+  let paden: OrkestratorPaden;
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-nacht-'));
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-nacht-home-'));
+    paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(
+      paden.envPad,
+      `${TOKEN_SLEUTEL}=sk-nacht\nFACTORY_DAGMAXIMUM=2\nFACTORY_BUDGET_USD=3\n`,
+      { mode: 0o600 },
+    );
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    rmSync(LOCK_PAD, { force: true });
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    rmSync(LOCK_PAD, { force: true });
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  const NU = new Date('2026-08-19T04:00:00');
+
+  /** Het issuenummer van een opgenomen board-item. */
+  function nummerVan(item: unknown): number {
+    return (item as { content: { number: number } }).content.number;
+  }
+
+  /**
+   * Een board dat meebeweegt met wat de orkestrator ermee doet — nodig voor `--nacht`,
+   * want die leest de wachtrij per ronde opnieuw. Een afgewerkt item verlaat de
+   * wachtrij-kolom; een geblokkeerd item blijft er staan maar duikt op in de
+   * escalatielijst, precies zoals `blokkeer` het achterlaat.
+   */
+  function nachtBord(items: unknown[], opties: { werker?: string } = {}): UitkomstBepaler {
+    const verzet = new Set<number>();
+    const geblokkeerd = new Set<number>();
+    return ({ commando, argumenten }) => {
+      if (commando === 'claude') {
+        const gevraagd = /- Issue: \*\*#(\d+)\*\*/.exec(argumenten.join('\n'))?.[1];
+        if (gevraagd !== undefined) {
+          verzet.add(Number.parseInt(gevraagd, 10));
+        }
+        return { stdout: opties.werker ?? werkerKlaar() };
+      }
+      if (commando === 'gh' && argumenten[0] === 'issue' && argumenten.includes('--add-label')) {
+        const nummer = Number.parseInt(argumenten[2] ?? '', 10);
+        geblokkeerd.add(nummer);
+        verzet.delete(nummer);
+        return {};
+      }
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
+        if (query.includes('items(first:100')) {
+          return { stdout: boardAntwoord(items.filter((item) => !verzet.has(nummerVan(item)))) };
+        }
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      if (commando === 'gh' && argumenten[0] === 'api') {
+        return { stdout: [...geblokkeerd].map(String).join('\n') };
+      }
+      return {};
+    };
+  }
+
+  function claudeAanroepen(aanroepen: ProcesAanroep[]): ProcesAanroep[] {
+    return aanroepen.filter((a) => a.commando === 'claude');
+  }
+
+  it('stopt bij het dagmaximum, ook al staan er meer items in de rij', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Dagmaximum 2 uit het instellingenbestand; de wachtrij heeft er drie.
+    expect(claudeAanroepen(aanroepen)).toHaveLength(2);
+    expect(leesStaat(paden, NU).gestart).toBe(2);
+  });
+
+  it('deelt dat maximum met een tweede run op dezelfde kalenderdag', () => {
+    const eerste = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(eerste.uitvoerder);
+    orkestreer({
+      nacht: true,
+      werkplaatsWortel: wortel,
+      paden,
+      nu: new Date('2026-08-19T04:00:00'),
+    });
+    expect(claudeAanroepen(eerste.aanroepen)).toHaveLength(2);
+
+    const tweede = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(tweede.uitvoerder);
+    rmSync(LOCK_PAD, { force: true });
+    orkestreer({
+      nacht: true,
+      werkplaatsWortel: wortel,
+      paden,
+      nu: new Date('2026-08-19T22:00:00'),
+    });
+
+    // Zonder deze deling is een handmatige extra run 's avonds een gratis verdubbeling
+    // van wat ik de volgende dag moet beoordelen.
+    expect(claudeAanroepen(tweede.aanroepen)).toHaveLength(0);
+    expect(uitvoer.join('')).toMatch(/dagmaximum al bereikt \(2\/2\)/);
+  });
+
+  it('begint na een dagovergang weer bij nul', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+    orkestreer({
+      nacht: true,
+      werkplaatsWortel: wortel,
+      paden,
+      nu: new Date('2026-08-19T04:00:00'),
+    });
+
+    const morgen = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(morgen.uitvoerder);
+    rmSync(LOCK_PAD, { force: true });
+    orkestreer({
+      nacht: true,
+      werkplaatsWortel: wortel,
+      paden,
+      nu: new Date('2026-08-20T04:00:00'),
+    });
+
+    // Anders zou de orkestrator na één volle nacht nooit meer draaien.
+    expect(claudeAanroepen(morgen.aanroepen)).toHaveLength(2);
+  });
+
+  it('stopt zodra de wachtrij leeg is, en leest die rij per ronde opnieuw', () => {
+    const eenItem = [
+      boardItem(131, 'factory', 'Klaar voor technische refinement', '2026-08-01T00:00:00Z'),
+    ];
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(eenItem));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Eén item, dus één werker — en niet twee keer hetzelfde item omdat de lijst van
+    // vóór de eerste run nog in het geheugen zat.
+    expect(claudeAanroepen(aanroepen)).toHaveLength(1);
+    expect(boardLezingen(aanroepen)).toBeGreaterThan(1);
+    expect(uitvoer.join('')).toMatch(/wachtrij leeg/);
+  });
+
+  it('geeft het budget uit de instellingen mee en de token buiten de plist om', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    const eerste = claudeAanroepen(aanroepen)[0];
+    expect(eerste?.argumenten[eerste.argumenten.indexOf('--max-budget-usd') + 1]).toBe('3');
+    // De token reist als omgevingsvariabele mee; hij staat nergens in de argumenten,
+    // want die zijn zichtbaar in `ps`.
+    expect(eerste?.env?.[TOKEN_SLEUTEL]).toBe('sk-nacht');
+    expect(eerste?.argumenten.join(' ')).not.toContain('sk-nacht');
+  });
+
+  it('schrijft per run een regel met issue, uitkomst, kosten en beurten', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Zonder eigen logregels zou alleen de stdout van launchd iets vastleggen, en dan
+    // legt een handmatige run niets vast.
+    const log = readFileSync(paden.logPad, 'utf8');
+    expect(log).toMatch(/#51 assistant klaar \$1\.25 12 beurten/);
+    expect(log.trim().split('\n')).toHaveLength(2);
+  });
+
+  it('telt een run mee die niet oplevert wat hij moest opleveren', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(nachtBord(WACHTRIJ, { werker: werkerMislukt() })).uitvoerder,
+    );
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Een teller die alleen geslaagde runs telt is geen rem: een kapot item zou de
+    // hele nacht opnieuw mogen draaien. En een mislukking is een escalatie, dus het
+    // item wordt niet vannacht nog eens gepakt.
+    expect(leesStaat(paden, NU).gestart).toBe(2);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt/);
+  });
+
+  it('laat een run die zijn budget opmaakt als escalatie achter', () => {
+    // De echte, opgenomen envelop van een budget-afkapping (`subtype:
+    // error_max_budget_usd`, exit 1). Zonder deze weg zou een item dat elke nacht zijn
+    // budget opmaakt elke nacht opnieuw geld kosten.
+    const opgenomen = readFileSync(fixture('claude-run-fout.json'), 'utf8');
+    const budgetOp: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: opgenomen }
+        : nachtBord(WACHTRIJ, { werker: opgenomen })(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(budgetOp);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    const label = ghArgs(aanroepen).find((a) => a.includes('--add-label'));
+    expect(label).toContain('escalatie');
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt \$0\.10/);
+  });
+
+  it('stopt als een item na zijn run nog in de wachtrij staat', () => {
+    // `zetKolom` faalt zacht — een board-hik of een leeg GraphQL-budget is genoeg — en
+    // dan blijft het item staan. Zonder vangnet refint de nacht hetzelfde issue tot
+    // vier keer: vier keer betalen voor één uitwerking.
+    const basis = nachtBord(WACHTRIJ);
+    const bordBlijftStaan: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { stdout: werkerKlaar() } // geen verzet: het item blijft in de wachtrij staan
+        : basis(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bordBlijftStaan);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    expect(claudeAanroepen(aanroepen)).toHaveLength(1);
+    expect(uitvoer.join('')).toMatch(/#51 staat na de run nog in de wachtrij/);
+  });
+
+  it('logt ook een run die de CLI omvertrekt', () => {
+    // `claude` is niet te starten: `run` gooit. Zonder deze regel staat de dagteller op
+    // 1 en het log op niets — de stilte die je 's ochtends niet kunt lezen.
+    const basis = nachtBord(WACHTRIJ);
+    const geenClaude: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
+        : basis(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(geenClaude).uitvoerder);
+
+    expect(() => {
+      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    }).toThrow(/claude/);
+
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant afgebroken/);
+    expect(leesStaat(paden, NU).gestart).toBe(1);
+  });
+
+  it('geeft elke runregel zijn eigen tijdstempel', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Twee regels met hetzelfde tijdstempel zeggen niets over hoe lang een run duurde.
+    const stempels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .map((regel) => regel.split(' ')[0]);
+    expect(stempels).toHaveLength(2);
+    expect(stempels[0]).not.toBe(NU.toISOString());
+  });
+
+  it('weigert onbemand te draaien zonder token, met het recept erbij', () => {
+    writeFileSync(paden.envPad, 'FACTORY_DAGMAXIMUM=2\n', { mode: 0o600 });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    }).toThrow(/claude setup-token/);
+
+    // En vóórdat er een item uit de wachtrij is gehaald: geen kolom verzet, geen werker.
+    expect(aanroepen).toHaveLength(0);
+  });
+
+  it('weigert --nacht samen met --dry', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    expect(() => {
+      orkestreer({ nacht: true, dry: true, werkplaatsWortel: wortel, paden, nu: NU });
+    }).toThrow(/sluiten elkaar uit/);
+  });
+});
+
+describe('de LaunchAgent van de orkestrator', () => {
+  const opzet = {
+    bin: '/usr/local/bin/factory',
+    werkmap: '/Users/gjvv',
+    logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
+  };
+
+  it('draait --nacht één keer per nacht, buiten ~/Documents', () => {
+    const plist = bouwOrkestreerPlist(opzet);
+
+    expect(plist).toContain('<key>Label</key><string>nl.factory.orkestreer</string>');
+    expect(plist).toContain('<string>--nacht</string>');
+    expect(plist).toContain('<key>WorkingDirectory</key><string>/Users/gjvv</string>');
+    // Een moment, geen frequentie: deze agent start werkers die geld kosten.
+    expect(plist).toContain('<key>Hour</key><integer>4</integer>');
+    expect(plist).not.toContain('StartInterval');
+  });
+
+  it('start niet meteen bij het laden en draagt de token niet mee', () => {
+    const plist = bouwOrkestreerPlist(opzet);
+
+    // RunAtLoad zou het installeren van de automatiek zelf de verrassing maken die de
+    // hele opzet wil vermijden; de token hoort in een 0600-bestand, niet in een plist
+    // die voor iedereen leesbaar is.
+    expect(plist).not.toContain('RunAtLoad');
+    expect(plist).not.toContain(TOKEN_SLEUTEL);
+  });
+});
+
+describe('orkestreer --installeer en --verwijder', () => {
+  let home: string;
+  let paden: OrkestratorPaden;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-agent-home-'));
+    paden = standaardPaden(home);
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  /** Een machine waarop de factory-repo staat, met tags en een globale npm-prefix. */
+  function machine(opties: { globaleVersie?: string } = {}): UitkomstBepaler {
+    return ({ commando, argumenten }) => {
+      if (commando === 'git' && argumenten[0] === 'remote') {
+        return { stdout: 'git@github.com:gjvv13/factory.git\n' };
+      }
+      if (commando === 'git' && argumenten[0] === 'tag') {
+        return { stdout: 'v1.15.13\nv1.15.12\nv1.9.0\n' };
+      }
+      if (commando === 'npm' && argumenten[0] === 'prefix') {
+        return { stdout: '/opt/homebrew\n' };
+      }
+      if (argumenten[0] === 'help') {
+        // De globaal geïnstalleerde bin die `--nacht` wél kent.
+        return { stdout: 'factory orkestreer <--dry|--eenmalig|--nacht>\n' };
+      }
+      if (commando === 'npm' && argumenten[0] === 'root') {
+        return opties.globaleVersie === undefined ? { code: 1 } : { stdout: '/opt/homebrew/lib' };
+      }
+      return {};
+    };
+  }
+
+  function metToken(): void {
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-nacht\n`, { mode: 0o600 });
+  }
+
+  it('installeert de globale bin uit de nieuwste tag en laadt de agent', () => {
+    metToken();
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine());
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ installeer: true, paden });
+
+    // De tag is de bron van waarheid over de laatste release, niet main's package.json.
+    const install = aanroepen.find((a) => a.commando === 'npm' && a.argumenten[0] === 'install');
+    expect(install?.argumenten[2]).toBe(
+      'https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/v1.15.13',
+    );
+    // De bin komt uit de globale prefix en dus niet uit deze werkkopie in ~/Documents.
+    expect(readFileSync(paden.agentPad, 'utf8')).toContain(
+      '<string>/opt/homebrew/bin/factory</string>',
+    );
+    // Ontladen vóór laden, zodat een tweede installatie geen dubbele agent oplevert.
+    const launchctl = aanroepen
+      .filter((a) => a.commando === 'launchctl')
+      .map((a) => a.argumenten[0]);
+    expect(launchctl).toEqual(['unload', 'load']);
+  });
+
+  it('is idempotent: twee keer installeren geeft dezelfde agent', () => {
+    metToken();
+    stelUitvoerderIn(maakUitvoerderOpnemer(machine()).uitvoerder);
+
+    orkestreer({ installeer: true, paden });
+    const eerste = readFileSync(paden.agentPad, 'utf8');
+    orkestreer({ installeer: true, paden });
+
+    expect(readFileSync(paden.agentPad, 'utf8')).toBe(eerste);
+  });
+
+  it('weigert te installeren zonder token, en laat dan niets achter', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine());
+    stelUitvoerderIn(uitvoerder);
+
+    // Een geladen agent zonder token draait vannacht een ronde die op niets uitloopt,
+    // en dat merk je dan pas morgen.
+    expect(() => {
+      orkestreer({ installeer: true, paden });
+    }).toThrow(/claude setup-token/);
+
+    expect(existsSync(paden.agentPad)).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
+    // Het skelet staat er wel, met 0600, klaar om de token in te zetten.
+    expect(statSync(paden.envPad).mode & 0o777).toBe(0o600);
+  });
+
+  it('weigert te installeren buiten de factory-repo', () => {
+    metToken();
+    const buiten: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'git' && aanroep.argumenten[0] === 'remote'
+        ? { stdout: 'git@github.com:gjvv13/assistant.git\n' }
+        : machine()(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(buiten).uitvoerder);
+
+    // De globale bin komt uit de tags van dit repo; buiten de factory zou hij uit een
+    // ander repo komen, of uit niets.
+    expect(() => {
+      orkestreer({ installeer: true, paden });
+    }).toThrow(/factory-repo/);
+  });
+
+  it('slaat de install over als er al een even nieuwe globale factory staat', () => {
+    metToken();
+    mkdirSync(path.join(home, 'globaal', 'factory'), { recursive: true });
+    const bepaal: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'npm' && aanroep.argumenten[0] === 'root'
+        ? { stdout: path.join(home, 'globaal') }
+        : machine()(aanroep, index);
+    writeFileSync(
+      path.join(home, 'globaal', 'factory', 'package.json'),
+      JSON.stringify({ version: '1.15.13' }),
+    );
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ installeer: true, paden });
+
+    // Zo downgradet een oudere pin de gedeelde bin nooit — dezelfde regel als bij
+    // `integreer --installeer`.
+    expect(aanroepen.some((a) => a.commando === 'npm' && a.argumenten[0] === 'install')).toBe(
+      false,
+    );
+    expect(uitvoer.join('')).toMatch(/staat al globaal/);
+  });
+
+  it('weigert een agent te plannen op een bin die --nacht niet kent', () => {
+    metToken();
+    const oudeBin: UitkomstBepaler = (aanroep, index) =>
+      aanroep.argumenten[0] === 'help'
+        ? { stdout: 'factory orkestreer <--dry|--eenmalig>\n' }
+        : machine()(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(oudeBin);
+    stelUitvoerderIn(uitvoerder);
+
+    // De globale bin komt uit de nieuwste tag, en die loopt achter op de branch waarin
+    // --nacht net gebouwd is. Zo'n agent ketst om 04:00 stil af.
+    expect(() => {
+      orkestreer({ installeer: true, paden });
+    }).toThrow(/nog niet is/);
+
+    expect(existsSync(paden.agentPad)).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
+  });
+
+  it('verwijdert de agent, ook als hij er niet staat', () => {
+    metToken();
+    stelUitvoerderIn(maakUitvoerderOpnemer(machine()).uitvoerder);
+    orkestreer({ installeer: true, paden });
+
+    orkestreer({ verwijder: true, paden });
+    expect(existsSync(paden.agentPad)).toBe(false);
+
+    // Idempotent: een tweede keer verwijderen is een no-op en geen fout.
+    expect(() => {
+      orkestreer({ verwijder: true, paden });
+    }).not.toThrow();
   });
 });

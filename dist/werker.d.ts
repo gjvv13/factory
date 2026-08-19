@@ -103,6 +103,13 @@ export interface WerkerOpdracht {
     readonly extraMappen?: readonly string[];
     readonly budgetUsd: number;
     readonly model: string;
+    /**
+     * De omgeving waarin `claude` draait. Onbemand staat hier de OAuth-token in: die
+     * hoort niet in de LaunchAgent-plist (wereldleesbaar) maar in een 0600-bestand dat
+     * de run zelf leest — zie `orkestrator-instellingen.ts`. Met de hand blijft dit
+     * leeg en gebruikt `claude` de gewone keychain-auth.
+     */
+    readonly env?: NodeJS.ProcessEnv;
 }
 export type Afloop = 'klaar' | 'escalatie' | 'mislukt';
 export interface WerkerUitkomst {
