@@ -854,20 +854,45 @@ describe('orkestreer --nacht', () => {
 
   const NU = new Date('2026-08-19T04:00:00');
 
-  /** Als `bepaler`, maar de wachtrij slinkt zodra een werker een item afwerkte. */
-  function slinkendBord(items: unknown[]): UitkomstBepaler {
-    const basis = bepaler();
-    let over = [...items];
-    return (aanroep, index) => {
-      if (aanroep.commando === 'claude') {
-        over = over.slice(1);
-        return basis(aanroep, index);
+  /** Het issuenummer van een opgenomen board-item. */
+  function nummerVan(item: unknown): number {
+    return (item as { content: { number: number } }).content.number;
+  }
+
+  /**
+   * Een board dat meebeweegt met wat de orkestrator ermee doet — nodig voor `--nacht`,
+   * want die leest de wachtrij per ronde opnieuw. Een afgewerkt item verlaat de
+   * wachtrij-kolom; een geblokkeerd item blijft er staan maar duikt op in de
+   * escalatielijst, precies zoals `blokkeer` het achterlaat.
+   */
+  function nachtBord(items: unknown[], opties: { werker?: string } = {}): UitkomstBepaler {
+    const verzet = new Set<number>();
+    const geblokkeerd = new Set<number>();
+    return ({ commando, argumenten }) => {
+      if (commando === 'claude') {
+        const gevraagd = /- Issue: \*\*#(\d+)\*\*/.exec(argumenten.join('\n'))?.[1];
+        if (gevraagd !== undefined) {
+          verzet.add(Number.parseInt(gevraagd, 10));
+        }
+        return { stdout: opties.werker ?? werkerKlaar() };
       }
-      const query = aanroep.argumenten.find((a) => a.startsWith('query=')) ?? '';
-      if (query.includes('items(first:100')) {
-        return { stdout: boardAntwoord(over) };
+      if (commando === 'gh' && argumenten[0] === 'issue' && argumenten.includes('--add-label')) {
+        const nummer = Number.parseInt(argumenten[2] ?? '', 10);
+        geblokkeerd.add(nummer);
+        verzet.delete(nummer);
+        return {};
       }
-      return basis(aanroep, index);
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
+        if (query.includes('items(first:100')) {
+          return { stdout: boardAntwoord(items.filter((item) => !verzet.has(nummerVan(item)))) };
+        }
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      if (commando === 'gh' && argumenten[0] === 'api') {
+        return { stdout: [...geblokkeerd].map(String).join('\n') };
+      }
+      return {};
     };
   }
 
@@ -876,7 +901,7 @@ describe('orkestreer --nacht', () => {
   }
 
   it('stopt bij het dagmaximum, ook al staan er meer items in de rij', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(uitvoerder);
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
@@ -887,7 +912,7 @@ describe('orkestreer --nacht', () => {
   });
 
   it('deelt dat maximum met een tweede run op dezelfde kalenderdag', () => {
-    const eerste = maakUitvoerderOpnemer(bepaler());
+    const eerste = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(eerste.uitvoerder);
     orkestreer({
       nacht: true,
@@ -897,7 +922,7 @@ describe('orkestreer --nacht', () => {
     });
     expect(claudeAanroepen(eerste.aanroepen)).toHaveLength(2);
 
-    const tweede = maakUitvoerderOpnemer(bepaler());
+    const tweede = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(tweede.uitvoerder);
     rmSync(LOCK_PAD, { force: true });
     orkestreer({
@@ -914,7 +939,7 @@ describe('orkestreer --nacht', () => {
   });
 
   it('begint na een dagovergang weer bij nul', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
     orkestreer({
       nacht: true,
       werkplaatsWortel: wortel,
@@ -922,7 +947,7 @@ describe('orkestreer --nacht', () => {
       nu: new Date('2026-08-19T04:00:00'),
     });
 
-    const morgen = maakUitvoerderOpnemer(bepaler());
+    const morgen = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(morgen.uitvoerder);
     rmSync(LOCK_PAD, { force: true });
     orkestreer({
@@ -940,7 +965,7 @@ describe('orkestreer --nacht', () => {
     const eenItem = [
       boardItem(131, 'factory', 'Klaar voor technische refinement', '2026-08-01T00:00:00Z'),
     ];
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(slinkendBord(eenItem));
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(eenItem));
     stelUitvoerderIn(uitvoerder);
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
@@ -953,7 +978,7 @@ describe('orkestreer --nacht', () => {
   });
 
   it('geeft het budget uit de instellingen mee en de token buiten de plist om', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(uitvoerder);
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
@@ -967,7 +992,7 @@ describe('orkestreer --nacht', () => {
   });
 
   it('schrijft per run een regel met issue, uitkomst, kosten en beurten', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
@@ -979,7 +1004,9 @@ describe('orkestreer --nacht', () => {
   });
 
   it('telt een run mee die niet oplevert wat hij moest opleveren', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler({ werker: werkerMislukt() })).uitvoerder);
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(nachtBord(WACHTRIJ, { werker: werkerMislukt() })).uitvoerder,
+    );
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
@@ -998,7 +1025,7 @@ describe('orkestreer --nacht', () => {
     const budgetOp: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude'
         ? { code: 1, stdout: opgenomen }
-        : bepaler({ werker: opgenomen })(aanroep, index);
+        : nachtBord(WACHTRIJ, { werker: opgenomen })(aanroep, index);
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(budgetOp);
     stelUitvoerderIn(uitvoerder);
 
@@ -1009,9 +1036,59 @@ describe('orkestreer --nacht', () => {
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt \$0\.10/);
   });
 
+  it('stopt als een item na zijn run nog in de wachtrij staat', () => {
+    // `zetKolom` faalt zacht — een board-hik of een leeg GraphQL-budget is genoeg — en
+    // dan blijft het item staan. Zonder vangnet refint de nacht hetzelfde issue tot
+    // vier keer: vier keer betalen voor één uitwerking.
+    const basis = nachtBord(WACHTRIJ);
+    const bordBlijftStaan: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { stdout: werkerKlaar() } // geen verzet: het item blijft in de wachtrij staan
+        : basis(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bordBlijftStaan);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    expect(claudeAanroepen(aanroepen)).toHaveLength(1);
+    expect(uitvoer.join('')).toMatch(/#51 staat na de run nog in de wachtrij/);
+  });
+
+  it('logt ook een run die de CLI omvertrekt', () => {
+    // `claude` is niet te starten: `run` gooit. Zonder deze regel staat de dagteller op
+    // 1 en het log op niets — de stilte die je 's ochtends niet kunt lezen.
+    const basis = nachtBord(WACHTRIJ);
+    const geenClaude: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
+        : basis(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(geenClaude).uitvoerder);
+
+    expect(() => {
+      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    }).toThrow(/claude/);
+
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant afgebroken/);
+    expect(leesStaat(paden, NU).gestart).toBe(1);
+  });
+
+  it('geeft elke runregel zijn eigen tijdstempel', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Twee regels met hetzelfde tijdstempel zeggen niets over hoe lang een run duurde.
+    const stempels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .map((regel) => regel.split(' ')[0]);
+    expect(stempels).toHaveLength(2);
+    expect(stempels[0]).not.toBe(NU.toISOString());
+  });
+
   it('weigert onbemand te draaien zonder token, met het recept erbij', () => {
     writeFileSync(paden.envPad, 'FACTORY_DAGMAXIMUM=2\n', { mode: 0o600 });
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(uitvoerder);
 
     expect(() => {
@@ -1023,7 +1100,7 @@ describe('orkestreer --nacht', () => {
   });
 
   it('weigert --nacht samen met --dry', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
 
     expect(() => {
       orkestreer({ nacht: true, dry: true, werkplaatsWortel: wortel, paden, nu: NU });

@@ -94,8 +94,14 @@ export declare function leesStaat(paden: OrkestratorPaden, nu: Date): Orkestrato
  * aanmoediging om te blijven proberen.
  */
 export declare function boekRun(paden: OrkestratorPaden, nu: Date): number;
-/** Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte. */
-export declare function logRun(paden: OrkestratorPaden, nu: Date, regel: {
+/**
+ * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
+ *
+ * `moment` is het moment van schrijven en niet het begin van de nacht: vier regels met
+ * hetzelfde tijdstempel zeggen niets over hoe lang een run duurde, en juist dat wil je
+ * 's ochtends kunnen zien.
+ */
+export declare function logRun(paden: OrkestratorPaden, moment: Date, regel: {
     readonly issue: number;
     readonly app: string;
     readonly uitkomst: string;

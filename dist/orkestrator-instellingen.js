@@ -181,11 +181,17 @@ export function boekRun(paden, nu) {
     writeFileSync(paden.staatPad, `${JSON.stringify({ dag: kalenderdag(nu), gestart, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`);
     return gestart;
 }
-/** Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte. */
-export function logRun(paden, nu, regel) {
+/**
+ * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
+ *
+ * `moment` is het moment van schrijven en niet het begin van de nacht: vier regels met
+ * hetzelfde tijdstempel zeggen niets over hoe lang een run duurde, en juist dat wil je
+ * 's ochtends kunnen zien.
+ */
+export function logRun(paden, moment, regel) {
     const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
     const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
-    schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
 }
 /**
  * Voegt een regel toe aan het runlog.

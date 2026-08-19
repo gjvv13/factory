@@ -253,10 +253,16 @@ export function boekRun(paden: OrkestratorPaden, nu: Date): number {
   return gestart;
 }
 
-/** Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte. */
+/**
+ * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
+ *
+ * `moment` is het moment van schrijven en niet het begin van de nacht: vier regels met
+ * hetzelfde tijdstempel zeggen niets over hoe lang een run duurde, en juist dat wil je
+ * 's ochtends kunnen zien.
+ */
 export function logRun(
   paden: OrkestratorPaden,
-  nu: Date,
+  moment: Date,
   regel: {
     readonly issue: number;
     readonly app: string;
@@ -269,7 +275,7 @@ export function logRun(
   const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
   schrijfLog(
     paden,
-    `${new Date(nu.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
+    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
   );
 }
 

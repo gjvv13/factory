@@ -290,6 +290,7 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
   if (!neemLock()) {
     throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
   }
+  const gedaan = new Set<number>();
   try {
     while (gestart < instellingen.dagmaximum) {
       const eerste = bouwWachtrij(cwd)[0];
@@ -297,10 +298,36 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
         ok('wachtrij leeg; klaar voor vannacht.');
         break;
       }
+      // Vangnet tegen een lus, zoals `integreer` dat ook heeft. Een geslaagde run haalt
+      // het item normaal uit de wachtrij-kolom, maar `zetKolom` faalt zacht — een
+      // board-hik of een opgesoupeerd GraphQL-budget is genoeg. Dan zou de nacht
+      // hetzelfde issue tot vier keer refinen: vier keer betalen voor één uitwerking.
+      if (gedaan.has(eerste.issue)) {
+        waarschuwing(
+          `#${String(eerste.issue)} staat na de run nog in de wachtrij; gestopt om een lus te voorkomen.`,
+        );
+        break;
+      }
+      gedaan.add(eerste.issue);
+
       // Boeken vóór de run: een run die omvalt heeft wél geld gekost.
       gestart = boekRun(paden, nu);
-      const uitkomst = werkAf(eerste, cwd, wortel, draaiOpties);
-      logRun(paden, nu, {
+      let uitkomst: RunUitkomst;
+      try {
+        uitkomst = werkAf(eerste, cwd, wortel, draaiOpties);
+      } catch (fout) {
+        // Ook een run die de CLI omvertrekt hoort in het log. Anders staat de teller op
+        // 1 en het log op niets, en dat is precies de stilte die je 's ochtends niet
+        // kunt lezen. Daarna alsnog doorgooien: dit is een probleem van de machine, en
+        // elke volgende run loopt er net zo goed op stuk.
+        logRun(paden, new Date(Date.now()), {
+          issue: eerste.issue,
+          app: eerste.app,
+          uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+        });
+        throw fout;
+      }
+      logRun(paden, new Date(Date.now()), {
         issue: eerste.issue,
         app: eerste.app,
         uitkomst: uitkomst.afloop,
@@ -661,6 +688,8 @@ export interface AntwoordOpties {
   /** Begin een verse sessie in plaats van de bestaande te hervatten. */
   readonly opnieuw?: boolean;
   readonly werkplaatsWortel?: string;
+  /** Waar de instellingen staan; geen CLI-vlag, zie `OrkestreerOpties.paden`. */
+  readonly paden?: OrkestratorPaden;
 }
 
 /**
@@ -722,7 +751,7 @@ function werkAntwoordAf(
         };
   const uitkomst = draaiWerker({
     ...opdracht,
-    budgetUsd: leesInstellingen(standaardPaden()).budgetPerRun,
+    budgetUsd: leesInstellingen(opties.paden ?? standaardPaden()).budgetPerRun,
     model: MODEL,
   });
 

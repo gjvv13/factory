@@ -70,6 +70,8 @@ export interface AntwoordOpties {
     /** Begin een verse sessie in plaats van de bestaande te hervatten. */
     readonly opnieuw?: boolean;
     readonly werkplaatsWortel?: string;
+    /** Waar de instellingen staan; geen CLI-vlag, zie `OrkestreerOpties.paden`. */
+    readonly paden?: OrkestratorPaden;
 }
 /**
  * Beantwoordt een escalatie: het antwoord gaat terug de bestaande sessie in.
