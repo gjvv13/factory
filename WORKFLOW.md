@@ -129,6 +129,22 @@ Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
 
 `/status` geeft het overzicht via het board (per `App`-veld en per kolom).
 
+### Waar je bouwt: een werkplek per slice
+
+Stap 5 begint met `factory werkplek <issue#>`: een eigen git-worktree naast de repo
+(`../<repo>-wt/<issue#>`) op branch `slice/<issue#>-1`, vers van `origin/main`. Bouwen
+in de gedeelde werkmap gaat mis zodra er twee sessies lopen — één `.git`, één HEAD, één
+`git status`, dus wijzigingen die teruggedraaid worden en bestanden van een ander in je
+commit. Met een worktree per slice verdwijnt die hele vraag.
+
+`factory inleveren` ruimt de werkplek zelf op zodra de PR er staat; zit er nog
+ongecommit werk in, dan blijft hij staan met een melding. Terugkomen kan altijd:
+`factory werkplek <issue#>` hervat dezelfde branch.
+
+Botst je branch met de main van dat moment, dan zegt `inleveren` dat vóór de
+kwaliteitspoort draait, met de rebase-stap erbij. Je lost het conflict één keer op en
+levert opnieuw in; de poort draait dan over het samengevoegde resultaat.
+
 ### De knip tussen functioneel en technisch
 
 Stap 2 en 3 zijn bewust gescheiden: **wat er gevraagd wordt weet alleen jij; hoe het

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { GebruikersFout, git, kop, ok, uitvoerVan, waarschuwing } from '../shell.js';
+import { GebruikersFout, git, kop, ok, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
 /**
  * Een eigen werkmap per slice, zodat twee sessies elkaar niet in de weg zitten (#118).
  *
@@ -28,6 +28,23 @@ export function werkplekPad(repoWortel, issue) {
 export function repoWortelVan(cwd) {
     const gitDir = uitvoerVan('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd);
     return gitDir === undefined || gitDir === '' ? cwd : path.dirname(gitDir);
+}
+/**
+ * Het pad van de werkplek waar deze sessie in staat, of undefined in een gewone kloon.
+ *
+ * De toets is `--git-dir` ≠ `--git-common-dir`: dát is wat een aangehaakte worktree
+ * definieert. "Ligt de toplevel ergens anders dan de git-map" zou er ook uitzien als
+ * een worktree bij een kloon met een losse git-map (`--separate-git-dir`, of een repo
+ * die als submodule is opgenomen) — dan zou `inleveren` de hoofdkloon proberen op te
+ * ruimen en elke inlevering eindigen met een onterechte waarschuwing.
+ */
+export function werkplekVanSessie(cwd) {
+    const uitvoer = uitvoerVan('git', ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir', '--show-toplevel'], cwd);
+    const [gitDir, gedeeldeDir, top] = (uitvoer ?? '').split('\n');
+    if (gitDir === undefined || gedeeldeDir === undefined || top === undefined || top === '') {
+        return undefined;
+    }
+    return gitDir === gedeeldeDir ? undefined : top;
 }
 /** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */
 export function branchVan(issue) {
@@ -66,7 +83,10 @@ export function werkplek(issueArgument, opties = {}) {
     const pad = werkplekPad(repoWortelVan(repoDir), issue);
     const branch = branchVan(issue);
     if (opties.op === true) {
-        ruimOp(repoDir, pad);
+        // Vanuit de hoofdkloon opruimen, niet vanuit `repoDir`: sta je zélf in de werkplek,
+        // dan trekt git de map onder je vandaan en faalt elk volgend commando op een
+        // verdwenen cwd.
+        ruimWerkplekOp(repoWortelVan(repoDir), pad);
         return;
     }
     if (existsSync(pad)) {
@@ -81,7 +101,7 @@ export function werkplek(issueArgument, opties = {}) {
     kop(`Werkplek voor #${String(issue)}`);
     // Vers ophalen: een worktree van een verouderde main levert een branch die pas bij
     // het inleveren conflicteert, en dat is het duurste moment om erachter te komen.
-    git(['fetch', '-q', 'origin'], repoDir);
+    runMetHerhaling('git', ['fetch', '-q', 'origin'], { cwd: repoDir }, { wat: 'git fetch' });
     // `worktree remove` haalt de map weg maar laat de branch staan. Bij een tweede
     // `werkplek` op hetzelfde issue bestaat de branch dus al, en dan is `-b` een harde
     // git-fout ("a branch named … already exists"). Hervat 'm in plaats daarvan: er kan
@@ -96,11 +116,17 @@ export function werkplek(issueArgument, opties = {}) {
     }
     process.stdout.write(`${pad}\n`);
 }
-/** Haalt de werkplek weg; laat hem staan als er nog ongecommit werk in zit. */
-function ruimOp(repoDir, pad) {
+/**
+ * Haalt de werkplek weg; laat hem staan als er nog ongecommit werk in zit. Levert op
+ * of de map echt verdwenen is, zodat de aanroeper niets belooft wat niet gebeurd is.
+ *
+ * `repoDir` moet een map zijn die blijft bestaan — de hoofdkloon dus, niet de werkplek
+ * zelf. Ook `inleveren` gebruikt dit, om de map op te ruimen waarin het net draaide.
+ */
+export function ruimWerkplekOp(repoDir, pad) {
     if (!existsSync(pad)) {
         ok(`werkplek ${pad} bestaat niet (meer)`);
-        return;
+        return false;
     }
     // Zonder --force weigert git bij vuil werk, en dat is precies wat we willen: liever
     // een map te veel dan werk kwijt.
@@ -115,8 +141,9 @@ function ruimOp(repoDir, pad) {
         const reden = uitkomst.stderr.trim();
         waarschuwing(`werkplek ${pad} blijft staan${reden === '' ? '' : ` — ${reden}`}\n` +
             `  Ruim hem zelf op met: git worktree remove --force ${pad}`);
-        return;
+        return false;
     }
     ok(`werkplek ${pad} opgeruimd`);
+    return true;
 }
 //# sourceMappingURL=werkplek.js.map
