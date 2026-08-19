@@ -45,3 +45,42 @@ export declare function ouderVan(issue: number, cwd?: string): number | undefine
 export declare function alleKinderenDicht(ouder: number, cwd?: string): boolean;
 /** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
 export declare function sluitIssue(issue: number, cwd?: string): void;
+/** Eén item op het board, met alles wat een werker nodig heeft om te beginnen. */
+export interface BacklogItem {
+    readonly issue: number;
+    readonly titel: string;
+    /** Het `App`-veld; undefined als het niet gezet is (dan weet de werker niet waar hij moet kijken). */
+    readonly app?: string;
+    readonly kolom: string;
+    readonly aangemaakt: string;
+}
+/**
+ * Alle open items in één kolom, oudste eerst.
+ *
+ * Dit is de dure kant van het board, en daarom **één document per pagina** in plaats
+ * van `gh project item-list`: gemeten op 2026-08-19 kost deze query 2 punten en die
+ * andere 102. Voor een onbemande batch is dat het verschil tussen "past ruim" en "het
+ * account ligt een uur plat" — zie #104.
+ *
+ * De pagina's worden echt doorgelopen. Het board had op 2026-08-19 al meer dan 100
+ * items, dus stoppen bij de eerste pagina zou stilletjes items overslaan, en een
+ * wachtrij die iets weglaat ziet er precies uit als een lege wachtrij.
+ *
+ * Levert undefined als het board niet gelezen kon worden — dat is iets anders dan
+ * "er staat niets in", en de aanroeper hoort dat verschil te merken.
+ */
+export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;
+/** Het label waaraan een geëscaleerd item te herkennen is. */
+export declare const ESCALATIE_LABEL = "escalatie";
+/**
+ * De open backlog-issues met het escalatie-label.
+ *
+ * Via REST, niet via het board: labels lezen kan prima met `gh api repos/...`, en dat
+ * telt tegen de aparte REST-pot die vrijwel ongebruikt blijft. De GraphQL-punten
+ * bewaren we voor Projects v2, dat geen alternatief heeft.
+ */
+export declare function escalaties(cwd?: string): Set<number>;
+/** Zet een label op een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
+export declare function zetLabel(issue: number, label: string, cwd?: string): void;
+/** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
+export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean;

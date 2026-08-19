@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "error_max_budget_usd",
+  "is_error": true,
+  "session_id": "fee9be62-4851-4e29-b206-e60ee801d94e",
+  "num_turns": 1,
+  "total_cost_usd": 0.102583,
+  "permission_denials": [],
+  "terminal_reason": "budget_exhausted"
+}
