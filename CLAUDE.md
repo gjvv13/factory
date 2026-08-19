@@ -204,8 +204,11 @@ uitrol niet aankwam en de oude versie nog draait; daarom toetst `promote` na de 
 of de gemelde `version` de beoogde tag is, en faalt het luid (met proces-rollback) bij
 een afwijking — een deploy is pas groen als de juiste versie echt draait. En omdat een
 gefaalde `deploy.yml`-job anders alleen een rood vinkje in de Actions-tab achterlaat,
-meldt een `if: failure()`-stap dat aan de assistent (die naar Matrix relayt). Die stap
-draait ook als een eerdere stap omviel (bijv. de action-download) en is een no-op met
+meldt een `if: failure()`-stap dat aan de assistent (die naar Matrix relayt). De melding
+draagt app, run-id, de **draaiende** versie (uit `/health` op de omgevingspoort) en de
+**beoogde** tag (uit `package.json`) — precies het gat waar "ok" op de oude versie stil
+bleef. Die stap draait ook als een eerdere stap omviel (bijv. de action-download); dan
+blijven versie/tag "onbekend" i.p.v. dat de meldstap zelf omvalt. Hij is een no-op met
 waarschuwing zolang `DEPLOY_NOTIFY_URL` niet is gezet.
 
 **Rooktest en terugweg (#121).** `/health` "ok" bewijst niet dat de kern werkt. Zet
