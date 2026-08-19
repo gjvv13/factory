@@ -53,6 +53,35 @@ const gelukkig: UitkomstBepaler = ({ commando, argumenten }) => {
   return {};
 };
 
+/** Antwoord van de board-opzoeking: het item staat op Bouwen, doel is Uitrollen. */
+const BOARD_ANTWOORD = JSON.stringify({
+  data: {
+    user: {
+      projectV2: {
+        id: 'PVT_test',
+        field: { id: 'PVTSSF_test', options: [{ id: 'optie-uitrollen', name: 'Uitrollen' }] },
+      },
+    },
+    repository: {
+      issue: {
+        projectItems: {
+          nodes: [
+            { id: 'PVTI_test', project: { number: 2 }, fieldValueByName: { name: 'Bouwen' } },
+          ],
+        },
+      },
+    },
+  },
+});
+
+/** De gelukkige weg, met een board dat antwoordt. */
+const gelukkigMetBoard: UitkomstBepaler = (aanroep, index) => {
+  if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'api') {
+    return { stdout: BOARD_ANTWOORD };
+  }
+  return gelukkig(aanroep, index);
+};
+
 function argsVan(aanroepen: ProcesAanroep[], commando: string): string[][] {
   return aanroepen.filter((a) => a.commando === commando).map((a) => a.argumenten);
 }
@@ -244,5 +273,63 @@ describe('inleveren', () => {
     const uitvoer = regels.join('');
     expect(uitvoer).not.toContain('geen integreer-agent');
     expect(uitvoer).toContain('integreert slice/58-1 serieel naar main');
+  });
+
+  it('zet het backlog-item op Uitrollen en meldt de PR erbij', () => {
+    process.chdir(maakRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkigMetBoard);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    // BRANCH is slice/58-1, dus issue 58 verschuift mee.
+    expect(argsVan(aanroepen, 'gh')).toContainEqual([
+      'project',
+      'item-edit',
+      '--id',
+      'PVTI_test',
+      '--project-id',
+      'PVT_test',
+      '--field-id',
+      'PVTSSF_test',
+      '--single-select-option-id',
+      'optie-uitrollen',
+    ]);
+    const comment = argsVan(aanroepen, 'gh').find((a) => a[0] === 'issue' && a[1] === 'comment');
+    expect(comment?.slice(0, 5)).toEqual(['issue', 'comment', '58', '--repo', 'gjvv13/factory']);
+    expect(comment?.[6]).toContain(PR_URL);
+  });
+
+  it('raakt het board niet aan vanaf een branch zonder slice-vorm', () => {
+    process.chdir(maakRepo());
+    const bepaal: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'git' && aanroep.argumenten[0] === 'rev-parse'
+        ? { stdout: 'fix/losse-hotfix' }
+        : gelukkigMetBoard(aanroep, index);
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    // Geen opzoeking, geen verplaatsing, geen comment — en ook geen fout.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[0] === 'api' || a[0] === 'project')).toBe(false);
+    expect(argsVan(aanroepen, 'gh').some((a) => a[0] === 'issue')).toBe(false);
+  });
+
+  it('levert gewoon in als het board niet bijgewerkt kan worden', () => {
+    process.chdir(maakRepo());
+    const regels = vangStdout();
+    const bepaal: UitkomstBepaler = (aanroep, index) => {
+      if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'api') return { code: 1 };
+      return gelukkig(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    // Geen throw: de PR is het product, de administratie is bijvangst.
+    inleveren();
+
+    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+    expect(regels.join('')).toContain('kon #58 niet op het board');
   });
 });

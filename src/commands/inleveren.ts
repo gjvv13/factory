@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
+import { issueUitBranch, plaatsComment, zetKolom } from '../board.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
@@ -102,6 +103,15 @@ export function inleveren(opties: InleverenOpties = {}): void {
     );
   if (prUrl === undefined || prUrl === '') {
     throw new GebruikersFout('Kon geen PR aanmaken of vinden met gh.');
+  }
+
+  // Het item schuift zelf mee (#128). Vanaf hier is de slice ingeleverd en dus onderweg
+  // naar acc en prod; dat is precies wat de kolom Uitrollen betekent. Een branch zonder
+  // slice-vorm hoort bij geen enkel backlog-item en verschuift daarom niets.
+  const issue = issueUitBranch(branch);
+  if (issue !== undefined && zetKolom(issue, 'Uitrollen', repoDir)) {
+    plaatsComment(issue, `Ingeleverd via \`factory inleveren\`: ${prUrl}`, repoDir);
+    ok(`#${String(issue)} staat op Uitrollen`);
   }
 
   if (lokaal) {
