@@ -51,6 +51,16 @@ export declare function run(commando: string, argumenten: string[], options?: Ru
  * Bewust strak op de bekende strings, zodat een échte fout (auth, non-fast-forward,
  * merge-conflict) níet als vergeeflijk telt en meteen naar boven komt.
  */
+/**
+ * Zet een uitvoer-variabele klaar voor de omliggende GitHub-workflow; buiten een
+ * workflow doet dit niets.
+ *
+ * Waarom de CLI dit zelf schrijft en de workflow het niet uit de uitvoer vist (zoals
+ * `heeft-migratie` doet): dit gaat niet om één waarde maar om een gegeven dat midden in
+ * een log met menselijke regels ontstaat. Dat er met `tail` uit halen is fragiel — de
+ * schrijver weet het gewoon.
+ */
+export declare function schrijfWorkflowUitvoer(naam: string, waarde: string): void;
 export declare function isDnsBlip(tekst: string): boolean;
 /** Een pauze in milliseconden. Injecteerbaar zodat tests niet echt wachten. */
 export type Wacht = (ms: number) => void;
