@@ -1,15 +1,29 @@
 import { type BacklogItem } from '../board.js';
+import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
 import { type WerkerUitkomst } from '../werker.js';
 export interface OrkestreerOpties {
     /** Toont de wachtrij en wat er zou gebeuren, en schrijft niets. */
     readonly dry?: boolean;
     /** Werkt één item af en stopt. */
     readonly eenmalig?: boolean;
+    /** Werkt de wachtrij af tot het dagmaximum of tot hij leeg is — de onbemande modus. */
+    readonly nacht?: boolean;
+    /** Zet de LaunchAgent op die `--nacht` één keer per nacht draait. */
+    readonly installeer?: boolean;
+    /** Haalt die LaunchAgent weg. */
+    readonly verwijder?: boolean;
     /**
      * De wortel van de werkplaatsen. Geen CLI-vlag: dit staat er zodat een test met een
      * tijdelijke map kan werken in plaats van in de home-map te schrijven.
      */
     readonly werkplaatsWortel?: string;
+    /**
+     * Waar de instellingen, de dagteller en het log staan. Ook geen CLI-vlag, en om
+     * dezelfde reden: een test hoort niet in de echte home-map te schrijven.
+     */
+    readonly paden?: OrkestratorPaden;
+    /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
+    readonly nu?: Date;
 }
 /** Een item uit de wachtrij dat een werker aankan: het `App`-veld moet gezet zijn. */
 interface Opdrachtitem extends BacklogItem {
@@ -65,4 +79,29 @@ export interface AntwoordOpties {
  * cache. Het werk tot de escalatie blijft dus staan; de werker begint niet opnieuw.
  */
 export declare function orkestreerAntwoord(issueArgument: string | undefined, tekst: string | undefined, opties?: AntwoordOpties, cwd?: string): void;
+export interface OrkestreerPlistOpzet {
+    /** Absoluut pad naar de globaal geïnstalleerde factory-bin (buiten ~/Documents). */
+    readonly bin: string;
+    /** TCC-vrije werkmap; in productie de home-map. */
+    readonly werkmap: string;
+    /** TCC-vrij logpad, hetzelfde bestand waar de runregels in gaan. */
+    readonly logPad: string;
+}
+/**
+ * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
+ *
+ * Drie keuzes die een lezer zou willen aanvechten:
+ *
+ * **`StartCalendarInterval` en niet `StartInterval`.** De integreer-agent tikt elke
+ * minuut een wachtrij af; die kost niets. Deze start werkers die geld kosten, dus hij
+ * hoort op een moment te draaien en niet op een frequentie.
+ *
+ * **Geen `RunAtLoad`.** Anders begint `--installeer` meteen aan een nacht werk, en dan
+ * is het installeren van de automatiek zelf de verrassing die de hele opzet wil
+ * vermijden. De eerste run is vannacht.
+ *
+ * **Geen token in de plist.** Een plist in `~/Library/LaunchAgents` is gewoon
+ * leesbaar; de token staat in een 0600-bestand dat de run zelf leest.
+ */
+export declare function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string;
 export {};
