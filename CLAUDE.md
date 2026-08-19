@@ -224,6 +224,24 @@ fixen). Zonder een `rooktest`-blok is de stap een no-op, zodat de workflow 'm al
 aanroepen. De read-only garantie ligt bij jou: kies een leesactie, geen bestelling en
 geen regel in iemands lijst.
 
+### Het bord bijwerken vanuit een uitrol
+
+`factory inleveren` en `factory promote prod` verplaatsen het backlog-item zelf op het
+board (#128): naar **Uitrollen** bij het inleveren, naar **Done** zodra prod de tag
+draait. Welke items dat zijn komt uit de branchnaam (`slice/<issue>-<n>`) en uit de
+merge-commits in het tagbereik — er wordt niets apart bijgehouden.
+
+Lokaal werkt dat met je eigen `gh`-auth. **In een workflow niet**, en dat is geen bug
+van ons: het ingebouwde `GITHUB_TOKEN` is gebonden aan het repo waarin de workflow
+draait, terwijl het board onder een persoonlijk account hangt en de backlog in een
+ánder repo staat. Zet daarom eenmalig een PAT als repo-secret `PROJECT_TOKEN`, met
+scope `project` plus lees/schrijf op de backlog-repo. Ontbreekt het secret, dan
+waarschuwt de stap en blijft de deploy groen — het bord loopt dan achter, de uitrol
+niet.
+
+Een bordfout houdt nooit een uitrol tegen: de pijplijn levert software af, de
+administratie is bijvangst.
+
 ## Seriële integratie op de apps
 
 `factory inleveren` integreert een branch. Op de publieke factory-repo gebruikt het de

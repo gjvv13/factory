@@ -173,7 +173,14 @@ jobs:
       # deploy prod promoveert de bestaande (nieuwste) tag naar prod; geen nieuwe
       # release. Komt prod niet gezond op (of meldt /health een andere versie dan de
       # tag), dan faalt promote luid en geldt de proces-rollback.
+      #
+      # PROJECT_TOKEN boekt de backlog-items van deze tag af op het board (#128). Het
+      # ingebouwde GITHUB_TOKEN kan dat niet: het is repo-gebonden, terwijl het board
+      # onder een persoonlijk account hangt en de backlog in een ánder repo staat.
+      # Zonder dit secret waarschuwt de stap en blijft de deploy groen.
       - run: pnpm exec factory deploy prod
+        env:
+          PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
       # Rooktest prod: bewijst dat de kern echt antwoordt na de uitrol (#121). Faalt hij,
       # dan wordt de prod-job rood (+ melding hieronder); terugrollen is bewust handmatig
       # (`factory terugrol prod`), niet automatisch. No-op zonder rooktest in factory.json.

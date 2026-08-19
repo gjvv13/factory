@@ -5,6 +5,8 @@ export interface ProcesAanroep {
   readonly commando: string;
   readonly argumenten: string[];
   readonly cwd?: string;
+  /** De meegegeven omgeving, als het commando er een kreeg (bijv. een PAT voor gh). */
+  readonly env?: NodeJS.ProcessEnv;
 }
 
 export interface Opnemer {
@@ -32,6 +34,7 @@ export function maakUitvoerderOpnemer(bepaal?: UitkomstBepaler): Opnemer {
       commando,
       argumenten,
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.env === undefined ? {} : { env: options.env }),
     };
     aanroepen.push(aanroep);
     return { code: 0, stdout: '', ...(bepaal?.(aanroep, aanroepen.length - 1) ?? {}) };

@@ -12,6 +12,22 @@ import { run, uitvoerVan, waarschuwing } from './shell.js';
  * één document — er 1 kost. Een uitrol mag de rest van de dag niet opeten.
  */
 
+/** Als `uitvoerVan`, maar met een eigen omgeving — nodig voor de PAT in een workflow. */
+function uitvoerMetEnv(
+  commando: string,
+  argumenten: string[],
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+): string | undefined {
+  const uitkomst = run(commando, argumenten, {
+    ...(cwd === undefined ? {} : { cwd }),
+    ...(env === undefined ? {} : { env }),
+    capture: true,
+    toleranter: true,
+  });
+  return uitkomst.code === 0 ? uitkomst.stdout.trim() : undefined;
+}
+
 const EIGENAAR = 'gjvv13';
 const BACKLOG_REPO = 'factory';
 const PROJECT_NUMMER = 2;
@@ -42,6 +58,27 @@ export function issueUitBranch(branch: string): number | undefined {
   }
   const nummer = Number.parseInt(match[1], 10);
   return Number.isSafeInteger(nummer) && nummer > 0 ? nummer : undefined;
+}
+
+/**
+ * De omgeving waarin `gh` het board mag aanraken, of undefined als dat niet kan.
+ *
+ * Lokaal is dat de gewone `gh`-auth van de gebruiker. In een workflow niet: het
+ * ingebouwde `GITHUB_TOKEN` is repo-gebonden en komt niet bij een board dat onder een
+ * persoonlijk account hangt — en de backlog staat bovendien in een ánder repo dan de
+ * app die uitrolt. Daarvoor is een PAT nodig (`PROJECT_TOKEN`, scope `project` plus
+ * lees/schrijf op de backlog-repo).
+ */
+function ghOmgeving(): { readonly kan: boolean; readonly env?: NodeJS.ProcessEnv } {
+  const pat = process.env['PROJECT_TOKEN'];
+  if (pat !== undefined && pat !== '') {
+    // gh leest GH_TOKEN; de PAT overschrijft het workflow-token voor deze aanroep.
+    return { kan: true, env: { ...process.env, GH_TOKEN: pat } };
+  }
+  if (process.env['GITHUB_ACTIONS'] === 'true') {
+    return { kan: false };
+  }
+  return { kan: true };
 }
 
 interface Doelwit {
@@ -87,8 +124,13 @@ interface OpzoekAntwoord {
 }
 
 /** Zoekt in één aanroep alles op wat nodig is om de kolom te kunnen zetten. */
-function zoekDoelwit(issue: number, kolom: Kolom, cwd?: string): Doelwit | undefined {
-  const ruw = uitvoerVan(
+function zoekDoelwit(
+  issue: number,
+  kolom: Kolom,
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+): Doelwit | undefined {
+  const ruw = uitvoerMetEnv(
     'gh',
     [
       'api',
@@ -105,6 +147,7 @@ function zoekDoelwit(issue: number, kolom: Kolom, cwd?: string): Doelwit | undef
       `nummer=${String(issue)}`,
     ],
     cwd,
+    env,
   );
   if (ruw === undefined || ruw === '') {
     return undefined;
@@ -143,7 +186,14 @@ function zoekDoelwit(issue: number, kolom: Kolom, cwd?: string): Doelwit | undef
  * waarschuwing en gaat door — anders valt een uitrol om op boekhouding.
  */
 export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
-  const doelwit = zoekDoelwit(issue, kolom, cwd);
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    waarschuwing(
+      `geen PROJECT_TOKEN in deze workflow — #${String(issue)} niet naar '${kolom}' gezet.`,
+    );
+    return false;
+  }
+  const doelwit = zoekDoelwit(issue, kolom, cwd, omgeving.env);
   if (doelwit === undefined) {
     waarschuwing(`kon #${String(issue)} niet op het board vinden — kolom niet gezet.`);
     return false;
@@ -165,7 +215,12 @@ export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
       '--single-select-option-id',
       doelwit.optieId,
     ],
-    { ...(cwd === undefined ? {} : { cwd }), capture: true, toleranter: true },
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
   );
   if (uitkomst.code !== 0) {
     waarschuwing(`kon #${String(issue)} niet naar '${kolom}' verplaatsen op het board.`);
@@ -179,10 +234,19 @@ export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
  * dus een fout is een waarschuwing.
  */
 export function plaatsComment(issue: number, tekst: string, cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
   const uitkomst = run(
     'gh',
     ['issue', 'comment', String(issue), '--repo', `${EIGENAAR}/${BACKLOG_REPO}`, '--body', tekst],
-    { ...(cwd === undefined ? {} : { cwd }), capture: true, toleranter: true },
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
   );
   if (uitkomst.code !== 0) {
     waarschuwing(`kon geen comment op #${String(issue)} plaatsen.`);
