@@ -280,3 +280,72 @@ export function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): n
   }
   return [...gevonden].sort((a, b) => a - b);
 }
+
+/** Leest één veld van een backlog-issue via REST; undefined als het er niet is. */
+function issueVeld(issue: number, jq: string, cwd?: string): string | undefined {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return undefined;
+  }
+  const ruw = uitvoerMetEnv(
+    'gh',
+    ['api', `repos/${EIGENAAR}/${BACKLOG_REPO}/issues/${String(issue)}`, '--jq', jq],
+    cwd,
+    omgeving.env,
+  );
+  return ruw === undefined || ruw === '' || ruw === 'null' ? undefined : ruw;
+}
+
+/**
+ * Het issuenummer van de ouder-epic, of undefined als dit issue er geen heeft.
+ *
+ * REST geeft `parent_issue_url` (een API-url die op het nummer eindigt). Dat is
+ * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
+ */
+export function ouderVan(issue: number, cwd?: string): number | undefined {
+  const url = issueVeld(issue, '.parent_issue_url', cwd);
+  if (url === undefined) {
+    return undefined;
+  }
+  const match = /\/(\d+)$/.exec(url.trim());
+  if (match?.[1] === undefined) {
+    return undefined;
+  }
+  const nummer = Number.parseInt(match[1], 10);
+  return Number.isSafeInteger(nummer) && nummer > 0 ? nummer : undefined;
+}
+
+/**
+ * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
+ * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.
+ * False bij een issue zonder kinderen: dan valt er niets af te ronden.
+ */
+export function alleKinderenDicht(ouder: number, cwd?: string): boolean {
+  const ruw = issueVeld(ouder, '.sub_issues_summary | "\\(.completed)/\\(.total)"', cwd);
+  if (ruw === undefined) {
+    return false;
+  }
+  const [gedaan, totaal] = ruw.trim().split('/').map(Number);
+  return totaal !== undefined && totaal > 0 && gedaan === totaal;
+}
+
+/** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
+export function sluitIssue(issue: number, cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  const uitkomst = run(
+    'gh',
+    ['issue', 'close', String(issue), '--repo', `${EIGENAAR}/${BACKLOG_REPO}`],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon #${String(issue)} niet sluiten.`);
+  }
+}

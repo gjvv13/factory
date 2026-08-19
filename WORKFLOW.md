@@ -116,16 +116,16 @@ Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
 
 ## De pijplijn
 
-| Stap           | Commando                 | Waar             | Wat er met het issue gebeurt                                          |
-| -------------- | ------------------------ | ---------------- | --------------------------------------------------------------------- |
-| 1. Idee        | `/idee <beschrijving>`   | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**  |
-| 2. Functioneel | `/functioneel <issue#>`  | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**   |
-| 3. Technisch   | `/refine <issue#>`       | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan |
-| 4. Akkoord     | kolom omzetten           | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij            |
-| 5. Bouwen      | `/bouw <issue#> <slice>` | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue          |
-| 6. Testen      | `pnpm verify`            | in de applicatie | —                                                                     |
-| 7. Releasen    | `pnpm release`           | in de applicatie | → kolom **Uitrollen**                                                 |
-| 8. Promoveren  | `pnpm promote`           | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                        |
+| Stap           | Commando                | Waar             | Wat er met het issue gebeurt                                          |
+| -------------- | ----------------------- | ---------------- | --------------------------------------------------------------------- |
+| 1. Idee        | `/idee <beschrijving>`  | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**  |
+| 2. Functioneel | `/functioneel <issue#>` | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**   |
+| 3. Technisch   | `/refine <issue#>`      | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan |
+| 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij            |
+| 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue          |
+| 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                     |
+| 7. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen**                                                 |
+| 8. Promoveren  | `pnpm promote`          | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                        |
 
 `/status` geeft het overzicht via het board (per `App`-veld en per kolom).
 

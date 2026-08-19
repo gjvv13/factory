@@ -13,7 +13,9 @@ Geef een overzicht van de factory en alles wat eruit gebouwd is. Doe dit:
    gebruiker wacht — **Functioneel uitwerken** (een gesprek) en wat al een tijd in
    **Technisch refinen** staat (een goedkeuring) — wat in **Klaar voor Bouwen** staat
    (dat kan opgepakt worden) en wat het label `escalatie` draagt (dat wacht op een
-   antwoord).
+   antwoord). Een epic heeft zelf geen kolom: toon zijn voortgang met
+   `gh api repos/gjvv13/factory/issues/<nummer> --jq .sub_issues_summary` (bijv.
+   "#97 1/3"), en zijn slices als losse regels in hun eigen kolom.
 2. In deze repo: `git status --short`, `git log --oneline -5` en
    `git tag --sort=-v:refname | head -3` — de staat van de factory zelf.
 3. Voor elke applicatie naast deze repo (mappen met een `factory.json`): dezelfde

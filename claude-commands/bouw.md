@@ -2,7 +2,7 @@
 description: Bouw één slice uit een gerefined backlog-item (GitHub Issue)
 ---
 
-Bouw deze slice: $ARGUMENTS (formaat: `<issuenummer> <slicenummer>`)
+Bouw dit item: $ARGUMENTS (formaat: `<issuenummer>`)
 
 Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het hier op
 met `factory sync`.
@@ -11,9 +11,10 @@ De backlog is één set GitHub Issues in `gjvv13/factory`; zie `WORKFLOW.md` daa
 
 Doe dit zo:
 
-1. Lees het gerefinede item: `gh issue view <issuenummer> -R gjvv13/factory`. Pak
-   alleen de genoemde slice. Bouw niets uit een andere slice, ook niet "omdat het
-   er toch bijna is".
+1. Lees het item: `gh issue view <issuenummer> -R gjvv13/factory`. Bij een epic met
+   meer slices is elke slice een eigen sub-issue (#127) — bouw je dus altijd op het
+   **kind**, en het nummer dat je meekrijgt is dat van het kind. Bouw niets uit een
+   ander issue, ook niet "omdat het er toch bijna is".
 2. **Controleer eerst of er niet al aan deze slice gewerkt wordt** — er lopen soms
    parallelle sessies, en die mogen elkaars werk niet overschrijven:
    - **Is het issue nog te bouwen?** `gh issue view <issuenummer> -R gjvv13/factory
@@ -35,7 +36,7 @@ Doe dit zo:
 
 3. De `coding-guidelines`-skill laadt hier vanzelf; houd je aan de lagen en de
    afhankelijkheidsrichting die hij beschrijft.
-4. Maak een branch: `git switch -c slice/<issuenummer>-<nummer>` (of
+4. Maak een branch: `git switch -c slice/<issuenummer>-1` (of
    `git checkout -b …`).
 5. Bouw de slice. Zet nieuw gedrag achter de feature flag uit de refinement, en
    voeg die flag toe aan `app/test/fixtures/feature-flags.json` (uit voor productie,

@@ -2,7 +2,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { issuesUitBereik, issueUitBranch, plaatsComment, zetKolom } from '../src/board.js';
+import {
+  alleKinderenDicht,
+  issuesUitBereik,
+  issueUitBranch,
+  ouderVan,
+  plaatsComment,
+  sluitIssue,
+  zetKolom,
+} from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
@@ -302,5 +310,71 @@ describe('token in een workflow', () => {
     expect(zetKolom(128, 'Uitrollen')).toBe(true);
     // Geen eigen omgeving: gh gebruikt de auth van de gebruiker zelf.
     expect(aanroepen[0]?.env).toBeUndefined();
+  });
+});
+
+describe('ouder en kind', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('leest het oudernummer uit parent_issue_url', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(() => ({
+      stdout: 'https://api.github.com/repos/gjvv13/factory/issues/26',
+    }));
+    stelUitvoerderIn(uitvoerder);
+
+    expect(ouderVan(147)).toBe(26);
+    // REST, niet GraphQL: die pot is nodig voor het board zelf (#104).
+    expect(aanroepen[0]?.argumenten.slice(0, 2)).toEqual([
+      'api',
+      'repos/gjvv13/factory/issues/147',
+    ]);
+  });
+
+  it('geeft niets terug voor een issue zonder ouder', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: 'null' })).uitvoerder);
+
+    expect(ouderVan(97)).toBeUndefined();
+  });
+
+  it('herkent een epic waarvan alle slices dicht zijn', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(() => ({ stdout: '3/3' }));
+    stelUitvoerderIn(uitvoerder);
+
+    expect(alleKinderenDicht(97)).toBe(true);
+    // De jq-interpolatie moet écht bij jq aankomen: in een JS-string wordt `\(` stil
+    // tot `(`, en dan geeft gh de letterlijke tekst "(.completed)/(.total)" terug.
+    expect(aanroepen[0]?.argumenten.at(-1)).toContain('\\(.completed)');
+  });
+
+  it('herkent een epic dat nog een open slice heeft', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '1/3' })).uitvoerder);
+
+    expect(alleKinderenDicht(26)).toBe(false);
+  });
+
+  it('rondt een issue zonder kinderen nooit af', () => {
+    // 0/0 is geen "alles af": er valt niets af te ronden.
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '0/0' })).uitvoerder);
+
+    expect(alleKinderenDicht(91)).toBe(false);
+  });
+
+  it('sluit een issue in het backlog-repo', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    sluitIssue(147);
+
+    expect(aanroepen[0]?.argumenten).toEqual(['issue', 'close', '147', '--repo', 'gjvv13/factory']);
   });
 });

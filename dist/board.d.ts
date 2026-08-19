@@ -30,3 +30,18 @@ export declare function plaatsComment(issue: number, tekst: string, cwd?: string
  * v1.15.1 waren er vijf een fix- of docs-branch.
  */
 export declare function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[];
+/**
+ * Het issuenummer van de ouder-epic, of undefined als dit issue er geen heeft.
+ *
+ * REST geeft `parent_issue_url` (een API-url die op het nummer eindigt). Dat is
+ * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
+ */
+export declare function ouderVan(issue: number, cwd?: string): number | undefined;
+/**
+ * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
+ * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.
+ * False bij een issue zonder kinderen: dan valt er niets af te ronden.
+ */
+export declare function alleKinderenDicht(ouder: number, cwd?: string): boolean;
+/** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
+export declare function sluitIssue(issue: number, cwd?: string): void;
