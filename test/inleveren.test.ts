@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -341,5 +341,148 @@ describe('inleveren', () => {
 
     expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
     expect(regels.join('')).toContain('kon #58 niet op het board');
+  });
+
+  describe('conflict met main', () => {
+    /** Zoals git het meldt: tree-oid, botsende bestanden, lege regel, dan de meldingen. */
+    const CONFLICT_UITVOER = ['92d6da3', 'src/cli.ts', 'README.md', '', 'CONFLICT (content)'].join(
+      '\n',
+    );
+
+    /** Laat `merge-tree` een conflict melden; de rest blijft de gelukkige weg. */
+    const botst: UitkomstBepaler = (aanroep, index) =>
+      aanroep.argumenten[0] === 'merge-tree'
+        ? { code: 1, stdout: CONFLICT_UITVOER }
+        : gelukkig(aanroep, index);
+
+    it('toont de rebase-stap en draait de poort niet', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(botst);
+      stelUitvoerderIn(uitvoerder);
+
+      // Eén regel die zegt wat je moet doen, in plaats van een halfuur poort draaien
+      // en dan pas in de merge-queue horen dat het niet past.
+      expect(() => {
+        inleveren();
+      }).toThrow(/git rebase origin\/main/);
+
+      expect(verify).not.toHaveBeenCalled();
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(false);
+    });
+
+    it('noemt de bestanden die botsen', () => {
+      process.chdir(maakRepo());
+      stelUitvoerderIn(maakUitvoerderOpnemer(botst).uitvoerder);
+
+      // De regels ná de tree-oid tot de lege regel zijn de bestanden; zonder die knip
+      // zou de melding de oid en de CONFLICT-tekst als "bestand" opsommen.
+      expect(() => {
+        inleveren();
+      }).toThrow(/src\/cli\.ts, README\.md/);
+    });
+
+    it('blokkeert niet als merge-tree zelf faalt', () => {
+      process.chdir(maakRepo());
+      // Exitcode 1 betekent óók "kon die refs niet mergen" (geen origin/main bijv.).
+      // Dan is stdout leeg, en dat is het enige verschil met een echt conflict.
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.argumenten[0] === 'merge-tree' ? { code: 1, stdout: '' } : gelukkig(aanroep, index);
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      inleveren();
+
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('de werkplek opruimen', () => {
+    /** Een echte hoofdkloon met een echte werkplek ernaast; ruimOp doet existsSync. */
+    function maakWerkplek(): { wortel: string; werkplek: string } {
+      const werkruimte = mkdtempSync(path.join(os.tmpdir(), 'factory-wt-'));
+      const wortel = path.join(werkruimte, 'proefrepo');
+      const werkplek = path.join(werkruimte, 'proefrepo-wt', '58');
+      mkdirSync(wortel, { recursive: true });
+      mkdirSync(werkplek, { recursive: true });
+      writeFileSync(path.join(werkplek, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n');
+      return { wortel, werkplek };
+    }
+
+    /** Antwoordt op de drie rev-parse-vormen zoals git dat in een worktree doet. */
+    function inWerkplek(wortel: string, werkplek: string): UitkomstBepaler {
+      return (aanroep, index) => {
+        if (aanroep.argumenten.includes('--show-toplevel')) return { stdout: werkplek };
+        if (aanroep.argumenten.includes('--git-common-dir')) return { stdout: `${wortel}/.git` };
+        return gelukkig(aanroep, index);
+      };
+    }
+
+    it('haalt de werkplek weg nadat de PR er staat', () => {
+      const { wortel, werkplek } = maakWerkplek();
+      process.chdir(werkplek);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(inWerkplek(wortel, werkplek));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Vanuit de hoofdkloon opruimen: git kan de map niet weghalen als het daarvoor
+      // in diezelfde map moet staan.
+      const opruimen = aanroepen.find((a) => a.argumenten[0] === 'worktree');
+      expect(opruimen?.argumenten).toEqual(['worktree', 'remove', werkplek]);
+      expect(opruimen?.cwd).toBe(wortel);
+    });
+
+    it('ruimt pas op nadat de PR is aangemaakt', () => {
+      const { wortel, werkplek } = maakWerkplek();
+      process.chdir(werkplek);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(inWerkplek(wortel, werkplek));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Andersom zou alles ná het opruimen op een verdwenen cwd stuklopen — de PR,
+      // de merge-queue en het bijwerken van het board draaien immers in de werkmap.
+      const pr = aanroepen.findIndex((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+      const op = aanroepen.findIndex((a) => a.argumenten[0] === 'worktree');
+      expect(pr).toBeGreaterThanOrEqual(0);
+      expect(op).toBeGreaterThan(pr);
+    });
+
+    it('laat de werkplek staan als er nog ongecommit werk in zit', () => {
+      const { wortel, werkplek } = maakWerkplek();
+      process.chdir(werkplek);
+      const regels = vangStdout();
+      // git weigert `worktree remove` zonder --force bij vuil werk; die weigering is
+      // de bescherming, en zijn reden hoort in de melding te staan.
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.argumenten[0] === 'worktree'
+          ? { code: 1, stderr: 'fatal: contains modified or untracked files, use --force' }
+          : inWerkplek(wortel, werkplek)(aanroep, index);
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      inleveren();
+
+      expect(regels.join('')).toMatch(/blijft staan/);
+      expect(regels.join('')).toContain('modified or untracked files');
+      // Niet beweren dat de map weg is als git 'm heeft laten staan.
+      expect(regels.join('')).not.toContain('ga verder in');
+      expect(existsSync(werkplek)).toBe(true);
+    });
+
+    it('raakt een gewone kloon niet aan', () => {
+      const repo = maakRepo();
+      process.chdir(repo);
+      // In een gewone kloon wijst --show-toplevel naar dezelfde map als --git-common-dir.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.argumenten.includes('--show-toplevel')) return { stdout: repo };
+        if (aanroep.argumenten.includes('--git-common-dir')) return { stdout: `${repo}/.git` };
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(aanroepen.some((a) => a.argumenten[0] === 'worktree')).toBe(false);
+    });
   });
 });

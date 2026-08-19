@@ -37,6 +37,21 @@ export function repoWortelVan(cwd: string): string {
   return gitDir === undefined || gitDir === '' ? cwd : path.dirname(gitDir);
 }
 
+/**
+ * Het pad van de werkplek waar deze sessie in staat, of undefined in een gewone kloon.
+ *
+ * `--show-toplevel` geeft de map van de huidige worktree; wijkt die af van de
+ * hoofdkloon, dan staan we in een aangehaakte worktree. Zo weet `inleveren` of er na
+ * de PR iets op te ruimen valt.
+ */
+export function werkplekVanSessie(cwd: string): string | undefined {
+  const top = uitvoerVan('git', ['rev-parse', '--path-format=absolute', '--show-toplevel'], cwd);
+  if (top === undefined || top === '') {
+    return undefined;
+  }
+  return top === repoWortelVan(cwd) ? undefined : top;
+}
+
 /** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */
 export function branchVan(issue: number): string {
   return `slice/${String(issue)}-1`;
@@ -82,7 +97,10 @@ export function werkplek(issueArgument: string | undefined, opties: WerkplekOpti
   const branch = branchVan(issue);
 
   if (opties.op === true) {
-    ruimOp(repoDir, pad);
+    // Vanuit de hoofdkloon opruimen, niet vanuit `repoDir`: sta je zélf in de werkplek,
+    // dan trekt git de map onder je vandaan en faalt elk volgend commando op een
+    // verdwenen cwd.
+    ruimWerkplekOp(repoWortelVan(repoDir), pad);
     return;
   }
 
@@ -117,11 +135,17 @@ export function werkplek(issueArgument: string | undefined, opties: WerkplekOpti
   process.stdout.write(`${pad}\n`);
 }
 
-/** Haalt de werkplek weg; laat hem staan als er nog ongecommit werk in zit. */
-function ruimOp(repoDir: string, pad: string): void {
+/**
+ * Haalt de werkplek weg; laat hem staan als er nog ongecommit werk in zit. Levert op
+ * of de map echt verdwenen is, zodat de aanroeper niets belooft wat niet gebeurd is.
+ *
+ * `repoDir` moet een map zijn die blijft bestaan — de hoofdkloon dus, niet de werkplek
+ * zelf. Ook `inleveren` gebruikt dit, om de map op te ruimen waarin het net draaide.
+ */
+export function ruimWerkplekOp(repoDir: string, pad: string): boolean {
   if (!existsSync(pad)) {
     ok(`werkplek ${pad} bestaat niet (meer)`);
-    return;
+    return false;
   }
   // Zonder --force weigert git bij vuil werk, en dat is precies wat we willen: liever
   // een map te veel dan werk kwijt.
@@ -138,7 +162,8 @@ function ruimOp(repoDir: string, pad: string): void {
       `werkplek ${pad} blijft staan${reden === '' ? '' : ` — ${reden}`}\n` +
         `  Ruim hem zelf op met: git worktree remove --force ${pad}`,
     );
-    return;
+    return false;
   }
   ok(`werkplek ${pad} opgeruimd`);
+  return true;
 }

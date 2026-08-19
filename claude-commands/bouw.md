@@ -36,8 +36,13 @@ Doe dit zo:
 
 3. De `coding-guidelines`-skill laadt hier vanzelf; houd je aan de lagen en de
    afhankelijkheidsrichting die hij beschrijft.
-4. Maak een branch: `git switch -c slice/<issuenummer>-1` (of
-   `git checkout -b …`).
+4. Maak je eigen werkmap: `factory werkplek <issuenummer>`. Dat fetcht, maakt
+   `../<repo>-wt/<issuenummer>` aan op branch `slice/<issuenummer>-1` vanaf de
+   actuele `origin/main`, en print het pad — **ga daarheen en bouw daar**. Zo zit
+   je niet in de gedeelde werkmap van de repo, waar een parallelle sessie jouw
+   wijzigingen kan terugdraaien of jouw bestanden kan meecommitten (#118). Bestaat
+   de werkmap al, dan krijg je 'm gewoon terug. `factory inleveren` ruimt hem later
+   zelf op.
 5. Bouw de slice. Zet nieuw gedrag achter de feature flag uit de refinement, en
    voeg die flag toe aan `app/test/fixtures/feature-flags.json` (uit voor productie,
    aan voor tests als de tests hem nodig hebben).

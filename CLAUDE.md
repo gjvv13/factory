@@ -14,20 +14,21 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 
 **Een CLI** (`factory`) die elke applicatie als devDependency binnenhaalt:
 
-| Commando                                          | Wat het doet                                                                  |
-| ------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `factory verify [--snel]`                         | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build              |
-| `factory inleveren [--titel=<t>]`                 | Poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten  |
-| `factory integreer`                               | De factory-wachtrij afwerken (private apps zonder GitHub merge-queue)         |
-| `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen      |
-| `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren                   |
-| `factory deploy <acc\|prod>`                      | Uitrol-orchestratie voor de runner: `acc` = release + promote acc             |
-| `factory rooktest <acc\|prod>`                    | Eén read-only aanroep door de kern na een uitrol (uit `factory.json`)         |
-| `factory terugrol <acc\|prod>`                    | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)      |
-| `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers          |
-| `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                          |
-| `factory nieuw <naam>`                            | Nieuwe applicatie uit het skeleton, met een vrij poortblok                    |
-| `factory sync`                                    | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo |
+| Commando                                          | Wat het doet                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `factory verify [--snel]`                         | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build               |
+| `factory werkplek <issue#> [--op]`                | Eigen werkmap (git worktree) voor een slice, naast de repo; `--op` ruimt op    |
+| `factory inleveren [--titel=<t>]`                 | Poort draaien, branch pushen, PR openen, in de queue zetten, werkplek opruimen |
+| `factory integreer`                               | De factory-wachtrij afwerken (private apps zonder GitHub merge-queue)          |
+| `factory release [patch\|minor\|major]`           | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen       |
+| `factory promote <acc\|prod> [tag]`               | Tag uitrollen, migreren, herstarten, gezondheid controleren                    |
+| `factory deploy <acc\|prod>`                      | Uitrol-orchestratie voor de runner: `acc` = release + promote acc              |
+| `factory rooktest <acc\|prod>`                    | Eén read-only aanroep door de kern na een uitrol (uit `factory.json`)          |
+| `factory terugrol <acc\|prod>`                    | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)       |
+| `factory env <status\|start\|stop\|reload\|logs>` | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers           |
+| `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                           |
+| `factory nieuw <naam>`                            | Nieuwe applicatie uit het skeleton, met een vrij poortblok                     |
+| `factory sync`                                    | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo  |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze

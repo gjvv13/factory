@@ -17,6 +17,14 @@ export declare function werkplekPad(repoWortel: string, issue: number): string;
  * `.git` van de hoofdkloon, in een worktree én daarbuiten.
  */
 export declare function repoWortelVan(cwd: string): string;
+/**
+ * Het pad van de werkplek waar deze sessie in staat, of undefined in een gewone kloon.
+ *
+ * `--show-toplevel` geeft de map van de huidige worktree; wijkt die af van de
+ * hoofdkloon, dan staan we in een aangehaakte worktree. Zo weet `inleveren` of er na
+ * de PR iets op te ruimen valt.
+ */
+export declare function werkplekVanSessie(cwd: string): string | undefined;
 /** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */
 export declare function branchVan(issue: number): string;
 export interface WerkplekOpties {
@@ -28,3 +36,11 @@ export interface WerkplekOpties {
  * hervatte sessie krijgt dezelfde map terug in plaats van een fout.
  */
 export declare function werkplek(issueArgument: string | undefined, opties?: WerkplekOpties): void;
+/**
+ * Haalt de werkplek weg; laat hem staan als er nog ongecommit werk in zit. Levert op
+ * of de map echt verdwenen is, zodat de aanroeper niets belooft wat niet gebeurd is.
+ *
+ * `repoDir` moet een map zijn die blijft bestaan — de hoofdkloon dus, niet de werkplek
+ * zelf. Ook `inleveren` gebruikt dit, om de map op te ruimen waarin het net draaide.
+ */
+export declare function ruimWerkplekOp(repoDir: string, pad: string): boolean;
