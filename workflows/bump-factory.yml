@@ -1,0 +1,69 @@
+name: bump-factory
+
+# Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
+# hier op met `factory sync`.
+#
+# Houdt de app automatisch op de nieuwste factory (#132). Pollt periodiek de tags van
+# de publieke factory-repo; is er een nieuwere dan de pin in package.json, dan bumpt
+# hij de dep, draait `factory sync` (zodat CLI én workflow/skill/hook-wijzigingen
+# meekomen), commit dat naar main en tript de deploy-pijplijn af. Zo bereikt een
+# factory-release deze app zonder handwerk.
+#
+# Draait op de mini-runner (dezelfde als de deploy). Een push met GITHUB_TOKEN triggert
+# `deploy.yml` niet vanzelf, dus dispatchen we die expliciet. De bestaande vangnetten
+# (rooktest, versie-check, migratie-gate, dekkings-ratchet) blijven op die uitrol gelden.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bump-factory
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  bump:
+    runs-on: [self-hosted, mini]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+        with:
+          dest: ${{ runner.temp }}/pnpm
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Bump de factory als er een nieuwere tag is
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          huidig=$(node -p "require('./package.json').devDependencies.factory.split('#').pop()")
+          # Nieuwste factory-tag, semver-gesorteerd. De factory-repo is publiek, dus
+          # ls-remote heeft geen sleutel nodig.
+          nieuwste=$(git ls-remote --tags --refs https://github.com/gjvv13/factory.git 'v*' \
+            | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)
+          if [ -z "$nieuwste" ] || [ "$huidig" = "$nieuwste" ]; then
+            echo "factory al op $huidig — niets te doen."
+            exit 0
+          fi
+          echo "::notice::factory bumpen van $huidig naar $nieuwste"
+          node -e "const fs=require('fs');const p=require('./package.json');p.devDependencies.factory='git+https://github.com/gjvv13/factory.git#'+process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste"
+          # Volledige install (niet --lockfile-only): we hebben de nieuwe factory in
+          # node_modules nodig om `factory sync` ermee te draaien.
+          pnpm install
+          pnpm exec factory sync
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "bump: factory naar $nieuwste (+ sync)"
+          git push origin main
+          # De push hierboven is met GITHUB_TOKEN en triggert deploy.yml niet; expliciet
+          # aftrappen zodat de nieuwe versie via de gewone pijplijn naar acc en prod gaat.
+          gh workflow run deploy.yml --ref main

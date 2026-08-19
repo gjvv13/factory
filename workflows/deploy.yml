@@ -28,6 +28,9 @@ name: deploy
 on:
   push:
     branches: [main]
+  # Aangeroepen door bump-factory.yml (#132): een push met GITHUB_TOKEN triggert een
+  # workflow niet vanzelf, dus de bump dispatcht de deploy expliciet.
+  workflow_dispatch:
 
 # Uitrollen blijft serieel: een nieuwe merge wacht op de lopende deploy.
 concurrency:
@@ -40,8 +43,9 @@ permissions:
 jobs:
   acc:
     # De release-commit (versie-bump) is zelf een push naar main; sla die over,
-    # anders rolt de deploy zichzelf in een lus.
-    if: ${{ !startsWith(github.event.head_commit.message, 'release:') }}
+    # anders rolt de deploy zichzelf in een lus. Een handmatige/gedispatchte run
+    # (bump-factory, #132) heeft geen head_commit en draait altijd.
+    if: ${{ github.event_name == 'workflow_dispatch' || !startsWith(github.event.head_commit.message, 'release:') }}
     runs-on: [self-hosted, mini]
     outputs:
       migratie: ${{ steps.migratie.outputs.nieuw }}
