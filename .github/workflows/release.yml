@@ -56,5 +56,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
       # factory release draait de volledige poort, bumpt de versie, commit, tagt en
       # pusht main + tag. De `release:`-commit triggert deze workflow niet opnieuw.
+      # Rechtstreeks via de gebouwde CLI (niet `pnpm exec factory`): de factory-repo
+      # hangt niet van zichzelf af, dus er is geen node_modules/.bin/factory — net als
+      # het `verify`-script draait dit op de meegeleverde dist/.
       - name: Releasen
-        run: pnpm exec factory release "${{ github.event.inputs.bump || 'patch' }}"
+        run: node dist/cli.js release "${{ github.event.inputs.bump || 'patch' }}"
