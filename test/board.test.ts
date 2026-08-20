@@ -305,6 +305,39 @@ describe('token in een workflow', () => {
     expect(aanroepen).toHaveLength(0);
   });
 
+  it('zet in de waarschuwing wat gh zelf zei toen de verplaatsing mislukte', () => {
+    // Zonder dit stond er alleen "kon niet verplaatsen" en kostte elke oorzaak een hele
+    // release om te achterhalen (#195: v1.15.15 en v1.15.16 gingen daaraan op).
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((aanroep) => {
+        if (isOpzoeking(aanroep)) return { stdout: opzoekAntwoord('Bouwen') };
+        return {
+          code: 1,
+          stderr: 'your token has not been granted the required scopes\nnog een regel',
+        };
+      }).uitvoerder,
+    );
+
+    expect(zetKolomUitkomst(128, 'Uitrollen')).toBe('mislukt');
+    const uitvoer = schrijf.mock.calls.map(String).join('');
+    expect(uitvoer).toContain('your token has not been granted the required scopes');
+    // Alleen de eerste regel: een waarschuwing blijft één regel.
+    expect(uitvoer).not.toContain('nog een regel');
+  });
+
+  it('meldt ook wat gh zei toen de opzoeking zelf faalde', () => {
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(() => ({ code: 1, stderr: 'API rate limit exceeded' })).uitvoerder,
+    );
+
+    expect(zetKolomUitkomst(128, 'Uitrollen')).toBe('mislukt');
+    expect(schrijf.mock.calls.map(String).join('')).toContain('API rate limit exceeded');
+  });
+
   it('scheidt verzet, al-goed en mislukt', () => {
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
     stelUitvoerderIn(maakUitvoerderOpnemer(bepalerMet('Bouwen')).uitvoerder);
