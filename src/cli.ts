@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { afronden } from './commands/afronden.js';
 import { backup } from './commands/backup.js';
+import { board } from './commands/board.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
@@ -42,6 +43,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer --soort bouw <--dry|--eenmalig>  bouw-werker: wachtrij tonen, of één item bouwen
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
+  factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
 
@@ -173,6 +175,11 @@ async function main(argumenten: string[]): Promise<void> {
     case 'sync': {
       const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--check'] });
       sync({ check: schakelaars.has('--check') });
+      return;
+    }
+    case 'board': {
+      const { positioneel } = leesArgumenten(rest);
+      board(positioneel[0], positioneel[1]);
       return;
     }
     case 'afronden': {

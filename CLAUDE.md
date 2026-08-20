@@ -29,6 +29,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory flag <omgeving> [naam] [on\|off]`            | Feature flags omzetten zonder deploy                                                                      |
 | `factory backup <acc\|prod> [aantal]`                 | Consistente SQLite-backup met rotatie, optioneel off-site                                                 |
 | `factory nieuw <naam>`                                | Nieuwe applicatie uit het skeleton, met een vrij poortblok                                                |
+| `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
 | `factory orkestreer <--dry\|--eenmalig>`              | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |
 | `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
@@ -259,6 +260,13 @@ draait, terwijl het board onder een persoonlijk account hangt en de backlog in e
 scope `project` plus lees/schrijf op de backlog-repo. Ontbreekt het secret, dan
 waarschuwt de stap en blijft de deploy groen — het bord loopt dan achter, de uitrol
 niet.
+
+**Groomen kost punten.** Een kolom met de hand zetten via `gh project item-list` kost 102
+GraphQL-punten per aanroep, en de pot is 5000 per uur voor het hele account — gedeeld met
+elke sessie en met elke uitrol. `factory board <issue> "<kolom>"` gebruikt daarom dezelfde
+gerichte query als de rest van `board.ts`: item-id, veld-id, optie-id en de huidige kolom
+in één document, voor 1 à 2 punten. Op 2026-08-20 stond de teller na een dag groomen op 35
+van 5000; dat commando bestaat om dat niet nog eens te laten gebeuren.
 
 Een bordfout houdt nooit een uitrol tegen: de pijplijn levert software af, de
 administratie is bijvangst.
