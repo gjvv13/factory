@@ -49,9 +49,10 @@ applicatie-repo. `/status` geeft het overzicht over de backlog en alle applicati
 ## Eén backlog voor alles
 
 De backlog van álle applicaties is **één set GitHub Issues** in `gjvv13/factory`,
-met per issue het `App`-veld (een kolom op het board, geen label; welke app), een
-`status:`-label (fase) en een `type:`-label (epic, task of bug). De grote brokken (epics) volg je op het
-board, je dagelijkse lijst zijn de bugs en klusjes. De volledige werkwijze staat
+met per issue het `App`-veld (welke app) en de kolom `Status` (waar het in de pijplijn
+staat) — beide velden op het board, geen labels — plus een `type:`-label (epic, task of
+bug). De grote brokken (epics) volg je op het board, je dagelijkse lijst zijn de bugs en
+klusjes. De volledige werkwijze staat
 in [`WORKFLOW.md`](WORKFLOW.md).
 
 ## De CLI

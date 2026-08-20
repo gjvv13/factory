@@ -1,7 +1,7 @@
 ---
 id: <kort-kebab-case-id>
 titel: <korte titel>
-status: <fase — functioneel, technisch of refined; gelijk aan het status:-label>
+status: <fase — functioneel, technisch of refined; gelijk aan de kolom op het board>
 aangemaakt: <JJJJ-MM-DD>
 gerefined: <JJJJ-MM-DD>
 ---
