@@ -35,6 +35,13 @@ export interface RunOptions {
   readonly capture?: boolean;
   /** Bij true levert een niet-nul exitcode geen fout op. */
   readonly toleranter?: boolean;
+  /**
+   * Kap het proces af na zoveel milliseconden. Alleen voor aanroepen die van buiten
+   * afhangen en kunnen blijven hangen (de werker, #206) — `git`, `gh` en `pnpm` krijgen
+   * bewust geen grens: die falen zelf snel genoeg en een grens erop zou een trage
+   * `pnpm install` in een mislukking veranderen.
+   */
+  readonly timeoutMs?: number;
 }
 
 export interface RunResult {
@@ -42,6 +49,8 @@ export interface RunResult {
   readonly stdout: string;
   /** Gevangen stderr; leeg als de uitvoer naar de terminal ging (geen capture). */
   readonly stderr: string;
+  /** Of `timeoutMs` verstreek voordat het commando klaar was (#206). */
+  readonly afgekapt: boolean;
 }
 
 /** Ruwe uitkomst van een proces, vóór interpretatie door run(). */
@@ -52,6 +61,12 @@ export interface ProcesUitkomst {
   readonly stderr?: string;
   /** Gezet als het proces niet gestart kon worden (commando niet gevonden e.d.). */
   readonly startfout?: string;
+  /**
+   * Gezet als `timeoutMs` verstreek. Bewust géén startfout: het commando liep, het was
+   * alleen niet klaar. De aanroeper hoort dat als een mislukte run te behandelen en niet
+   * als een kapotte machine (#206).
+   */
+  readonly afgekapt?: true;
 }
 
 /**
@@ -71,8 +86,25 @@ const spawnUitvoerder: Uitvoerder = (commando, argumenten, options) => {
     env: options.env ?? process.env,
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'inherit', 'inherit'],
     encoding: 'utf8',
+    ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
   });
   if (resultaat.error !== undefined) {
+    // Een verstreken time-out komt óók als `error` terug, maar is iets anders dan een
+    // commando dat niet bestaat: het liep, het was niet klaar. Node markeert dat met
+    // ETIMEDOUT; de uitvoer tot dat moment houden we vast, want daar staat vaak precies
+    // in waar hij bleef hangen.
+    if ((resultaat.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+      // De typing belooft strings, maar bij een afgekapt proces levert Node feitelijk
+      // `null` als er nog niets over de pijp kwam. Dat expliciet opvangen: anders staat er
+      // straks de tekst "null" in een comment op een issue.
+      const deels = resultaat as { stdout: string | null; stderr: string | null };
+      return {
+        code: resultaat.status ?? 124,
+        stdout: deels.stdout ?? '',
+        stderr: deels.stderr ?? '',
+        afgekapt: true,
+      };
+    }
     return { code: 1, stdout: '', startfout: resultaat.error.message };
   }
   return { code: resultaat.status ?? 1, stdout: resultaat.stdout, stderr: resultaat.stderr };
@@ -99,12 +131,20 @@ export function run(commando: string, argumenten: string[], options: RunOptions 
   if (uitkomst.startfout !== undefined) {
     throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
   }
-  if (uitkomst.code !== 0 && options.toleranter !== true) {
+  // Een afgekapte aanroep gooit niet: de aanroeper die een grens zette wíl de uitkomst
+  // zien en er zelf iets mee doen (#206). Gooien zou de nacht beëindigen in plaats van
+  // één item te laten mislukken.
+  if (uitkomst.code !== 0 && options.toleranter !== true && uitkomst.afgekapt !== true) {
     throw new GebruikersFout(
       `'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`,
     );
   }
-  return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+  return {
+    code: uitkomst.code,
+    stdout: uitkomst.stdout,
+    stderr: uitkomst.stderr ?? '',
+    afgekapt: uitkomst.afgekapt === true,
+  };
 }
 
 /**
@@ -191,7 +231,7 @@ export function runMetHerhaling(
       throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
     }
     if (uitkomst.code === 0) {
-      return { code: 0, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+      return { code: 0, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '', afgekapt: false };
     }
 
     const uitvoer = `${uitkomst.stdout}\n${uitkomst.stderr ?? ''}`;
@@ -208,7 +248,12 @@ export function runMetHerhaling(
     // gaven capture geforceerd aan, dus geef de opgevangen uitvoer alsnog door zodat
     // de echte fout zichtbaar is.
     if (options.toleranter === true) {
-      return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+      return {
+        code: uitkomst.code,
+        stdout: uitkomst.stdout,
+        stderr: uitkomst.stderr ?? '',
+        afgekapt: uitkomst.afgekapt === true,
+      };
     }
     if (uitkomst.stdout !== '') process.stdout.write(uitkomst.stdout);
     if ((uitkomst.stderr ?? '') !== '') process.stderr.write(uitkomst.stderr ?? '');

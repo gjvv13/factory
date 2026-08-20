@@ -274,6 +274,9 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
   const draaiOpties = {
     budgetUsd: instellingen.budgetPerRun,
     env: { ...process.env, [TOKEN_SLEUTEL]: token },
+    // Alleen onbemand een grens: een nacht die vastloopt kost de hele rij, terwijl een
+    // run die ik zelf start onder mijn ogen gebeurt en gewoon met ctrl-c stopt.
+    timeoutMs: instellingen.runTimeoutMs,
   };
 
   kop(`Nacht van ${kalenderdag(nu)}`);
@@ -341,7 +344,12 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
       logRun(paden, new Date(Date.now()), {
         issue: eerste.issue,
         app: eerste.app,
-        uitkomst: uitkomst.afloop,
+        // Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik
+        // zien dat de tijd op was en niet dat "iets" faalde (#206).
+        uitkomst:
+          uitkomst.afgekaptNaMinuten === undefined
+            ? uitkomst.afloop
+            : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
         ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
         ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
       });
@@ -357,12 +365,16 @@ interface RunUitkomst {
   readonly afloop: Afloop;
   readonly kosten?: number;
   readonly beurten?: number;
+  /** Gezet als de run op zijn tijdsgrens sneuvelde (#206); voor de logregel. */
+  readonly afgekaptNaMinuten?: number;
 }
 
-/** Hoe de werker aangeroepen wordt: de kostenrem, en onbemand ook zijn token. */
+/** Hoe de werker aangeroepen wordt: de kostenrem, de tijdsgrens, en onbemand zijn token. */
 interface DraaiOpties {
   readonly budgetUsd: number;
   readonly env?: NodeJS.ProcessEnv;
+  /** Tijdsgrens per run (#206); afwezig betekent geen grens — zo blijft `--eenmalig` met de hand onbeperkt. */
+  readonly timeoutMs?: number;
 }
 
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
@@ -401,6 +413,7 @@ function werkAf(item: Opdrachtitem, cwd: string, wortel: string, draai: DraaiOpt
       sessie,
       extraMappen: [factoryMap],
       budgetUsd: draai.budgetUsd,
+      ...(draai.timeoutMs === undefined ? {} : { timeoutMs: draai.timeoutMs }),
       model: MODEL,
       ...(draai.env === undefined ? {} : { env: draai.env }),
     });
@@ -411,6 +424,9 @@ function werkAf(item: Opdrachtitem, cwd: string, wortel: string, draai: DraaiOpt
       afloop: verwerk(item, uitkomst, werkmap, cwd),
       ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
       ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+      ...(uitkomst.afgekaptNaMinuten === undefined
+        ? {}
+        : { afgekaptNaMinuten: uitkomst.afgekaptNaMinuten }),
     };
   } catch (fout) {
     terugInWachtrij();

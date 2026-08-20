@@ -64,6 +64,7 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
+        runTimeoutMs: 30 * 60_000,
       });
     });
 
@@ -74,7 +75,23 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 2,
         budgetPerRun: 1.5,
         bouwBudgetPerRun: 10,
+        runTimeoutMs: 30 * 60_000,
       });
+    });
+
+    it('leest een eigen tijdsgrens per run en rekent naar milliseconden', () => {
+      schrijfEnv('FACTORY_RUN_TIMEOUT_MIN=12\n');
+
+      expect(leesInstellingen(paden).runTimeoutMs).toBe(12 * 60_000);
+    });
+
+    it('weigert een tijdsgrens die niet onder de slotgeldigheid blijft', () => {
+      // Het slot van de orkestrator vervalt na een uur. Een run die langer mag leven dan
+      // dat, ziet zijn eigen slot verlopen — en dan start er een tweede orkestrator naast
+      // de eerste (#206).
+      schrijfEnv('FACTORY_RUN_TIMEOUT_MIN=90\n');
+
+      expect(() => leesInstellingen(paden)).toThrow(/FACTORY_RUN_TIMEOUT_MIN/);
     });
 
     it('heeft een ruimer budget voor een bouw-run dan voor een refinement', () => {
@@ -96,6 +113,7 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
+        runTimeoutMs: 30 * 60_000,
       });
     });
 

@@ -7,6 +7,8 @@ export interface ProcesAanroep {
   readonly cwd?: string;
   /** De meegegeven omgeving, als het commando er een kreeg (bijv. een PAT voor gh). */
   readonly env?: NodeJS.ProcessEnv;
+  /** De tijdsgrens, als het commando er een kreeg (#206). */
+  readonly timeoutMs?: number;
 }
 
 export interface Opnemer {
@@ -35,6 +37,7 @@ export function maakUitvoerderOpnemer(bepaal?: UitkomstBepaler): Opnemer {
       argumenten,
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
     };
     aanroepen.push(aanroep);
     return { code: 0, stdout: '', ...(bepaal?.(aanroep, aanroepen.length - 1) ?? {}) };

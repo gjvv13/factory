@@ -1106,6 +1106,33 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).not.toMatch(/3\/2/);
   });
 
+  it('gaat na een afgekapte run door met het volgende item', () => {
+    // De hangende werker (#206): afkappen mag één item kosten, niet de nacht. Het item
+    // gaat langs het bestaande escalatiepad van #154 en de rij schuift door.
+    const basis = nachtBord(WACHTRIJ);
+    let eerste = true;
+    const kaptEersteAf: UitkomstBepaler = (aanroep, index) => {
+      if (aanroep.commando === 'claude' && eerste) {
+        eerste = false;
+        return { code: 124, stdout: '', stderr: '', afgekapt: true as const };
+      }
+      return basis(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(kaptEersteAf);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Twee runs: de afgekapte en de volgende. Zonder deze slice stopte de nacht hier.
+    expect(claudeAanroepen(aanroepen)).toHaveLength(2);
+    // De afkapping staat in het log, met de reden erin.
+    // Zoals de uitwerking hem voorschrijft: "#93 beheer afgekapt (30 min)".
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#\d+ \w+ afgekapt \(30 min\)/);
+    // En het item is geëscaleerd, niet stil overgeslagen.
+    const label = ghArgs(aanroepen).find((a) => a.includes('--add-label'));
+    expect(label).toContain('escalatie');
+  });
+
   it('logt ook een run die de CLI omvertrekt', () => {
     // `claude` is niet te starten: `run` gooit. Zonder deze regel staat de dagteller op
     // 1 en het log op niets — de stilte die je 's ochtends niet kunt lezen.
