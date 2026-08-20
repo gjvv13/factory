@@ -1,8 +1,16 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nieuw } from '../src/commands/nieuw.js';
+import { skeletonDir } from '../src/paths.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type Opnemer } from './helpers.js';
 
@@ -88,6 +96,44 @@ describe('nieuw', () => {
         argumenten: expect.arrayContaining(['api', 'graphql']),
       }),
     );
+  });
+
+  it('geeft de nieuwe app een .gitignore en laat geen gitignore of .npmignore achter', () => {
+    // #91: het skeleton draagt het bestand als `gitignore` (zonder punt), omdat npm's
+    // pack-laag een `.gitignore` niet in het pakket laat overleven. `nieuw` zet de punt
+    // terug; zonder die stap kreeg elke app die uit een geïnstalleerde factory kwam er
+    // geen.
+    const { factoryRepo, werkruimte } = maakWerkruimte();
+    process.chdir(factoryRepo);
+
+    nieuw('proefapp');
+
+    const appDir = path.join(werkruimte, 'proefapp');
+    const gitignore = readFileSync(path.join(appDir, '.gitignore'), 'utf8');
+    // Inhoud gelijk aan het skeleton, niet een eigen lijstje dat kan afdrijven.
+    expect(gitignore).toBe(readFileSync(path.join(skeletonDir, 'gitignore'), 'utf8'));
+    expect(existsSync(path.join(appDir, 'gitignore'))).toBe(false);
+    expect(existsSync(path.join(appDir, '.npmignore'))).toBe(false);
+  });
+
+  it('waarschuwt en gaat door als het skeleton geen gitignore heeft', () => {
+    // Een app zonder .gitignore is hinderlijk; halverwege afbreken is erger.
+    const { factoryRepo, werkruimte } = maakWerkruimte();
+    process.chdir(factoryRepo);
+    const schrijf = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    const echteBron = path.join(skeletonDir, 'gitignore');
+    const geparkeerd = `${echteBron}.geparkeerd`;
+    renameSync(echteBron, geparkeerd);
+    try {
+      nieuw('proefapp');
+    } finally {
+      renameSync(geparkeerd, echteBron);
+    }
+
+    const appDir = path.join(werkruimte, 'proefapp');
+    expect(existsSync(path.join(appDir, 'factory.json'))).toBe(true);
+    expect(existsSync(path.join(appDir, '.gitignore'))).toBe(false);
+    expect(schrijf.mock.calls.map(String).join('')).toMatch(/geen 'gitignore'/);
   });
 
   it('kiest het volgende poortblok als het eerste al bezet is', () => {
