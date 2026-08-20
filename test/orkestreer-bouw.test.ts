@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +12,12 @@ import {
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
+import {
+  maakUitvoerderOpnemer,
+  zetBoardOmgeving,
+  type ProcesAanroep,
+  type UitkomstBepaler,
+} from './helpers.js';
 
 /** De opgenomen board-uitvoer met alle randgevallen van de bouw-wachtrij. */
 function bord(): string {
@@ -221,5 +227,174 @@ describe('de vorm van een bouwplan', () => {
     expect(leesSoort('bouw')).toBe('bouw');
     // Stil terugvallen op refinen zou een bouwopdracht in een refinement veranderen.
     expect(() => leesSoort('bouwen')).toThrow(/Onbekende --soort/);
+  });
+});
+
+describe('orkestreer --soort bouw --eenmalig', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+  let wortel: string;
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-'));
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  /** De opgenomen envelop-vorm; het bouw-verdict erin is met de hand geschreven. */
+  function envelop(naam: string): string {
+    const hier = path.dirname(fileURLToPath(import.meta.url));
+    return readFileSync(path.join(hier, 'fixtures', `${naam}.json`), 'utf8');
+  }
+
+  /** Een machine waarop het board de fixture teruggeeft en claude een gegeven envelop. */
+  function machine(werker: string): UitkomstBepaler {
+    let huidig = 'Klaar voor Bouwen';
+    return ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werker };
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
+        if (query.includes('items(first:100')) return { stdout: bord() };
+        return {
+          stdout: JSON.stringify({
+            data: {
+              user: {
+                projectV2: {
+                  id: 'PVT_x',
+                  field: {
+                    id: 'PVTSSF_x',
+                    options: [
+                      { id: 'optie-bouwen', name: 'Bouwen' },
+                      { id: 'optie-klaar', name: 'Klaar voor Bouwen' },
+                    ],
+                  },
+                },
+              },
+              repository: {
+                issue: {
+                  projectItems: {
+                    nodes: [
+                      { id: 'PVTI_x', project: { number: 2 }, fieldValueByName: { name: huidig } },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        };
+      }
+      if (commando === 'gh' && argumenten[0] === 'project') {
+        const optie = argumenten[argumenten.indexOf('--single-select-option-id') + 1];
+        huidig = optie === 'optie-bouwen' ? 'Bouwen' : 'Klaar voor Bouwen';
+        return {};
+      }
+      if (commando === 'git' && argumenten[0] === 'rev-parse') return { stdout: '/spiegel' };
+      return {};
+    };
+  }
+
+  function draai(werker: string): { aanroepen: ProcesAanroep[]; geleverd: unknown[] } {
+    const geleverd: unknown[] = [];
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine(werker));
+    stelUitvoerderIn(uitvoerder);
+    orkestreerBouw({
+      eenmalig: true,
+      werkplaatsWortel: wortel,
+      leverIn: (opties) => geleverd.push(opties),
+    });
+    return { aanroepen, geleverd };
+  }
+
+  it('claimt het item vóór de run, en levert in zonder auto-merge', () => {
+    const { aanroepen, geleverd } = draai(envelop('claude-bouw-klaar'));
+
+    // De claim gaat vóór alles wat geld kost: twee werkers op één item leveren twee
+    // branches op waarvan er één weg moet.
+    const claim = aanroepen.findIndex(
+      (a) => a.argumenten[0] === 'project' && a.argumenten.includes('optie-bouwen'),
+    );
+    const werker = aanroepen.findIndex((a) => a.commando === 'claude');
+    expect(claim).toBeGreaterThanOrEqual(0);
+    expect(claim).toBeLessThan(werker);
+
+    // Inleveren gebeurt met geenAutomerge, en nooit via `gh pr merge --auto`.
+    expect(geleverd).toEqual([{ cwd: path.join(wortel, 'factory-wt', '91'), geenAutomerge: true }]);
+    expect(
+      aanroepen.some((a) => a.argumenten.includes('--auto') || a.argumenten[1] === 'merge'),
+    ).toBe(false);
+  });
+
+  it('geeft het bouwbudget mee, niet het refinement-budget', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+
+    const werker = aanroepen.find((a) => a.commando === 'claude');
+    // Default $10 voor bouwen tegen $5 voor een refinement: bouwen is meer beurten.
+    expect(werker?.argumenten[werker.argumenten.indexOf('--max-budget-usd') + 1]).toBe('10');
+  });
+
+  it('mag schrijven maar niet pushen', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+
+    const args = (aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? []).join(' ');
+    // Schrijven is de opdracht; de PR is de grens tussen voorstellen en landen.
+    expect(args).toContain('Write');
+    expect(args).toContain('Bash(git commit:*)');
+    expect(args).toContain('Bash(git push:*)');
+    expect(args).toContain('Bash(gh pr:*)');
+  });
+
+  it('escaleert een criterium zonder bewijs in plaats van het af te vinken', () => {
+    const { aanroepen, geleverd } = draai(envelop('claude-bouw-geen-bewijs'));
+
+    // Het schema weigert een leeg `bewijs` als `klaar`. Dus: niets ingeleverd, label
+    // erop, en het item terug in de bouw-wachtrij.
+    expect(geleverd).toEqual([]);
+    expect(aanroepen.some((a) => a.argumenten.includes('--add-label'))).toBe(true);
+    const terug = aanroepen.filter(
+      (a) => a.argumenten[0] === 'project' && a.argumenten.includes('optie-klaar'),
+    );
+    expect(terug.length).toBeGreaterThan(0);
+  });
+
+  it('herkent is_error bij exitcode 0 als mislukt', () => {
+    const { aanroepen, geleverd } = draai(envelop('claude-bouw-fout'));
+
+    // De val uit #153: exit 0 met is_error true. Geen PR, geen afvink-comment.
+    expect(geleverd).toEqual([]);
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comment?.argumenten.join(' ')).toMatch(/Bouw-run mislukt/);
+  });
+
+  it('zet de comment met bewijs per criterium op het issue', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).toContain('Acceptatiecriterium');
+    expect(tekst).toContain("test/promote.test.ts:'draait pnpm zonder interactieve prompt'");
+    expect(tekst).toContain('zonder auto-merge');
+  });
+
+  it('weigert --dry en --eenmalig samen', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(machine(envelop('claude-bouw-klaar'))).uitvoerder);
+
+    expect(() => {
+      orkestreerBouw({ dry: true, eenmalig: true, werkplaatsWortel: wortel });
+    }).toThrow(/sluiten elkaar uit/);
   });
 });

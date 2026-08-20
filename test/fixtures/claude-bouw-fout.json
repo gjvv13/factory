@@ -1,0 +1,15 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "session_id": "7c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "num_turns": 6,
+  "total_cost_usd": 0.71,
+  "permission_denials": [
+    {
+      "tool_name": "Bash"
+    }
+  ],
+  "result": "Ik kon de poort niet groen krijgen; verify blijft rood op een test die ik niet kan lezen.",
+  "terminal_reason": "api_error"
+}

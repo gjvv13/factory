@@ -21,6 +21,15 @@ import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js'
 export interface InleverenOpties {
   /** Titel voor de PR; zonder dit vult gh de titel uit de commits (`--fill`). */
   readonly titel?: string;
+  /**
+   * Levert in zonder auto-merge: de PR wordt geopend en blijft staan tot iemand hem
+   * merget (#183). Voor een onbemande bouw-werker: die mag code voorstellen, niet
+   * landen. Op een app met de lokale wachtrij betekent het dat het `wachtrij`-label
+   * niet gezet wordt, want dat label ís de opdracht om te mergen.
+   */
+  readonly geenAutomerge?: boolean;
+  /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
+  readonly cwd?: string;
 }
 
 /** Committeert een gewijzigd bestand met een korte melding; slaat over als het niet wijzigde. */
@@ -49,7 +58,7 @@ function bestaandePr(repoDir: string, branch: string): string | undefined {
  * kan meteen aan de volgende slice beginnen.
  */
 export function inleveren(opties: InleverenOpties = {}): void {
-  const repoDir = process.cwd();
+  const repoDir = opties.cwd ?? process.cwd();
 
   const branch = uitvoerVan('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoDir);
   if (branch === undefined || branch === 'main') {
@@ -132,7 +141,15 @@ export function inleveren(opties: InleverenOpties = {}): void {
   // Nu opzoeken, zolang de map er nog is: het opruimen hieronder maakt hem onvindbaar.
   const werkplek = werkplekVanSessie(repoDir);
 
-  if (lokaal) {
+  if (opties.geenAutomerge === true) {
+    // Een onbemande bouw-werker mag code voorstellen, niet landen. Dus geen auto-merge
+    // en op een app ook geen `wachtrij`-label — dat label ís de opdracht om te mergen.
+    // De PR staat er, de poort draait erop, en het mergen blijft een mensbesluit.
+    ok(`PR geopend zonder auto-merge: ${prUrl}`);
+    process.stdout.write(
+      `\n${branch} wacht op een menselijke merge; er is niets in een wachtrij gezet.\n`,
+    );
+  } else if (lokaal) {
     // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
     // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).
     zorgVoorWachtrijLabel(repoDir);

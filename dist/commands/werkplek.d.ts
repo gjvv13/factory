@@ -30,6 +30,11 @@ export declare function werkplekVanSessie(cwd: string): string | undefined;
 /** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */
 export declare function branchVan(issue: number): string;
 export interface WerkplekOpties {
+    /**
+     * De repo waarin de werkplek gemaakt wordt. Geen CLI-vlag: de bouw-werker (#183) roept
+     * dit aan vanuit de spiegel in `~/OrkestratorWerk`, en die staat niet in `process.cwd()`.
+     */
+    readonly cwd?: string;
     /** Ruimt de werkplek op in plaats van hem te maken. */
     readonly op?: boolean;
 }

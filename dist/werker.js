@@ -34,6 +34,49 @@ export const WERKER_TOEGESTAAN = [
     'Bash(git diff:*)',
     'Bash(git status:*)',
 ];
+/**
+ * Wat een **bouw**-werker mag (#183). Wél schrijven — dat is de opdracht — maar niet
+ * pushen en geen PR openen: de supervisor levert in met `factory inleveren
+ * --geen-automerge`, zodat het openen van een PR een beslissing van de factory blijft en
+ * niet van het model. Committen mag wel; zonder commit is er niets in te leveren.
+ */
+export const BOUWER_TOEGESTAAN = [
+    'Read',
+    'Grep',
+    'Glob',
+    'Write',
+    'Edit',
+    'Bash(git add:*)',
+    'Bash(git commit:*)',
+    'Bash(git diff:*)',
+    'Bash(git log:*)',
+    'Bash(git show:*)',
+    'Bash(git status:*)',
+    'Bash(git restore:*)',
+    'Bash(pnpm:*)',
+    'Bash(npx:*)',
+    'Bash(node:*)',
+    'Bash(gh issue view:*)',
+    'Bash(gh api:*)',
+];
+/**
+ * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
+ * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
+ * supervisor is. En `git checkout`/`switch`/`rebase` niet: hij werkt op één branch in
+ * zijn eigen worktree, en van branch wisselen is per definitie buiten de opdracht.
+ */
+export const BOUWER_VERBODEN = [
+    'Bash(git push:*)',
+    'Bash(git checkout:*)',
+    'Bash(git switch:*)',
+    'Bash(git rebase:*)',
+    'Bash(git reset:*)',
+    'Bash(gh pr:*)',
+    'Bash(gh issue edit:*)',
+    'Bash(gh issue close:*)',
+    'Bash(gh project:*)',
+    'Bash(gh release:*)',
+];
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
 export const WERKER_VERBODEN = [
     'Write',
@@ -87,6 +130,56 @@ const verdictSchema = z.discriminatedUnion('uitkomst', [
     }),
 ]);
 /**
+ * Het verdict van een bouw-run (#183). Het verschil met een refinement zit in het
+ * bewijs: per acceptatiecriterium een regel met wat het aantoont. `bewijs` is
+ * `min(1)`, dus een criterium zonder bewijs komt niet als `klaar` door de poort — dat
+ * is precies de reden dat dit schema bestaat en niet alleen de prompt erom vraagt.
+ */
+const bouwVerdictSchema = z.discriminatedUnion('uitkomst', [
+    z.object({
+        uitkomst: z.literal('klaar'),
+        samenvatting: z.string().min(1),
+        criteria: z.array(z.object({ criterium: z.string().min(1), bewijs: z.string().min(1) })).min(1),
+    }),
+    z.object({
+        uitkomst: z.literal('escalatie'),
+        vraag: z.string().min(1),
+        advies: z.string().min(1),
+    }),
+]);
+/** Als `VERDICT_JSON_SCHEMA`, maar voor een bouw-run: plat, met de hand, om dezelfde redenen. */
+export const BOUW_JSON_SCHEMA = {
+    type: 'object',
+    properties: {
+        uitkomst: {
+            type: 'string',
+            enum: ['klaar', 'escalatie'],
+            description: 'klaar = gebouwd, poort groen, elk criterium bewezen; escalatie = je hebt een vraag',
+        },
+        samenvatting: {
+            type: 'string',
+            description: 'alleen bij klaar: twee of drie zinnen over wat je deed en wat je aannam',
+        },
+        criteria: {
+            type: 'array',
+            description: 'alleen bij klaar: per acceptatiecriterium het criterium en het bewijs (test of commit). Kun je geen bewijs noemen, escaleer dan.',
+            items: {
+                type: 'object',
+                properties: {
+                    criterium: { type: 'string' },
+                    bewijs: { type: 'string' },
+                },
+                required: ['criterium', 'bewijs'],
+                additionalProperties: false,
+            },
+        },
+        vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
+        advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },
+    },
+    required: ['uitkomst'],
+    additionalProperties: false,
+};
+/**
  * Het schema dat aan `claude --json-schema` meegaat — met de hand geschreven, en niet
  * `z.toJSONSchema(verdictSchema)`.
  *
@@ -135,11 +228,11 @@ export function werkerArgumenten(opdracht) {
         '--max-budget-usd',
         String(opdracht.budgetUsd),
         '--json-schema',
-        JSON.stringify(VERDICT_JSON_SCHEMA),
+        JSON.stringify(opdracht.jsonSchema ?? VERDICT_JSON_SCHEMA),
         '--allowedTools',
-        ...WERKER_TOEGESTAAN,
+        ...(opdracht.toegestaan ?? WERKER_TOEGESTAAN),
         '--disallowedTools',
-        ...WERKER_VERBODEN,
+        ...(opdracht.verboden ?? WERKER_VERBODEN),
         ...(opdracht.extraMappen ?? []).flatMap((map) => ['--add-dir', map]),
     ];
 }
@@ -152,7 +245,15 @@ export function werkerArgumenten(opdracht) {
  * van dít item maar van de machine, en het escaleren van één issue zou dat verbergen
  * terwijl elke volgende run er net zo goed op stukloopt.
  */
-export function draaiWerker(opdracht) {
+/**
+ * De envelop van één `claude`-aanroep, of een mislukte uitkomst.
+ *
+ * Apart van `draaiWerker` omdat de bouw-werker (#183) dezelfde envelop leest maar een
+ * ander verdict verwacht. Alles wat hier misgaat — geen JSON, een verlopen sessie, een
+ * afwijkende envelop, `is_error` — geldt voor beide even hard, en dat wil je op één
+ * plek houden: het zijn allemaal gemeten valkuilen.
+ */
+function leesEnvelop(opdracht) {
     const uitkomst = run('claude', werkerArgumenten(opdracht), {
         cwd: opdracht.werkmap,
         capture: true,
@@ -166,19 +267,23 @@ export function draaiWerker(opdracht) {
     catch {
         const alles = `${uitkomst.stdout}\n${uitkomst.stderr}`;
         if (alles.includes('No conversation found with session ID')) {
-            // Geen JSON, maar wel een duidelijke reden. Gemeten: een onbekende sessie geeft
-            // deze regel in platte tekst met exit 1 — de aanroeper moet dat kunnen zien,
-            // want een verse run is dan het enige pad dat nog werkt.
-            return { ...mislukt(opdracht.sessie, 'de sessie bestaat niet meer'), sessieWeg: true };
+            return {
+                soort: 'mislukt',
+                uitkomst: { ...mislukt(opdracht.sessie, 'de sessie bestaat niet meer'), sessieWeg: true },
+            };
         }
         const staart = (uitkomst.stderr === '' ? uitkomst.stdout : uitkomst.stderr).trim().slice(-300);
-        return mislukt(opdracht.sessie, `claude gaf geen leesbare JSON terug: ${staart}`);
+        return {
+            soort: 'mislukt',
+            uitkomst: mislukt(opdracht.sessie, `claude gaf geen leesbare JSON terug: ${staart}`),
+        };
     }
     const envelop = envelopSchema.safeParse(ruw);
     if (!envelop.success) {
-        // Een luide fout, geen stille aanname: verandert de vorm van de envelop door een
-        // CLI-update, dan mag een mislukte run niet als "klaar" doorgaan.
-        return mislukt(opdracht.sessie, `envelop van claude wijkt af: ${envelop.error.message}`);
+        return {
+            soort: 'mislukt',
+            uitkomst: mislukt(opdracht.sessie, `envelop van claude wijkt af: ${envelop.error.message}`),
+        };
     }
     const data = envelop.data;
     const basis = {
@@ -188,27 +293,65 @@ export function draaiWerker(opdracht) {
         ...(data.num_turns === undefined ? {} : { beurten: data.num_turns }),
     };
     if (data.is_error) {
-        // Niet op `subtype` sturen: bij een API-fout stond daar gewoon "success", terwijl
-        // `result` de echte reden droeg ("API Error: 400 …"). Vandaar deze volgorde.
         const reden = (data.result ?? '').trim();
         return {
-            ...basis,
-            afloop: 'mislukt',
-            fout: `run mislukt: ${reden === '' ? data.subtype : reden.slice(0, 300)}`,
+            soort: 'mislukt',
+            uitkomst: {
+                ...basis,
+                afloop: 'mislukt',
+                fout: `run mislukt: ${reden === '' ? data.subtype : reden.slice(0, 300)}`,
+            },
         };
     }
-    const verdict = verdictSchema.safeParse(data.structured_output);
+    return { soort: 'gelezen', basis, structured: data.structured_output };
+}
+/**
+ * Draait één bouw-werker (#183) en vertaalt zijn uitvoer naar een uitkomst.
+ *
+ * Zelfde regels als bij een refinement: de uitkomst komt uit de JSON en nooit uit de
+ * exitcode, en geen verdict is een mislukking en geen "waarschijnlijk gelukt". Het
+ * verschil is het schema — een criterium zonder bewijs komt er niet als `klaar` door.
+ */
+export function draaiBouwer(opdracht) {
+    const gelezen = leesEnvelop({
+        ...opdracht,
+        toegestaan: opdracht.toegestaan ?? BOUWER_TOEGESTAAN,
+        verboden: opdracht.verboden ?? BOUWER_VERBODEN,
+        jsonSchema: opdracht.jsonSchema ?? BOUW_JSON_SCHEMA,
+    });
+    if (gelezen.soort === 'mislukt') {
+        return gelezen.uitkomst;
+    }
+    const verdict = bouwVerdictSchema.safeParse(gelezen.structured);
+    if (!verdict.success) {
+        // Een criterium zonder bewijs landt hier: het schema weigert het als `klaar`, en dan
+        // is er geen uitkomst maar een mislukking — nooit een groen vinkje op een onbewezen
+        // criterium.
+        return {
+            ...gelezen.basis,
+            afloop: 'mislukt',
+            fout: `geen bruikbaar bouw-verdict: ${verdict.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
+        };
+    }
+    return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
+}
+export function draaiWerker(opdracht) {
+    const gelezen = leesEnvelop(opdracht);
+    if (gelezen.soort === 'mislukt') {
+        return gelezen.uitkomst;
+    }
+    const verdict = verdictSchema.safeParse(gelezen.structured);
     if (!verdict.success) {
         // Geen verdict betekent niet "waarschijnlijk gelukt". De geweigerde-rechten-run uit
         // de proef gaf `is_error: false` mét een net excuus in `result` — zonder verdict is
         // er geen bewijs dat er iets gebeurd is.
         return {
-            ...basis,
+            ...gelezen.basis,
             afloop: 'mislukt',
-            fout: `geen bruikbaar verdict in de uitvoer${basis.weigeringen > 0 ? ` (${String(basis.weigeringen)}× gereedschap geweigerd)` : ''}`,
+            fout: `geen bruikbaar verdict in de uitvoer${gelezen.basis.weigeringen > 0 ? ` (${String(gelezen.basis.weigeringen)}× gereedschap geweigerd)` : ''}`,
         };
     }
-    return { ...basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
+    return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
 }
 function mislukt(sessie, fout) {
     return { afloop: 'mislukt', sessie, weigeringen: 0, fout };

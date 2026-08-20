@@ -79,7 +79,7 @@ export function werkplek(issueArgument, opties = {}) {
     if (!Number.isSafeInteger(issue) || issue <= 0) {
         throw new GebruikersFout('Gebruik: factory werkplek <issuenummer> [--op]');
     }
-    const repoDir = process.cwd();
+    const repoDir = opties.cwd ?? process.cwd();
     const pad = werkplekPad(repoWortelVan(repoDir), issue);
     const branch = branchVan(issue);
     if (opties.op === true) {

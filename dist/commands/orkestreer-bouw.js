@@ -1,8 +1,14 @@
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bordItems, ESCALATIE_LABEL } from '../board.js';
+import { bordItems, ESCALATIE_LABEL, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { leesInstellingen, standaardPaden, } from '../orkestrator-instellingen.js';
+import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
-import { buitenDocumenten, werkplaatsWortel } from '../werkplaats.js';
+import { draaiBouwer } from '../werker.js';
+import { buitenDocumenten, versWerkplaats, werkplaatsWortel } from '../werkplaats.js';
+import { inleveren } from './inleveren.js';
+import { werkplek } from './werkplek.js';
 /**
  * De tweede taaksoort: een werker die bouwt in plaats van refinet (#164, slice #182).
  *
@@ -16,6 +22,9 @@ const BOUW_KOLOM = 'Klaar voor Bouwen';
 const GECLAIMD_KOLOM = 'Bouwen';
 /** Alleen kleine klussen. Een epic is geen bouwopdracht, en een slice hoort bij zijn epic. */
 const BOUWBARE_SOORTEN = ['type:bug', 'type:task'];
+const EIGENAAR = 'gjvv13';
+/** Eén model voor alle onbemande werkers — zie het modelkeuze-besluit in #104. */
+const MODEL = 'claude-opus-4-6';
 /**
  * Waar de bouw-werker zijn worktree neerzet.
  *
@@ -80,13 +89,16 @@ export function bouwWachtrij(items) {
  * valt vóórdat er iets gebeurt.
  */
 export function orkestreerBouw(opties = {}) {
-    if (opties.dry !== true) {
-        // Bewust geen stille default naar bouwen. `--eenmalig` komt in #183; tot dan is een
-        // commando dat zonder vlag een werker met schrijfrechten start precies de
-        // verrassing die deze epic wil vermijden.
-        throw new GebruikersFout('Gebruik: factory orkestreer --soort bouw --dry (tonen). Bouwen zelf komt in #183.');
+    if (opties.dry === true && opties.eenmalig === true) {
+        throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
     }
-    const items = bordItems(process.cwd());
+    if (opties.dry !== true && opties.eenmalig !== true) {
+        // Geen stille default naar bouwen: een commando dat zonder vlag een werker met
+        // schrijfrechten start is precies de verrassing die deze epic wil vermijden.
+        throw new GebruikersFout('Gebruik: factory orkestreer --soort bouw --dry (tonen) of --eenmalig (één item bouwen).');
+    }
+    const cwd = process.cwd();
+    const items = bordItems(cwd);
     if (items === undefined) {
         throw new GebruikersFout('Kon het board niet lezen; zonder wachtrij is er niets te doen.\n' +
             '  Controleer je gh-auth (`gh auth status`) en de GraphQL-limiet\n' +
@@ -114,17 +126,121 @@ export function orkestreerBouw(opties = {}) {
     if (eerste === undefined) {
         return;
     }
-    const werkplek = bouwWerkplek(eerste.app, eerste.issue, wortel);
-    if (!buitenDocumenten(werkplek)) {
+    const werkplekPad = bouwWerkplek(eerste.app, eerste.issue, wortel);
+    if (!buitenDocumenten(werkplekPad)) {
         // Onbereikbaar zolang de wortel in $HOME ligt, maar dit is de aanname waar de hele
         // opzet op rust; als iemand het pad verlegt moet dat luid falen.
-        throw new GebruikersFout(`Werkplek ${werkplek} ligt binnen ~/Documents; dat mag niet.`);
+        throw new GebruikersFout(`Werkplek ${werkplekPad} ligt binnen ~/Documents; dat mag niet.`);
     }
-    process.stdout.write(`\nZou nu bouwen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
-        `  werkplek: ${werkplek}\n` +
-        `  branch:   ${bouwBranch(eerste.issue)}\n` +
-        `  budget:   $${String(instellingen.bouwBudgetPerRun)} voor deze run\n` +
-        `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`);
+    if (opties.dry === true) {
+        process.stdout.write(`\nZou nu bouwen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
+            `  werkplek: ${werkplekPad}\n` +
+            `  branch:   ${bouwBranch(eerste.issue)}\n` +
+            `  budget:   $${String(instellingen.bouwBudgetPerRun)} voor deze run\n` +
+            `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`);
+        return;
+    }
+    bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren);
+}
+/** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
+export function bouwPrompt(item, werkmap, factoryMap) {
+    const sjabloon = readFileSync(path.join(templatesDir, 'werker-bouw.md'), 'utf8');
+    const vervang = {
+        '{{ISSUE}}': String(item.issue),
+        '{{TITEL}}': item.titel,
+        '{{APP}}': item.app,
+        '{{BRANCH}}': bouwBranch(item.issue),
+        '{{WERKMAP}}': werkmap,
+        '{{FACTORY_MAP}}': factoryMap,
+    };
+    return Object.entries(vervang).reduce((tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde), sjabloon);
+}
+/**
+ * Bouwt één item af: claimen, worktree maken, werker draaien, inleveren of escaleren.
+ *
+ * De claim gaat vóór alles wat geld kost: een tweede werker of een `/bouw`-sessie in de
+ * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
+ * er één weg moet.
+ */
+function bouwAf(item, cwd, wortel, budgetUsd, leverIn) {
+    kop(`#${String(item.issue)} — ${item.titel}`);
+    zorgVoorEscalatieLabel(cwd);
+    zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
+    // Valt de run om, dan hoort het item terug in de rij: geclaimd blijven staan zonder
+    // dat er iemand aan werkt is precies hoe een item onvindbaar wordt (de les van #153).
+    const terug = () => {
+        zetKolom(item.issue, BOUW_KOLOM, cwd);
+    };
+    let uitkomst;
+    try {
+        const spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
+        const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+        // Via `factory werkplek` en niet met een eigen `git worktree add`: dan geldt hier
+        // dezelfde padconventie en dezelfde branchnaam als voor een menselijke sessie, en
+        // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
+        werkplek(String(item.issue), { cwd: spiegel });
+        const werkmap = bouwWerkplek(item.app, item.issue, wortel);
+        uitkomst = draaiBouwer({
+            prompt: bouwPrompt(item, werkmap, factoryMap),
+            werkmap,
+            sessie: randomUUID(),
+            extraMappen: [factoryMap],
+            budgetUsd,
+            model: MODEL,
+        });
+    }
+    catch (fout) {
+        terug();
+        throw fout;
+    }
+    verwerkBouw(item, uitkomst, cwd, wortel, leverIn);
+}
+/** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
+function verwerkBouw(item, uitkomst, cwd, wortel, leverIn) {
+    const voetnoot = `<sub>${[
+        uitkomst.kosten === undefined ? undefined : `$${uitkomst.kosten.toFixed(2)}`,
+        uitkomst.beurten === undefined ? undefined : `${String(uitkomst.beurten)} beurten`,
+        uitkomst.weigeringen > 0 ? `${String(uitkomst.weigeringen)}× geweigerd` : undefined,
+    ]
+        .filter((deel) => deel !== undefined)
+        .join(' · ')}</sub>\n` +
+        `<!-- orkestrator: sessie=${uitkomst.sessie} werkmap=${bouwWerkplek(item.app, item.issue, wortel)} -->`;
+    if (uitkomst.afloop === 'mislukt') {
+        // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
+        // de rij met een label, zodat dezelfde fout niet vannacht opnieuw draait.
+        blokkeer(item, cwd);
+        plaatsComment(item.issue, `**Bouw-run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot}`, cwd);
+        waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
+        return;
+    }
+    const verdict = uitkomst.verdict;
+    if (verdict?.uitkomst === 'escalatie') {
+        blokkeer(item, cwd);
+        plaatsComment(item.issue, `**Escalatie tijdens het bouwen.**\n\n**Vraag:** ${verdict.vraag}\n\n` +
+            `**Advies:** ${verdict.advies}\n\nEr is niets ingeleverd.\n\n${voetnoot}`, cwd);
+        ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
+        return;
+    }
+    if (verdict?.uitkomst !== 'klaar') {
+        blokkeer(item, cwd);
+        waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
+        return;
+    }
+    // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
+    // schuiven (#128) en de werkplek opruimen. Zonder auto-merge, want deze werker mag
+    // code voorstellen en niet landen.
+    const werkmap = bouwWerkplek(item.app, item.issue, wortel);
+    plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
+        `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
+        verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+        `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`, cwd);
+    leverIn({ cwd: werkmap, geenAutomerge: true });
+    ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
+}
+/** Zet een item stil: terug in de bouw-wachtrij, met het label dat het overslaat. */
+function blokkeer(item, cwd) {
+    zetKolom(item.issue, BOUW_KOLOM, cwd);
+    zetLabel(item.issue, ESCALATIE_LABEL, cwd);
 }
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 export function leesSoort(waarde) {

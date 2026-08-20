@@ -1,5 +1,6 @@
 import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type InleverenOpties } from './inleveren.js';
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
     readonly app: string;
@@ -26,14 +27,23 @@ export declare function bouwBranch(issue: number): string;
 export declare function bouwWachtrij(items: readonly BacklogItem[]): Bouwitem[];
 export interface BouwOpties {
     readonly dry?: boolean;
+    /** Bouwt één item en stopt. */
+    readonly eenmalig?: boolean;
     /** Injecteerbaar voor tests; in productie de echte wortel in `$HOME`. */
     readonly werkplaatsWortel?: string;
     readonly paden?: OrkestratorPaden;
+    /**
+     * Hoe er ingeleverd wordt. Geen CLI-vlag: `inleveren` draait de volledige poort, en
+     * een test hoort prettier, eslint en vitest niet vanuit zichzélf te starten.
+     */
+    readonly leverIn?: (opties: InleverenOpties) => void;
 }
 /**
  * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
  * valt vóórdat er iets gebeurt.
  */
 export declare function orkestreerBouw(opties?: BouwOpties): void;
+/** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
+export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 export declare function leesSoort(waarde: string | undefined): 'refine' | 'bouw';
