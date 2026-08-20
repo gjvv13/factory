@@ -194,19 +194,30 @@ function draaiNacht(cwd, wortel, paden, nu) {
         throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
     }
     const gedaan = new Set();
+    const gemeld = new Set();
     try {
         while (gestart < instellingen.dagmaximum) {
-            const eerste = bouwWachtrij(cwd)[0];
-            if (eerste === undefined) {
+            // Het board één keer per ronde lezen (#153): elke extra uitvraag kost GraphQL-punten
+            // per item, en die pot is de schaarse.
+            const rij = bouwWachtrij(cwd);
+            if (rij.length === 0) {
                 ok('wachtrij leeg; klaar voor vannacht.');
                 break;
             }
-            // Vangnet tegen een lus, zoals `integreer` dat ook heeft. Een geslaagde run haalt
-            // het item normaal uit de wachtrij-kolom, maar `zetKolom` faalt zacht — een
-            // board-hik of een opgesoupeerd GraphQL-budget is genoeg. Dan zou de nacht
-            // hetzelfde issue tot vier keer refinen: vier keer betalen voor één uitwerking.
-            if (gedaan.has(eerste.issue)) {
-                waarschuwing(`#${String(eerste.issue)} staat na de run nog in de wachtrij; gestopt om een lus te voorkomen.`);
+            // Vangnet tegen een lus, zoals `integreer` dat ook heeft: hetzelfde item mag binnen
+            // één nacht nooit twee keer draaien — dat is twee keer betalen voor één uitwerking.
+            // Maar het is een *filter*, geen noodstop. Een item blijft ook in de rij staan bij
+            // een normale escalatie (GitHub's labelfilter loopt seconden achter) of bij een zacht
+            // gefaalde `zetKolom`; stoppen kostte dan de hele nacht in plaats van dat ene item.
+            for (const item of rij) {
+                if (gedaan.has(item.issue) && !gemeld.has(item.issue)) {
+                    gemeld.add(item.issue);
+                    waarschuwing(`#${String(item.issue)} staat na zijn run nog in de wachtrij — overgeslagen voor vannacht.`);
+                }
+            }
+            const eerste = rij.find((item) => !gedaan.has(item.issue));
+            if (eerste === undefined) {
+                ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
                 break;
             }
             gedaan.add(eerste.issue);

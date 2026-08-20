@@ -1036,10 +1036,10 @@ describe('orkestreer --nacht', () => {
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt \$0\.10/);
   });
 
-  it('stopt als een item na zijn run nog in de wachtrij staat', () => {
-    // `zetKolom` faalt zacht — een board-hik of een leeg GraphQL-budget is genoeg — en
-    // dan blijft het item staan. Zonder vangnet refint de nacht hetzelfde issue tot
-    // vier keer: vier keer betalen voor één uitwerking.
+  it('slaat een item over dat na zijn run nog in de wachtrij staat, en gaat door met de rest', () => {
+    // `zetKolom` faalt zacht — een board-hik of een leeg GraphQL-budget is genoeg — en dan
+    // blijft het item staan. Hetzelfde issue twee keer refinen is twee keer betalen voor
+    // één uitwerking, dus overslaan; maar de rest van de nacht hoort door te gaan (#202).
     const basis = nachtBord(WACHTRIJ);
     const bordBlijftStaan: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude'
@@ -1050,8 +1050,60 @@ describe('orkestreer --nacht', () => {
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
-    expect(claudeAanroepen(aanroepen)).toHaveLength(1);
-    expect(uitvoer.join('')).toMatch(/#51 staat na de run nog in de wachtrij/);
+    // Twee runs (het dagmaximum), op twee verschillende items: geen herhaling, geen stop.
+    const gedraaid = claudeAanroepen(aanroepen).map(
+      (a) => /- Issue: \*\*#(\d+)\*\*/.exec(a.argumenten.join('\n'))?.[1],
+    );
+    expect(gedraaid).toHaveLength(2);
+    expect(new Set(gedraaid).size).toBe(2);
+    expect(uitvoer.join('')).toMatch(/overgeslagen voor vannacht/);
+    expect(uitvoer.join('')).not.toMatch(/gestopt om een lus te voorkomen/);
+  });
+
+  it('gaat door met de rij als het eerste item escaleert en de escalatielijst achterloopt', () => {
+    // Precies de storing van 2026-08-20: #131 escaleerde, GitHub's labelfilter liep een
+    // paar seconden achter, dus het item stond nog vooraan — en de nacht stopte met
+    // "2/4 gedaan" terwijl er werk lag.
+    const basis = nachtBord(WACHTRIJ);
+    const achterlopend: UitkomstBepaler = (aanroep, index) => {
+      // De escalatie-uitvraag (REST, niet graphql) blijft leeg: het label is gezet, maar
+      // GitHub's filter kent het nog niet. Daardoor staat het geëscaleerde item de
+      // volgende ronde nog vooraan in de rij — precies wat er vannacht gebeurde.
+      if (
+        aanroep.commando === 'gh' &&
+        aanroep.argumenten[0] === 'api' &&
+        aanroep.argumenten[1] !== 'graphql'
+      ) {
+        return { stdout: '' };
+      }
+      if (aanroep.commando === 'claude') return { stdout: werkerEscaleert() };
+      return basis(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(achterlopend);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Het geëscaleerde item wordt overgeslagen, niet herhaald, en de nacht gaat door.
+    const gedraaid = claudeAanroepen(aanroepen).map(
+      (a) => /- Issue: \*\*#(\d+)\*\*/.exec(a.argumenten.join('\n'))?.[1],
+    );
+    expect(gedraaid).toHaveLength(2);
+    expect(new Set(gedraaid).size).toBe(2);
+    expect(uitvoer.join('')).toMatch(/overgeslagen voor vannacht/);
+  });
+
+  it('laat een overgeslagen item de dagteller niet verhogen', () => {
+    const basis = nachtBord(WACHTRIJ);
+    const bordBlijftStaan: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude' ? { stdout: werkerKlaar() } : basis(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(bordBlijftStaan).uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Twee runs, dus de teller staat op 2 — niet op 3 doordat de overslag ook meetelde.
+    expect(uitvoer.join('')).toMatch(/2\/2 van vannacht gedaan/);
+    expect(uitvoer.join('')).not.toMatch(/3\/2/);
   });
 
   it('logt ook een run die de CLI omvertrekt', () => {
