@@ -286,9 +286,11 @@ function leesEnvelop(opdracht) {
         };
     }
     const data = envelop.data;
+    const geweigerd = [...new Set((data.permission_denials ?? []).map((d) => d.tool_name))];
     const basis = {
         sessie: data.session_id,
         weigeringen: data.permission_denials?.length ?? 0,
+        ...(geweigerd.length === 0 ? {} : { geweigerd }),
         ...(data.total_cost_usd === undefined ? {} : { kosten: data.total_cost_usd }),
         ...(data.num_turns === undefined ? {} : { beurten: data.num_turns }),
     };

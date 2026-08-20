@@ -329,7 +329,14 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(claim).toBeLessThan(werker);
 
     // Inleveren gebeurt met geenAutomerge, en nooit via `gh pr merge --auto`.
-    expect(geleverd).toEqual([{ cwd: path.join(wortel, 'factory-wt', '91'), geenAutomerge: true }]);
+    expect(geleverd).toEqual([
+      {
+        cwd: path.join(wortel, 'factory-wt', '91'),
+        geenAutomerge: true,
+        // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/91 1".
+        titel: '#91 — factory nieuw levert een app zonder .gitignore',
+      },
+    ]);
     expect(
       aanroepen.some((a) => a.argumenten.includes('--auto') || a.argumenten[1] === 'merge'),
     ).toBe(false);
@@ -365,6 +372,17 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       (a) => a.argumenten[0] === 'project' && a.argumenten.includes('optie-klaar'),
     );
     expect(terug.length).toBeGreaterThan(0);
+  });
+
+  it('noemt in de comment wélke gereedschappen geweigerd zijn', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-fout'));
+
+    // Alleen een aantal is niet bruikbaar: negen keer `git push` betekent dat de grens
+    // werkt, negen keer iets wat hij nodig had dat de lijst te krap is.
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comment?.argumenten.join(' ')).toContain('1× geweigerd (Bash)');
   });
 
   it('herkent is_error bij exitcode 0 als mislukt', () => {

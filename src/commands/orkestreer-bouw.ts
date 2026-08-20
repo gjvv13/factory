@@ -274,7 +274,9 @@ function verwerkBouw(
     `<sub>${[
       uitkomst.kosten === undefined ? undefined : `$${uitkomst.kosten.toFixed(2)}`,
       uitkomst.beurten === undefined ? undefined : `${String(uitkomst.beurten)} beurten`,
-      uitkomst.weigeringen > 0 ? `${String(uitkomst.weigeringen)}× geweigerd` : undefined,
+      uitkomst.weigeringen > 0
+        ? `${String(uitkomst.weigeringen)}× geweigerd${uitkomst.geweigerd === undefined ? '' : ` (${uitkomst.geweigerd.join(', ')})`}`
+        : undefined,
     ]
       .filter((deel) => deel !== undefined)
       .join(' · ')}</sub>\n` +
@@ -324,7 +326,13 @@ function verwerkBouw(
       `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
     cwd,
   );
-  leverIn({ cwd: werkmap, geenAutomerge: true });
+  // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
+  // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
+  leverIn({
+    cwd: werkmap,
+    geenAutomerge: true,
+    titel: `#${String(item.issue)} — ${item.titel}`,
+  });
   ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
 }
 

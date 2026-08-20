@@ -279,6 +279,13 @@ export interface WerkerBasis {
   readonly beurten?: number;
   /** Hoe vaak een gereedschap geweigerd werd; 0 bij een schone run. */
   readonly weigeringen: number;
+  /**
+   * Wélke gereedschappen geweigerd werden, zonder dubbelen. Alleen een aantal is niet
+   * bruikbaar: negen keer `git push` betekent dat de grens werkt, negen keer iets wat hij
+   * nodig had betekent dat de lijst te krap is — en dat verschil zag je niet (gemeten bij
+   * de eerste bouw-run, #87 op 2026-08-20).
+   */
+  readonly geweigerd?: readonly string[];
   /** Bij `mislukt`: waarom, in één regel die in een comment past. */
   readonly fout?: string;
 }
@@ -369,9 +376,11 @@ function leesEnvelop(opdracht: WerkerOpdracht):
     };
   }
   const data = envelop.data;
+  const geweigerd = [...new Set((data.permission_denials ?? []).map((d) => d.tool_name))];
   const basis = {
     sessie: data.session_id,
     weigeringen: data.permission_denials?.length ?? 0,
+    ...(geweigerd.length === 0 ? {} : { geweigerd }),
     ...(data.total_cost_usd === undefined ? {} : { kosten: data.total_cost_usd }),
     ...(data.num_turns === undefined ? {} : { beurten: data.num_turns }),
   };
