@@ -13,6 +13,24 @@ import { ok, run, uitvoerVan, waarschuwing } from './shell.js';
  */
 
 /** Als `uitvoerVan`, maar met een eigen omgeving — nodig voor de PAT in een workflow. */
+/**
+ * De eerste betekenisvolle regel van wat `gh` zei toen het misging, ingekort.
+ *
+ * Kort houden is het punt: één regel die in een waarschuwing past. Zonder dit stond er
+ * alleen "kon het niet" en kostte elke oorzaak — te smalle scope, rate-limit, netwerkblip —
+ * een hele release om te achterhalen (#195, v1.15.15 en v1.15.16).
+ */
+function ghReden(stderr: string): string {
+  const regel = stderr
+    .split('\n')
+    .map((r) => r.trim())
+    .find((r) => r !== '');
+  if (regel === undefined) {
+    return 'geen foutmelding van gh';
+  }
+  return regel.length > 200 ? `${regel.slice(0, 197)}...` : regel;
+}
+
 function uitvoerMetEnv(
   commando: string,
   argumenten: string[],
@@ -25,7 +43,16 @@ function uitvoerMetEnv(
     capture: true,
     toleranter: true,
   });
-  return uitkomst.code === 0 ? uitkomst.stdout.trim() : undefined;
+  if (uitkomst.code === 0) {
+    return uitkomst.stdout.trim();
+  }
+  // Elke aanroeper hierboven leest een niet-nul code als "kon niet lezen" en geeft
+  // undefined door; zonder deze regel verdwijnt de enige plek waar de échte oorzaak staat.
+  waarschuwing(
+    `gh ${argumenten.slice(0, 2).join(' ')} faalde (code ${String(uitkomst.code)}): ` +
+      ghReden(uitkomst.stderr),
+  );
+  return undefined;
 }
 
 const EIGENAAR = 'gjvv13';
@@ -265,7 +292,10 @@ export function zetKolomUitkomst(issue: number, kolom: Kolom, cwd?: string): Kol
     },
   );
   if (uitkomst.code !== 0) {
-    waarschuwing(`kon #${String(issue)} niet naar '${kolom}' verplaatsen op het board.`);
+    waarschuwing(
+      `kon #${String(issue)} niet naar '${kolom}' verplaatsen op het board: ` +
+        ghReden(uitkomst.stderr),
+    );
     return 'mislukt';
   }
   return 'verzet';
