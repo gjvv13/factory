@@ -82,7 +82,22 @@ describe('factory board', () => {
     board('131', 'Klaar voor Bouwen');
 
     expect(ghArgs(aanroepen).some((a) => a[1] === 'item-edit')).toBe(false);
-    expect(uitvoer.join('')).toMatch(/niets verplaatst/);
+    expect(uitvoer.join('')).toMatch(/stond al op Klaar voor Bouwen/);
+  });
+
+  it('faalt hoorbaar als de aanroep mislukt', () => {
+    // De val van 2026-08-20: met de GraphQL-limiet op nul faalde de opzoeking, en een
+    // boolean maakte daar "niets verplaatst" van — mét een groen vinkje. Een mislukking
+    // moet een mislukking blijven, anders denk je dat het board bij is terwijl het
+    // achterloopt.
+    const opnemer = maakUitvoerderOpnemer(({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[0] === 'api' ? { code: 1 } : {},
+    );
+    stelUitvoerderIn(opnemer.uitvoerder);
+
+    expect(() => {
+      board('131', 'Idee');
+    }).toThrow(/niet verplaatst/);
   });
 
   it('somt de kolommen op bij een typefout', () => {

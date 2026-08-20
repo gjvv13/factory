@@ -1,4 +1,4 @@
-import { KOLOMMEN, zetKolom } from '../board.js';
+import { KOLOMMEN, zetKolomUitkomst } from '../board.js';
 import { GebruikersFout, kop, ok } from '../shell.js';
 /**
  * Eén item van kolom veranderen, via de gerichte board-query (#223).
@@ -30,13 +30,22 @@ export function board(issueArgument, kolomArgument) {
     const issue = vereisIssue(issueArgument);
     const kolom = vereisKolom(kolomArgument);
     kop(`#${String(issue)} naar ${kolom}`);
-    if (zetKolom(issue, kolom, process.cwd())) {
+    // Bewust `zetKolomUitkomst` en niet `zetKolom`: die laatste geeft één boolean voor drie
+    // verschillende dingen — verzet, stond er al, en het is mislukt. Met een boolean werd
+    // een mislukte aanroep (GraphQL-limiet op, geen leesrecht) gemeld als "niets
+    // verplaatst" met een groen vinkje. Gemeten op 2026-08-20, en precies het soort stille
+    // misstand dat deze week drie keer is opgeschreven.
+    const uitkomst = zetKolomUitkomst(issue, kolom, process.cwd());
+    if (uitkomst === 'verzet') {
         ok(`#${String(issue)} staat op ${kolom}`);
         return;
     }
-    // `zetKolom` geeft false zowel als het item er al stond als wanneer het niet te vinden
-    // was; het waarschuwt in het tweede geval zelf. Hier dus geen fout maken van iets wat
-    // misschien gewoon "al goed" is.
-    ok('niets verplaatst — het item stond er al, of het staat niet op het board.');
+    if (uitkomst === 'al-goed') {
+        ok(`#${String(issue)} stond al op ${kolom} — niets te doen.`);
+        return;
+    }
+    // `zetKolomUitkomst` heeft de reden al gemeld; hier gaat het erom dat de aanroeper
+    // weet dat het níet gebeurd is.
+    throw new GebruikersFout(`#${String(issue)} is niet verplaatst — zie de melding hierboven.`);
 }
 //# sourceMappingURL=board.js.map
