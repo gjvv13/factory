@@ -105,6 +105,28 @@ describe('promote', () => {
     expect(aanroepen.some((a) => a.argumenten.includes('seed'))).toBe(true);
   });
 
+  it('geeft de purge-vlag mee aan beide installs, ook in het terugrol-pad (#87)', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { stdout: 'v0.3.0' } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    // Post-swap health faalt: dat triggert het terugrol-pad met zijn eigen install.
+    vi.spyOn(shell, 'wachtOpGezond')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce('{"status":"ok"}');
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow();
+
+    const installs = aanroepen.filter((a) => a.argumenten.includes('install'));
+    expect(installs).toHaveLength(2);
+    for (const install of installs) {
+      expect(install.argumenten).toContain('--config.confirmModulesPurge=false');
+      expect(install.argumenten).toContain('--frozen-lockfile');
+      expect(install.argumenten).toContain('--prod=false');
+    }
+  });
+
   it('stopt bij de eerste fout en raakt de omgeving daarna niet meer aan', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>

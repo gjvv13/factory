@@ -178,6 +178,21 @@ describe('inleveren', () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it('geeft de purge-vlag mee aan de lockfile-install (#87)', () => {
+    process.chdir(maakRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    const installs = aanroepen.filter((a) => a.argumenten.includes('install'));
+    expect(installs).toHaveLength(1);
+    const install = installs[0];
+    expect(install).toBeDefined();
+    expect(install!.argumenten).toContain('--config.confirmModulesPurge=false');
+    expect(install!.argumenten).toContain('--lockfile-only');
+  });
+
   it('committeert de lockfile als die door de sync wijzigde', () => {
     process.chdir(maakRepo());
     const bepaal: UitkomstBepaler = (aanroep) => {
