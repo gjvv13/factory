@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { APP_CONFIG_BESTAND, leesAppConfig } from '../app-config.js';
 import { factoryPakketDir, skeletonDir } from '../paths.js';
@@ -214,6 +214,31 @@ export interface NieuwOpties {
 }
 
 /** Zet een nieuwe applicatie op basis van het skeleton, met een eigen poortblok. */
+/**
+ * Geeft het skeleton-bestand `gitignore` zijn punt terug in de nieuwe app.
+ *
+ * In het skeleton heet het bewust `gitignore`, zonder punt: npm's pack-laag laat een
+ * `.gitignore` een pakket niet overleven — in een geïnstalleerde factory was het bestand
+ * simpelweg verdwenen, of stond er een `.npmignore` voor in de plaats (#91). Omdat
+ * `nieuw` het skeleton uit het **draaiende pakket** leest, kreeg elke nieuwe app dus geen
+ * `.gitignore`.
+ *
+ * Ontbreekt het bronbestand toch, dan waarschuwen we en gaan we door: een app zonder
+ * `.gitignore` is hinderlijk, maar het aanmaken afbreken is erger — je staat dan met een
+ * halve repo.
+ */
+function herstelGitignore(appDir: string): void {
+  const bron = path.join(appDir, 'gitignore');
+  if (!existsSync(bron)) {
+    waarschuwing(
+      "het skeleton had geen 'gitignore'; de nieuwe app krijgt dus geen .gitignore " +
+        '(zie #91). Kopieer hem met de hand uit een bestaande app.',
+    );
+    return;
+  }
+  renameSync(bron, path.join(appDir, '.gitignore'));
+}
+
 export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void {
   if (naam === undefined || !/^[a-z][a-z0-9-]*$/.test(naam)) {
     throw new GebruikersFout(
@@ -234,6 +259,7 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
 
   kop(`Applicatie '${naam}' aanmaken in ${appDir}`);
   cpSync(skeletonDir, appDir, { recursive: true });
+  herstelGitignore(appDir);
 
   // Dubbele accolades en niet __TOKEN__: dat laatste leest markdown als vetgedrukt,
   // waardoor prettier de placeholder in het skeleton zou omschrijven.
