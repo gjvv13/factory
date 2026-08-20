@@ -31,7 +31,7 @@ function bestaandePr(repoDir, branch) {
  * kan meteen aan de volgende slice beginnen.
  */
 export function inleveren(opties = {}) {
-    const repoDir = process.cwd();
+    const repoDir = opties.cwd ?? process.cwd();
     const branch = uitvoerVan('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoDir);
     if (branch === undefined || branch === 'main') {
         throw new GebruikersFout(`Inleveren doe je vanaf een slice-branch, niet vanaf '${branch ?? '?'}'.`);
@@ -92,7 +92,14 @@ export function inleveren(opties = {}) {
     }
     // Nu opzoeken, zolang de map er nog is: het opruimen hieronder maakt hem onvindbaar.
     const werkplek = werkplekVanSessie(repoDir);
-    if (lokaal) {
+    if (opties.geenAutomerge === true) {
+        // Een onbemande bouw-werker mag code voorstellen, niet landen. Dus geen auto-merge
+        // en op een app ook geen `wachtrij`-label — dat label ís de opdracht om te mergen.
+        // De PR staat er, de poort draait erop, en het mergen blijft een mensbesluit.
+        ok(`PR geopend zonder auto-merge: ${prUrl}`);
+        process.stdout.write(`\n${branch} wacht op een menselijke merge; er is niets in een wachtrij gezet.\n`);
+    }
+    else if (lokaal) {
         // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
         // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).
         zorgVoorWachtrijLabel(repoDir);
