@@ -8,6 +8,7 @@ import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
+import { leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -37,6 +38,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
+  factory orkestreer --soort bouw --dry  wachtrij en bouwplan van de bouw-werker (schrijft niets)
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
@@ -126,9 +128,14 @@ async function main(argumenten) {
             return;
         }
         case 'orkestreer': {
-            const { schakelaars, positioneel } = leesArgumenten(rest, {
+            const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
                 schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
+                waarden: ['--soort'],
             });
+            if (leesSoort(waarden.get('--soort')) === 'bouw') {
+                orkestreerBouw({ dry: schakelaars.has('--dry') });
+                return;
+            }
             if (positioneel[0] === 'status') {
                 orkestreerStatus(process.cwd());
                 return;

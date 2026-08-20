@@ -66,12 +66,18 @@ const instellingenSchema = z.object({
   FACTORY_DAGMAXIMUM: z.coerce.number().int().min(1).max(50).default(4),
   /** Harde kostenrem per run, als `--max-budget-usd`. Default 5. */
   FACTORY_BUDGET_USD: z.coerce.number().positive().max(100).default(5),
+  /**
+   * Kostenrem voor een bouw-run (#182). Ruimer dan een refinement: bouwen is lezen,
+   * schrijven, de poort draaien en op rood opnieuw — dat zijn simpelweg meer beurten.
+   */
+  FACTORY_BOUW_BUDGET_USD: z.coerce.number().positive().max(100).default(10),
   [TOKEN_SLEUTEL]: z.string().min(1).optional(),
 });
 
 export interface Instellingen {
   readonly dagmaximum: number;
   readonly budgetPerRun: number;
+  readonly bouwBudgetPerRun: number;
   /** Undefined als er (nog) geen token in het bestand staat. */
   readonly token?: string;
 }
@@ -109,7 +115,7 @@ function leesEnvBestand(bestand: string): Record<string, string> {
  */
 export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
   if (!existsSync(paden.envPad)) {
-    return { dagmaximum: 4, budgetPerRun: 5 };
+    return { dagmaximum: 4, budgetPerRun: 5, bouwBudgetPerRun: 10 };
   }
   waarschuwBijSlappeRechten(paden.envPad);
   const gelezen = instellingenSchema.safeParse(leesEnvBestand(paden.envPad));
@@ -123,6 +129,7 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
   return {
     dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
     budgetPerRun: gelezen.data.FACTORY_BUDGET_USD,
+    bouwBudgetPerRun: gelezen.data.FACTORY_BOUW_BUDGET_USD,
     ...(token === undefined ? {} : { token }),
   };
 }

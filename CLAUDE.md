@@ -33,6 +33,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory orkestreer <--dry\|--eenmalig>`          | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |
 | `factory orkestreer --nacht`                      | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
 | `factory orkestreer <--installeer\|--verwijder>`  | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                |
+| `factory orkestreer --soort bouw --dry`           | Wachtrij en bouwplan van de bouw-werker; schrijft niets (#182)                                            |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze
@@ -316,6 +317,25 @@ staan. Dat is ook veruit het goedkoopst: gemeten op 2026-08-19 kostte een hervat
 $0,02 tegen $0,32 voor een verse run, want de context zit in de cache. Is de sessie er
 niet meer, dan zegt het commando dat en biedt het `--opnieuw` aan — een verse run met
 je antwoord erbij.
+
+**Een tweede taaksoort: bouwen (#164).** `--soort bouw` richt dezelfde harness op de
+kolom **Klaar voor Bouwen** in plaats van op de refinement-wachtrij. Geen `--soort` blijft
+refinen, zodat bestaande aanroepen niet van betekenis veranderen.
+
+```bash
+factory orkestreer --soort bouw --dry   # wachtrij + bouwplan; schrijft niets
+```
+
+De bouw-wachtrij is smaller dan de refinement-wachtrij: alleen `type:bug` en `type:task`,
+geen epic en geen slice onder een epic (die horen in de volgorde van hun epic), niets met
+een `escalatie`-label, en niets dat al op **Bouwen** staat — dat laatste is de claim
+waarmee twee werkers elkaar niet in de weg lopen. Labels en de ouder-relatie komen mee in
+dezelfde board-lezing, dus dit filter kost geen extra GraphQL-punten.
+
+De worktree komt op `~/OrkestratorWerk/<app>-wt/<issue>` — naast de spiegels en niet
+erin, want een spiegel wordt vóór elke run hard teruggezet op `origin/main`. Het budget is
+apart instelbaar (`FACTORY_BOUW_BUDGET_USD`, default $10): bouwen is lezen, schrijven, de
+poort draaien en op rood opnieuw, en dat zijn simpelweg meer beurten dan een refinement.
 
 **Het contract staat in een skill.** `skills/onbemand-werken/SKILL.md` draagt de
 gesloten lijst van dingen waarbij een werker stopt, wat er wél zonder vragen mag, en

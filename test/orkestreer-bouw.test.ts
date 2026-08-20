@@ -1,0 +1,225 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  bouwBranch,
+  bouwWachtrij,
+  bouwWerkplek,
+  leesSoort,
+  orkestreerBouw,
+} from '../src/commands/orkestreer-bouw.js';
+import { bordItems } from '../src/board.js';
+import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
+
+/** De opgenomen board-uitvoer met alle randgevallen van de bouw-wachtrij. */
+function bord(): string {
+  const hier = path.dirname(fileURLToPath(import.meta.url));
+  return readFileSync(path.join(hier, 'fixtures', 'project-items-klaar-voor-bouwen.json'), 'utf8');
+}
+
+/** Een uitvoerder die elke board-lezing met de fixture antwoordt. */
+function metBord() {
+  return maakUitvoerderOpnemer(({ commando, argumenten }) =>
+    commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql'
+      ? { stdout: bord() }
+      : {},
+  );
+}
+
+function boardLezingen(aanroepen: ProcesAanroep[]): number {
+  return aanroepen.filter((a) =>
+    a.argumenten.some((arg) => arg.startsWith('query=') && arg.includes('items(first:100')),
+  ).length;
+}
+
+describe('de bouw-wachtrij', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('neemt alleen kleine, onbeklede klussen uit Klaar voor Bouwen, oudste eerst', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = bouwWachtrij(bordItems() ?? []);
+
+    // #91 (bug, 5 aug) vóór #126 (task, 10 aug). En verder niets:
+    // #164 is een epic, #182 een slice daaronder, #149 draagt escalatie, #200 heeft geen
+    // App, #87 staat al op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
+    expect(rij.map((item) => item.issue)).toEqual([91, 126]);
+  });
+
+  it('laat een epic en zijn slices staan', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = bouwWachtrij(bordItems() ?? []);
+
+    // Een epic is geen bouwopdracht, en een slice hoort in de volgorde van zijn epic —
+    // niet losgepikt omdat hij toevallig vooraan staat.
+    expect(rij.map((item) => item.issue)).not.toContain(164);
+    expect(rij.map((item) => item.issue)).not.toContain(182);
+  });
+
+  it('laat een slice staan waarvan het epic niet eens in de lezing zit', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = bouwWachtrij(bordItems() ?? []);
+
+    // De echte val van 2026-08-20: `bordItems` slaat items zonder Status-waarde over, en
+    // #164/#169/#171 hebben die niet. Een filter dat de ouder moet kunnen opzoeken laat
+    // hun slices dan gewoon in de bouw-wachtrij staan. #177 hangt hier onder een epic dat
+    // niet in de lezing voorkomt en hoort er alsnog uit.
+    expect(rij.map((item) => item.issue)).not.toContain(177);
+    expect(rij.map((item) => item.issue)).toEqual([91, 126]);
+  });
+
+  it('slaat een geëscaleerd item over', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    expect(bouwWachtrij(bordItems() ?? []).map((item) => item.issue)).not.toContain(149);
+  });
+
+  it('slaat een item zonder App-veld over, met een melding', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = bouwWachtrij(bordItems() ?? []);
+
+    // Zonder App weet de werker niet welke code hij moet lezen. Stil overslaan zou
+    // betekenen dat zo'n item nooit aan de beurt komt zonder dat iemand het merkt.
+    expect(rij.map((item) => item.issue)).not.toContain(200);
+    expect(uitvoer.join('')).toMatch(/#200 heeft geen App-veld/);
+  });
+
+  it('laat een geclaimd item met rust', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    // #87 staat op Bouwen: daar werkt iemand aan, of een werker heeft hem geclaimd.
+    expect(bouwWachtrij(bordItems() ?? []).map((item) => item.issue)).not.toContain(87);
+  });
+});
+
+describe('orkestreer --soort bouw --dry', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('toont de rij, de werkplek, de branch en het budget', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain('#91');
+    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/91');
+    expect(tekst).toContain('slice/91-1');
+    // Zonder instellingenbestand is het bouwbudget de default van $10.
+    expect(tekst).toContain('$10');
+  });
+
+  it('schrijft niets', () => {
+    const { uitvoerder, aanroepen } = metBord();
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    // Geen claude, geen git (dus geen worktree), en geen enkele schrijvende gh-aanroep.
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'git')).toBe(false);
+    expect(
+      aanroepen.some(
+        (a) =>
+          a.commando === 'gh' &&
+          (a.argumenten[0] === 'project' ||
+            a.argumenten[0] === 'issue' ||
+            a.argumenten[0] === 'pr'),
+      ),
+    ).toBe(false);
+  });
+
+  it('leest het board precies één keer', () => {
+    const { uitvoerder, aanroepen } = metBord();
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    // De harness-regel van #153: het GraphQL-budget is gedeeld met elke sessie op dit
+    // account, dus één lezing per run — ook met negen items op het board.
+    expect(boardLezingen(aanroepen)).toBe(1);
+  });
+
+  it('meldt hoeveel items geclaimd zijn', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    // Een geclaimd item is niet vergeten maar in behandeling; dat wil je zien zonder
+    // het board te openen.
+    expect(uitvoer.join('')).toMatch(/1 item\(s\) staan op Bouwen/);
+  });
+
+  it('weigert te bouwen zonder --dry, want dat komt in #183', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    // Een commando dat zonder vlag een werker met schrijfrechten start is precies de
+    // verrassing die deze epic wil vermijden.
+    expect(() => {
+      orkestreerBouw({ werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    }).toThrow(/--dry/);
+  });
+
+  it('weigert een werkplek binnen ~/Documents', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    // De hele opzet rust erop dat een onbemande werker daar niet komt: TCC houdt hem
+    // buiten, en er lopen parallelle sessies in de werkkopieën.
+    expect(() => {
+      orkestreerBouw({ dry: true, werkplaatsWortel: `${process.env.HOME ?? ''}/Documents/Werk` });
+    }).toThrow(/binnen ~\/Documents/);
+  });
+});
+
+describe('de vorm van een bouwplan', () => {
+  it('zet de worktree naast de spiegels, niet erin', () => {
+    // `<app>-wt` en niet `<app>`: een worktree mag nooit met een spiegel te verwarren
+    // zijn, want de spiegel wordt vóór elke run hard teruggezet op origin/main.
+    expect(bouwWerkplek('beheer', 149, '/w')).toBe('/w/beheer-wt/149');
+    expect(bouwBranch(149)).toBe('slice/149-1');
+  });
+
+  it('houdt refinen de default en weigert een onbekende soort', () => {
+    expect(leesSoort(undefined)).toBe('refine');
+    expect(leesSoort('refine')).toBe('refine');
+    expect(leesSoort('bouw')).toBe('bouw');
+    // Stil terugvallen op refinen zou een bouwopdracht in een refinement veranderen.
+    expect(() => leesSoort('bouwen')).toThrow(/Onbekende --soort/);
+  });
+});

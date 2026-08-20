@@ -88,6 +88,14 @@ export interface BacklogItem {
     readonly app?: string;
     readonly kolom: string;
     readonly aangemaakt: string;
+    /**
+     * De labels van het issue. Komen mee in dezelfde board-lezing (#182): de bouw-wachtrij
+     * filtert op `type:bug`/`type:task` en op `escalatie`, en dat mag geen tweede
+     * aanroep per item kosten — zie de kostenparagraaf in #104.
+     */
+    readonly labels: readonly string[];
+    /** Het ouder-issue (sub-issue-relatie), als dit item er een heeft. */
+    readonly ouder?: number;
 }
 /** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
 export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;

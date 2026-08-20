@@ -40,6 +40,7 @@ export declare const TOKEN_SLEUTEL = "CLAUDE_CODE_OAUTH_TOKEN";
 export interface Instellingen {
     readonly dagmaximum: number;
     readonly budgetPerRun: number;
+    readonly bouwBudgetPerRun: number;
     /** Undefined als er (nog) geen token in het bestand staat. */
     readonly token?: string;
 }

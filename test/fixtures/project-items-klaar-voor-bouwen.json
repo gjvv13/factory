@@ -1,0 +1,238 @@
+{
+  "data": {
+    "user": {
+      "projectV2": {
+        "items": {
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "status": null,
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 164,
+                "title": "Onbemande werkers die bouwen",
+                "state": "OPEN",
+                "createdAt": "2026-08-19T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:epic"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 91,
+                "title": "factory nieuw levert een app zonder .gitignore",
+                "state": "OPEN",
+                "createdAt": "2026-08-05T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:bug"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 126,
+                "title": "factory opruimen",
+                "state": "OPEN",
+                "createdAt": "2026-08-10T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 182,
+                "title": "--soort bouw --dry",
+                "state": "OPEN",
+                "createdAt": "2026-08-19T10:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": {
+                  "number": 164
+                }
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "beheer"
+              },
+              "content": {
+                "number": 149,
+                "title": "Migratiestatus per omgeving",
+                "state": "OPEN",
+                "createdAt": "2026-08-12T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    },
+                    {
+                      "name": "escalatie"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": null,
+              "content": {
+                "number": 200,
+                "title": "Item zonder App-veld",
+                "state": "OPEN",
+                "createdAt": "2026-08-02T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 87,
+                "title": "factory promote faalt zonder TTY",
+                "state": "OPEN",
+                "createdAt": "2026-08-03T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:bug"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Technisch refinen"
+              },
+              "app": {
+                "name": "assistant"
+              },
+              "content": {
+                "number": 119,
+                "title": "Antwoorden op een doorgestuurd bericht",
+                "state": "OPEN",
+                "createdAt": "2026-08-18T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 78,
+                "title": "Gesloten item",
+                "state": "CLOSED",
+                "createdAt": "2026-08-01T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 177,
+                "title": "Slice onder een epic dat geen Status heeft",
+                "state": "OPEN",
+                "createdAt": "2026-08-04T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": {
+                  "number": 169
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
