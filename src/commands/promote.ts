@@ -13,6 +13,7 @@ import {
   bevestig,
   GebruikersFout,
   git,
+  installeer,
   isGezondNaStart,
   isInteractief,
   kop,
@@ -123,10 +124,7 @@ export async function promote(
   const { commando, basisArgumenten } = pakketbeheerder();
 
   kop('Afhankelijkheden installeren');
-  run(commando, [...basisArgumenten, 'install', '--frozen-lockfile', '--prod=false'], {
-    cwd: werkmap,
-    capture: true,
-  });
+  installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
 
   kop('Bouwen');
   run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
@@ -219,10 +217,7 @@ export async function promote(
     ['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'],
     werkmap,
   );
-  run(commando, [...basisArgumenten, 'install', '--frozen-lockfile', '--prod=false'], {
-    cwd: werkmap,
-    capture: true,
-  });
+  installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
   run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
   herstartOmgeving(ecosystem, pm2Naam);
 

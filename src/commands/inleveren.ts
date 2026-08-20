@@ -6,9 +6,9 @@ import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
   git,
+  installeer,
   kop,
   ok,
-  pakketbeheerder,
   run,
   runMetHerhaling,
   uitvoerVan,
@@ -84,11 +84,7 @@ export function inleveren(opties: InleverenOpties = {}): void {
   // struikelt (`--frozen-lockfile`). `--lockfile-only`: alleen de lockfile, geen
   // volledige install van node_modules.
   kop('Lockfile bijwerken');
-  const { commando, basisArgumenten } = pakketbeheerder();
-  run(commando, [...basisArgumenten, 'install', '--lockfile-only'], {
-    cwd: repoDir,
-    capture: true,
-  });
+  installeer(['--lockfile-only'], { cwd: repoDir, capture: true });
   ok(
     commitAlsGewijzigd(repoDir, 'pnpm-lock.yaml', 'sync lockfile voor inleveren')
       ? 'lockfile bijgewerkt en gecommit'
