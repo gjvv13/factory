@@ -443,6 +443,14 @@ export interface BacklogItem {
   readonly app?: string;
   readonly kolom: string;
   readonly aangemaakt: string;
+  /**
+   * De labels van het issue. Komen mee in dezelfde board-lezing (#182): de bouw-wachtrij
+   * filtert op `type:bug`/`type:task` en op `escalatie`, en dat mag geen tweede
+   * aanroep per item kosten — zie de kostenparagraaf in #104.
+   */
+  readonly labels: readonly string[];
+  /** Het ouder-issue (sub-issue-relatie), als dit item er een heeft. */
+  readonly ouder?: number;
 }
 
 const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
@@ -452,7 +460,9 @@ const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
       nodes{
         status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
-        content{ ... on Issue { number title state createdAt } } } } } }
+        content{ ... on Issue { number title state createdAt
+          labels(first:20){ nodes{ name } }
+          parent{ number } } } } } } }
 }`;
 
 interface WachtrijAntwoord {
@@ -469,6 +479,8 @@ interface WachtrijAntwoord {
               title?: string;
               state?: string;
               createdAt?: string;
+              labels?: { nodes?: ({ name?: string } | null)[] } | null;
+              parent?: { number?: number } | null;
             } | null;
           }[];
         };
@@ -548,12 +560,18 @@ export function bordItems(cwd?: string): BacklogItem[] | undefined {
         continue;
       }
       const app = knoop.app?.name;
+      const ouder = inhoud.parent?.number;
+      const labels = (inhoud.labels?.nodes ?? [])
+        .map((label) => label?.name)
+        .filter((naam): naam is string => naam !== undefined);
       gevonden.push({
         issue: nummer,
         titel: inhoud.title ?? '',
         kolom,
         aangemaakt: inhoud.createdAt ?? '',
+        labels,
         ...(app === undefined ? {} : { app }),
+        ...(ouder === undefined ? {} : { ouder }),
       });
     }
     const volgende = items.pageInfo?.endCursor;

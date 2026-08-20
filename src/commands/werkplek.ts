@@ -94,6 +94,11 @@ function elders(repoDir: string, branch: string): string | undefined {
 }
 
 export interface WerkplekOpties {
+  /**
+   * De repo waarin de werkplek gemaakt wordt. Geen CLI-vlag: de bouw-werker (#183) roept
+   * dit aan vanuit de spiegel in `~/OrkestratorWerk`, en die staat niet in `process.cwd()`.
+   */
+  readonly cwd?: string;
   /** Ruimt de werkplek op in plaats van hem te maken. */
   readonly op?: boolean;
 }
@@ -107,7 +112,7 @@ export function werkplek(issueArgument: string | undefined, opties: WerkplekOpti
   if (!Number.isSafeInteger(issue) || issue <= 0) {
     throw new GebruikersFout('Gebruik: factory werkplek <issuenummer> [--op]');
   }
-  const repoDir = process.cwd();
+  const repoDir = opties.cwd ?? process.cwd();
   const pad = werkplekPad(repoWortelVan(repoDir), issue);
   const branch = branchVan(issue);
 

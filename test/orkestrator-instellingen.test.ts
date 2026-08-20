@@ -60,13 +60,31 @@ describe('orkestrator-instellingen', () => {
     it('valt zonder bestand terug op dagmaximum 4 en $5 per run', () => {
       // De defaults uit #104/#155. Zonder deze terugval zou een verse machine niets doen
       // of, erger, zonder rem draaien.
-      expect(leesInstellingen(paden)).toEqual({ dagmaximum: 4, budgetPerRun: 5 });
+      expect(leesInstellingen(paden)).toEqual({
+        dagmaximum: 4,
+        budgetPerRun: 5,
+        bouwBudgetPerRun: 10,
+      });
     });
 
     it('leest een eigen dagmaximum en budget', () => {
       schrijfEnv('FACTORY_DAGMAXIMUM=2\nFACTORY_BUDGET_USD=1.5\n');
 
-      expect(leesInstellingen(paden)).toEqual({ dagmaximum: 2, budgetPerRun: 1.5 });
+      expect(leesInstellingen(paden)).toEqual({
+        dagmaximum: 2,
+        budgetPerRun: 1.5,
+        bouwBudgetPerRun: 10,
+      });
+    });
+
+    it('heeft een ruimer budget voor een bouw-run dan voor een refinement', () => {
+      // Bouwen is lezen, schrijven, de poort draaien en op rood opnieuw — meer beurten
+      // dan een refinement. Eén rem voor beide zou of te krap of te ruim zijn.
+      schrijfEnv('FACTORY_BOUW_BUDGET_USD=12\n');
+
+      const instellingen = leesInstellingen(paden);
+      expect(instellingen.bouwBudgetPerRun).toBe(12);
+      expect(instellingen.budgetPerRun).toBe(5);
     });
 
     it('behandelt een leeg rechterlid als niet-ingevuld', () => {
@@ -74,7 +92,11 @@ describe('orkestrator-instellingen', () => {
       // `FACTORY_DAGMAXIMUM=` als 0 langs Zod komen en de nacht stilzetten.
       schrijfEnv(`${TOKEN_SLEUTEL}=\nFACTORY_DAGMAXIMUM=\n`);
 
-      expect(leesInstellingen(paden)).toEqual({ dagmaximum: 4, budgetPerRun: 5 });
+      expect(leesInstellingen(paden)).toEqual({
+        dagmaximum: 4,
+        budgetPerRun: 5,
+        bouwBudgetPerRun: 10,
+      });
     });
 
     it('faalt luid op een onmogelijke waarde', () => {

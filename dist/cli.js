@@ -8,6 +8,7 @@ import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
+import { leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -21,7 +22,7 @@ import { fout, GebruikersFout } from './shell.js';
 const HULP = `factory — pipeline van idee tot productie
 
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
-  factory inleveren [--titel=<titel>]    poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten
+  factory inleveren [--titel=<titel>] [--geen-automerge]  poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten
   factory integreer [--repo=<owner/naam>|--installeer|--verwijder]  werk de wachtrij af (--repo: TCC-vrij van overal)
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
@@ -37,6 +38,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
+  factory orkestreer --soort bouw <--dry|--eenmalig>  bouw-werker: wachtrij tonen, of één item bouwen
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
@@ -50,9 +52,15 @@ async function main(argumenten) {
             return;
         }
         case 'inleveren': {
-            const { waarden } = leesArgumenten(rest, { waarden: ['--titel'] });
+            const { schakelaars, waarden } = leesArgumenten(rest, {
+                schakelaars: ['--geen-automerge'],
+                waarden: ['--titel'],
+            });
             const titel = waarden.get('--titel');
-            inleveren(titel === undefined ? {} : { titel });
+            inleveren({
+                ...(titel === undefined ? {} : { titel }),
+                geenAutomerge: schakelaars.has('--geen-automerge'),
+            });
             return;
         }
         case 'integreer': {
@@ -126,9 +134,17 @@ async function main(argumenten) {
             return;
         }
         case 'orkestreer': {
-            const { schakelaars, positioneel } = leesArgumenten(rest, {
+            const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
                 schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
+                waarden: ['--soort'],
             });
+            if (leesSoort(waarden.get('--soort')) === 'bouw') {
+                orkestreerBouw({
+                    dry: schakelaars.has('--dry'),
+                    eenmalig: schakelaars.has('--eenmalig'),
+                });
+                return;
+            }
             if (positioneel[0] === 'status') {
                 orkestreerStatus(process.cwd());
                 return;

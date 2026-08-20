@@ -324,7 +324,9 @@ const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
       nodes{
         status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
-        content{ ... on Issue { number title state createdAt } } } } } }
+        content{ ... on Issue { number title state createdAt
+          labels(first:20){ nodes{ name } }
+          parent{ number } } } } } } }
 }`;
 /** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
 export function wachtrijVan(kolom, cwd) {
@@ -392,12 +394,18 @@ export function bordItems(cwd) {
                 continue;
             }
             const app = knoop.app?.name;
+            const ouder = inhoud.parent?.number;
+            const labels = (inhoud.labels?.nodes ?? [])
+                .map((label) => label?.name)
+                .filter((naam) => naam !== undefined);
             gevonden.push({
                 issue: nummer,
                 titel: inhoud.title ?? '',
                 kolom,
                 aangemaakt: inhoud.createdAt ?? '',
+                labels,
                 ...(app === undefined ? {} : { app }),
+                ...(ouder === undefined ? {} : { ouder }),
             });
         }
         const volgende = items.pageInfo?.endCursor;
