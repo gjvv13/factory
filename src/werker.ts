@@ -49,6 +49,19 @@ export const BOUWER_TOEGESTAAN = [
   'Glob',
   'Write',
   'Edit',
+  // De lees- en tmp-werkwoorden (#217). Ze geven geen macht die `Write` en `Edit` niet
+  // al geven, en zonder deze zocht de werker omwegen: de eerste bouw-run (#87) liep
+  // negen keer tegen een weigering aan, waarvan zes op `mkdir`, `cd` en `echo`. Die
+  // omwegen zaten in zijn 58 beurten.
+  'Bash(ls:*)',
+  'Bash(cat:*)',
+  'Bash(head:*)',
+  'Bash(tail:*)',
+  'Bash(wc:*)',
+  'Bash(grep:*)',
+  'Bash(echo:*)',
+  'Bash(mkdir:*)',
+  'Bash(mktemp:*)',
   'Bash(git add:*)',
   'Bash(git commit:*)',
   'Bash(git diff:*)',
@@ -68,6 +81,15 @@ export const BOUWER_TOEGESTAAN = [
  * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
  * supervisor is. En `git checkout`/`switch`/`rebase` niet: hij werkt op één branch in
  * zijn eigen worktree, en van branch wisselen is per definitie buiten de opdracht.
+ *
+ * **`rm` staat hier bewust niet bij de toegestane werkwoorden** (#217), anders dan de
+ * andere tmp-hulpmiddelen. `Write` kan alleen bestanden maken of overschrijven binnen de
+ * werkmap; `rm -rf <pad>` kan de spiegel van een ándere applicatie wissen. "Alleen in
+ * zijn eigen tmp-map" is niet in een patroon uit te drukken, want dat pad is per sessie
+ * anders. Hij mag zijn rommel in tmp laten staan — het besturingssysteem ruimt die op.
+ *
+ * **`git -C` ook niet**: `Bash(git -C:*)` zou `git -C <pad> push` toestaan en daarmee
+ * precies de grens omzeilen die hierboven staat. Git in zijn eigen werkmap kan hij wel.
  */
 export const BOUWER_VERBODEN = [
   'Bash(git push:*)',

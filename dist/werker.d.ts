@@ -29,12 +29,21 @@ export declare const WERKER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(
  * --geen-automerge`, zodat het openen van een PR een beslissing van de factory blijft en
  * niet van het model. Committen mag wel; zonder commit is er niets in te leveren.
  */
-export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write", "Edit", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)", "Bash(git restore:*)", "Bash(pnpm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(gh issue view:*)", "Bash(gh api:*)"];
+export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write", "Edit", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(mkdir:*)", "Bash(mktemp:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)", "Bash(git restore:*)", "Bash(pnpm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(gh issue view:*)", "Bash(gh api:*)"];
 /**
  * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
  * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
  * supervisor is. En `git checkout`/`switch`/`rebase` niet: hij werkt op één branch in
  * zijn eigen worktree, en van branch wisselen is per definitie buiten de opdracht.
+ *
+ * **`rm` staat hier bewust niet bij de toegestane werkwoorden** (#217), anders dan de
+ * andere tmp-hulpmiddelen. `Write` kan alleen bestanden maken of overschrijven binnen de
+ * werkmap; `rm -rf <pad>` kan de spiegel van een ándere applicatie wissen. "Alleen in
+ * zijn eigen tmp-map" is niet in een patroon uit te drukken, want dat pad is per sessie
+ * anders. Hij mag zijn rommel in tmp laten staan — het besturingssysteem ruimt die op.
+ *
+ * **`git -C` ook niet**: `Bash(git -C:*)` zou `git -C <pad> push` toestaan en daarmee
+ * precies de grens omzeilen die hierboven staat. Git in zijn eigen werkmap kan hij wel.
  */
 export declare const BOUWER_VERBODEN: readonly ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git rebase:*)", "Bash(git reset:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)", "Bash(gh release:*)"];
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */

@@ -339,6 +339,15 @@ pushen en geen PR openen: `git push` en `gh pr` staan op zijn verbodslijst, en h
 inleveren doet de supervisor met `factory inleveren --geen-automerge`. De PR is de grens
 tussen voorstellen en landen, en die grens blijft bij jou.
 
+Zijn gereedschapslijst bevat naast schrijven ook de gewone **lees- en tmp-werkwoorden**
+(`ls`, `cat`, `head`, `grep`, `echo`, `mkdir`, `mktemp`): die geven geen macht die `Write`
+en `Edit` niet al geven, en zonder hen zoekt hij omwegen die beurten kosten — de eerste
+bouw-run liep negen keer tegen zo'n weigering aan. Wat er bewust **niet** op staat is
+`rm` (kan de spiegel van een andere app wissen, en "alleen in zijn eigen tmp" is niet in
+een patroon uit te drukken) en `git -C` (zou `git -C <pad> push` toestaan en daarmee de
+grens omzeilen). Een test pint die vier grenzen vast, zodat een latere uitbreiding ze niet
+stil oprekt.
+
 Zijn uitkomst is **bewijs per acceptatiecriterium**: per criterium de test of de commit die
 het aantoont. Een criterium zonder bewijs komt het schema niet door als `klaar` — dan is
 het een escalatie, terug naar _Klaar voor Bouwen_ met een label, en er wordt niets

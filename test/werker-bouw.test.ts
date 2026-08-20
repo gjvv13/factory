@@ -94,6 +94,33 @@ describe('draaiBouwer', () => {
     }
   });
 
+  it('mag lezen en een tmp-map maken, zonder extra macht', () => {
+    // De negen weigeringen van de eerste bouw-run (#87) waren allemaal hulpmiddelen bij
+    // zijn eigen toets. Weigeren kostte beurten en leverde geen veiligheid op, want
+    // `Write` en `Edit` staan al op de lijst.
+    for (const gereedschap of [
+      'Bash(ls:*)',
+      'Bash(cat:*)',
+      'Bash(grep:*)',
+      'Bash(echo:*)',
+      'Bash(mkdir:*)',
+      'Bash(mktemp:*)',
+    ]) {
+      expect(BOUWER_TOEGESTAAN as readonly string[]).toContain(gereedschap);
+    }
+  });
+
+  it('houdt rm, git -C, git push en gh pr buiten de toestemmingslijst', () => {
+    // Deze vier zijn geen gemak maar macht: `rm -rf <pad>` kan de spiegel van een andere
+    // app wissen, en `git -C <pad> push` omzeilt de grens tussen voorstellen en landen.
+    // Een latere uitbreiding mag die grens niet stil oprekken.
+    const lijst = BOUWER_TOEGESTAAN as readonly string[];
+    expect(lijst.some((g) => g.startsWith('Bash(rm'))).toBe(false);
+    expect(lijst.some((g) => g.startsWith('Bash(git -C'))).toBe(false);
+    expect(lijst.some((g) => g.includes('push'))).toBe(false);
+    expect(lijst.some((g) => g.includes('gh pr'))).toBe(false);
+  });
+
   it('laat de refine-werker ongemoeid', () => {
     // `--soort bouw` mag de bestaande refine-aanroep niet van rechten of schema
     // veranderen; dat zou #153 stil omgooien.
