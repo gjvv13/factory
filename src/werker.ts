@@ -272,6 +272,12 @@ export interface WerkerOpdracht {
   readonly budgetUsd: number;
   readonly model: string;
   /**
+   * Kap de run af na zoveel milliseconden (#206). Zonder grens hing een werker de hele
+   * nacht: het slot blijft staan, de rij komt niet vooruit, en 's ochtends staat er één
+   * regel in het log en verder niets.
+   */
+  readonly timeoutMs?: number;
+  /**
    * De omgeving waarin `claude` draait. Onbemand staat hier de OAuth-token in: die
    * hoort niet in de LaunchAgent-plist (wereldleesbaar) maar in een 0600-bestand dat
    * de run zelf leest — zie `orkestrator-instellingen.ts`. Met de hand blijft dit
@@ -310,6 +316,14 @@ export interface WerkerBasis {
   readonly geweigerd?: readonly string[];
   /** Bij `mislukt`: waarom, in één regel die in een comment past. */
   readonly fout?: string;
+  /**
+   * Na hoeveel minuten de run is afgekapt; afwezig als hij dat niet is (#206).
+   *
+   * Eén veld in plaats van een losse vlag plus een getal: het runlog moet "afgekapt
+   * (30 min)" kunnen schrijven in plaats van het algemene "mislukt", en op de tekst van
+   * `fout` snuffelen breekt bij de eerste herformulering.
+   */
+  readonly afgekaptNaMinuten?: number;
 }
 
 export interface WerkerUitkomst extends WerkerBasis {
@@ -370,7 +384,25 @@ function leesEnvelop(opdracht: WerkerOpdracht):
     capture: true,
     toleranter: true,
     ...(opdracht.env === undefined ? {} : { env: opdracht.env }),
+    ...(opdracht.timeoutMs === undefined ? {} : { timeoutMs: opdracht.timeoutMs }),
   });
+
+  if (uitkomst.afgekapt) {
+    // Alleen de grens, niet het opruimen. `spawnSync`'s time-out doodt het directe kind;
+    // gemeten op 2026-08-20 overleeft een kleinkind dat wél. Gericht opruimen op de
+    // sessie-id haalt alleen processen die die id in hun argv dragen, en een breed
+    // `pkill -f claude` zou de sessie van de gebruiker zelf kunnen omleggen. Het echte
+    // opruimen (procesgroep via een async spawn) is bewust een eigen item — deze slice
+    // zorgt dat de nacht doorloopt, niet dat de machine schoon is.
+    const minuten = Math.round((opdracht.timeoutMs ?? 0) / 60_000);
+    return {
+      soort: 'mislukt',
+      uitkomst: {
+        ...mislukt(opdracht.sessie, `afgekapt na ${String(minuten)} minuten zonder uitkomst`),
+        afgekaptNaMinuten: minuten,
+      },
+    };
+  }
 
   let ruw: unknown;
   try {

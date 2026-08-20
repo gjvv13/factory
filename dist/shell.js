@@ -27,8 +27,25 @@ const spawnUitvoerder = (commando, argumenten, options) => {
         env: options.env ?? process.env,
         stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'inherit', 'inherit'],
         encoding: 'utf8',
+        ...(options.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
     });
     if (resultaat.error !== undefined) {
+        // Een verstreken time-out komt óók als `error` terug, maar is iets anders dan een
+        // commando dat niet bestaat: het liep, het was niet klaar. Node markeert dat met
+        // ETIMEDOUT; de uitvoer tot dat moment houden we vast, want daar staat vaak precies
+        // in waar hij bleef hangen.
+        if (resultaat.error.code === 'ETIMEDOUT') {
+            // De typing belooft strings, maar bij een afgekapt proces levert Node feitelijk
+            // `null` als er nog niets over de pijp kwam. Dat expliciet opvangen: anders staat er
+            // straks de tekst "null" in een comment op een issue.
+            const deels = resultaat;
+            return {
+                code: resultaat.status ?? 124,
+                stdout: deels.stdout ?? '',
+                stderr: deels.stderr ?? '',
+                afgekapt: true,
+            };
+        }
         return { code: 1, stdout: '', startfout: resultaat.error.message };
     }
     return { code: resultaat.status ?? 1, stdout: resultaat.stdout, stderr: resultaat.stderr };
@@ -51,10 +68,18 @@ export function run(commando, argumenten, options = {}) {
     if (uitkomst.startfout !== undefined) {
         throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
     }
-    if (uitkomst.code !== 0 && options.toleranter !== true) {
+    // Een afgekapte aanroep gooit niet: de aanroeper die een grens zette wíl de uitkomst
+    // zien en er zelf iets mee doen (#206). Gooien zou de nacht beëindigen in plaats van
+    // één item te laten mislukken.
+    if (uitkomst.code !== 0 && options.toleranter !== true && uitkomst.afgekapt !== true) {
         throw new GebruikersFout(`'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`);
     }
-    return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+    return {
+        code: uitkomst.code,
+        stdout: uitkomst.stdout,
+        stderr: uitkomst.stderr ?? '',
+        afgekapt: uitkomst.afgekapt === true,
+    };
 }
 /**
  * Herkent de signatuur van een tijdelijke DNS-storing naar een externe host — de
@@ -114,7 +139,7 @@ export function runMetHerhaling(commando, argumenten, options = {}, herhaal = {}
             throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
         }
         if (uitkomst.code === 0) {
-            return { code: 0, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+            return { code: 0, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '', afgekapt: false };
         }
         const uitvoer = `${uitkomst.stdout}\n${uitkomst.stderr ?? ''}`;
         if (isDnsBlip(uitvoer) && poging < pogingen) {
@@ -127,7 +152,12 @@ export function runMetHerhaling(commando, argumenten, options = {}, herhaal = {}
         // gaven capture geforceerd aan, dus geef de opgevangen uitvoer alsnog door zodat
         // de echte fout zichtbaar is.
         if (options.toleranter === true) {
-            return { code: uitkomst.code, stdout: uitkomst.stdout, stderr: uitkomst.stderr ?? '' };
+            return {
+                code: uitkomst.code,
+                stdout: uitkomst.stdout,
+                stderr: uitkomst.stderr ?? '',
+                afgekapt: uitkomst.afgekapt === true,
+            };
         }
         if (uitkomst.stdout !== '')
             process.stdout.write(uitkomst.stdout);

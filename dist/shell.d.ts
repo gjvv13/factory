@@ -14,12 +14,21 @@ export interface RunOptions {
     readonly capture?: boolean;
     /** Bij true levert een niet-nul exitcode geen fout op. */
     readonly toleranter?: boolean;
+    /**
+     * Kap het proces af na zoveel milliseconden. Alleen voor aanroepen die van buiten
+     * afhangen en kunnen blijven hangen (de werker, #206) — `git`, `gh` en `pnpm` krijgen
+     * bewust geen grens: die falen zelf snel genoeg en een grens erop zou een trage
+     * `pnpm install` in een mislukking veranderen.
+     */
+    readonly timeoutMs?: number;
 }
 export interface RunResult {
     readonly code: number;
     readonly stdout: string;
     /** Gevangen stderr; leeg als de uitvoer naar de terminal ging (geen capture). */
     readonly stderr: string;
+    /** Of `timeoutMs` verstreek voordat het commando klaar was (#206). */
+    readonly afgekapt: boolean;
 }
 /** Ruwe uitkomst van een proces, vóór interpretatie door run(). */
 export interface ProcesUitkomst {
@@ -29,6 +38,12 @@ export interface ProcesUitkomst {
     readonly stderr?: string;
     /** Gezet als het proces niet gestart kon worden (commando niet gevonden e.d.). */
     readonly startfout?: string;
+    /**
+     * Gezet als `timeoutMs` verstreek. Bewust géén startfout: het commando liep, het was
+     * alleen niet klaar. De aanroeper hoort dat als een mislukte run te behandelen en niet
+     * als een kapotte machine (#206).
+     */
+    readonly afgekapt?: true;
 }
 /**
  * Voert één extern proces uit. Dit is het enige punt waar de CLI de buitenwereld

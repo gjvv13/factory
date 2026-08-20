@@ -281,7 +281,24 @@ function leesEnvelop(opdracht) {
         capture: true,
         toleranter: true,
         ...(opdracht.env === undefined ? {} : { env: opdracht.env }),
+        ...(opdracht.timeoutMs === undefined ? {} : { timeoutMs: opdracht.timeoutMs }),
     });
+    if (uitkomst.afgekapt) {
+        // Alleen de grens, niet het opruimen. `spawnSync`'s time-out doodt het directe kind;
+        // gemeten op 2026-08-20 overleeft een kleinkind dat wél. Gericht opruimen op de
+        // sessie-id haalt alleen processen die die id in hun argv dragen, en een breed
+        // `pkill -f claude` zou de sessie van de gebruiker zelf kunnen omleggen. Het echte
+        // opruimen (procesgroep via een async spawn) is bewust een eigen item — deze slice
+        // zorgt dat de nacht doorloopt, niet dat de machine schoon is.
+        const minuten = Math.round((opdracht.timeoutMs ?? 0) / 60_000);
+        return {
+            soort: 'mislukt',
+            uitkomst: {
+                ...mislukt(opdracht.sessie, `afgekapt na ${String(minuten)} minuten zonder uitkomst`),
+                afgekaptNaMinuten: minuten,
+            },
+        };
+    }
     let ruw;
     try {
         ruw = JSON.parse(uitkomst.stdout);

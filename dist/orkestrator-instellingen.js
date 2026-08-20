@@ -29,6 +29,15 @@ const instellingenSchema = z.object({
      * schrijven, de poort draaien en op rood opnieuw — dat zijn simpelweg meer beurten.
      */
     FACTORY_BOUW_BUDGET_USD: z.coerce.number().positive().max(100).default(10),
+    /**
+     * Tijdsgrens per werker-run in minuten (#206). Default 30.
+     *
+     * De bovengrens is niet willekeurig: hij moet ónder de slotgeldigheid van de
+     * orkestrator (`LOCK_VERVALT_MS`, één uur) blijven. Een run die langer mag leven dan
+     * het slot geldig is, kan zijn eigen slot zien verlopen — en dan start er een tweede
+     * orkestrator naast de eerste. 55 minuten laat marge voor het opruimen erna.
+     */
+    FACTORY_RUN_TIMEOUT_MIN: z.coerce.number().int().min(1).max(55).default(30),
     [TOKEN_SLEUTEL]: z.string().min(1).optional(),
 });
 /** Regels in `sleutel=waarde`-vorm, zoals de env-bestanden van de apps. */
@@ -63,7 +72,7 @@ function leesEnvBestand(bestand) {
  */
 export function leesInstellingen(paden) {
     if (!existsSync(paden.envPad)) {
-        return { dagmaximum: 4, budgetPerRun: 5, bouwBudgetPerRun: 10 };
+        return { dagmaximum: 4, budgetPerRun: 5, bouwBudgetPerRun: 10, runTimeoutMs: 30 * 60_000 };
     }
     waarschuwBijSlappeRechten(paden.envPad);
     const gelezen = instellingenSchema.safeParse(leesEnvBestand(paden.envPad));
@@ -78,6 +87,7 @@ export function leesInstellingen(paden) {
         dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
         budgetPerRun: gelezen.data.FACTORY_BUDGET_USD,
         bouwBudgetPerRun: gelezen.data.FACTORY_BOUW_BUDGET_USD,
+        runTimeoutMs: gelezen.data.FACTORY_RUN_TIMEOUT_MIN * 60_000,
         ...(token === undefined ? {} : { token }),
     };
 }

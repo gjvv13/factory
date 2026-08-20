@@ -181,6 +181,9 @@ function draaiNacht(cwd, wortel, paden, nu) {
     const draaiOpties = {
         budgetUsd: instellingen.budgetPerRun,
         env: { ...process.env, [TOKEN_SLEUTEL]: token },
+        // Alleen onbemand een grens: een nacht die vastloopt kost de hele rij, terwijl een
+        // run die ik zelf start onder mijn ogen gebeurt en gewoon met ctrl-c stopt.
+        timeoutMs: instellingen.runTimeoutMs,
     };
     kop(`Nacht van ${kalenderdag(nu)}`);
     let gestart = leesStaat(paden, nu).gestart;
@@ -242,7 +245,11 @@ function draaiNacht(cwd, wortel, paden, nu) {
             logRun(paden, new Date(Date.now()), {
                 issue: eerste.issue,
                 app: eerste.app,
-                uitkomst: uitkomst.afloop,
+                // Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik
+                // zien dat de tijd op was en niet dat "iets" faalde (#206).
+                uitkomst: uitkomst.afgekaptNaMinuten === undefined
+                    ? uitkomst.afloop
+                    : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
                 ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
                 ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
             });
@@ -286,6 +293,7 @@ function werkAf(item, cwd, wortel, draai) {
             sessie,
             extraMappen: [factoryMap],
             budgetUsd: draai.budgetUsd,
+            ...(draai.timeoutMs === undefined ? {} : { timeoutMs: draai.timeoutMs }),
             model: MODEL,
             ...(draai.env === undefined ? {} : { env: draai.env }),
         });
@@ -295,6 +303,9 @@ function werkAf(item, cwd, wortel, draai) {
             afloop: verwerk(item, uitkomst, werkmap, cwd),
             ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
             ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+            ...(uitkomst.afgekaptNaMinuten === undefined
+                ? {}
+                : { afgekaptNaMinuten: uitkomst.afgekaptNaMinuten }),
         };
     }
     catch (fout) {

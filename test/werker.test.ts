@@ -107,6 +107,38 @@ describe('draaiWerker', () => {
     expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.body).toContain('# Proefrun');
   });
 
+  it('behandelt een afgekapte run als mislukt en noemt de grens in de reden', () => {
+    // Een hangende werker hield vroeger de hele nacht bezet (#206). Afkappen is
+    // mislukken langs het bestaande pad — label, comment, logregel — en geen crash.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((aanroep) =>
+      aanroep.commando === 'claude'
+        ? { code: 124, stdout: '', stderr: '', afgekapt: true as const }
+        : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    const uitkomst = draaiWerker({ ...OPDRACHT, timeoutMs: 30 * 60_000 });
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toBe('afgekapt na 30 minuten zonder uitkomst');
+    // Deze slice ruimt bewust géén processen op (zie de comment in `werker.ts`): dat is
+    // een eigen item. Wat hier telt is dat er niets ongevraagd wordt afgeschoten.
+    expect(aanroepen.some((a) => a.commando === 'pkill')).toBe(false);
+  });
+
+  it('geeft de tijdsgrens door aan claude en laat hem weg als er geen is', () => {
+    const metGrens = maakUitvoerderOpnemer(() => ({ code: 124, afgekapt: true as const }));
+    stelUitvoerderIn(metGrens.uitvoerder);
+    draaiWerker({ ...OPDRACHT, timeoutMs: 12_000 });
+    expect(metGrens.aanroepen[0]?.timeoutMs).toBe(12_000);
+
+    // Zonder grens (met de hand gestart) blijft de aanroep onbeperkt.
+    const zonder = maakUitvoerderOpnemer(() => ({ code: 1, stdout: '' }));
+    stelUitvoerderIn(zonder.uitvoerder);
+    draaiWerker(OPDRACHT);
+    expect(zonder.aanroepen[0]?.timeoutMs).toBeUndefined();
+  });
+
   it('herkent een mislukte run aan de JSON, niet aan de exitcode', () => {
     // Deze fixture kwam mét exit 1, maar dat is niet waar we op sturen: de
     // geweigerde-rechten-run hieronder kwam mét exit 0 terwijl er niets gebeurde.

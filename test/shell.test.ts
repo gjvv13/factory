@@ -10,6 +10,7 @@ import {
   herstelWacht,
   isDnsBlip,
   isGezondNaStart,
+  run,
   runMetHerhaling,
   schrijfWorkflowUitvoer,
   stelStarterIn,
@@ -246,5 +247,43 @@ describe('schrijfWorkflowUitvoer', () => {
     expect(() => {
       schrijfWorkflowUitvoer('bord_overgeslagen', '#1');
     }).not.toThrow();
+  });
+});
+
+describe('een afgekapte aanroep', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('gooit niet, maar geeft afgekapt terug met de uitvoer tot dat moment', () => {
+    // Een time-out is geen kapotte machine: het commando liep, het was niet klaar. Zou
+    // `run` hier gooien, dan beëindigt één hangende werker de hele nacht (#206).
+    stelUitvoerderIn(() => ({
+      code: 124,
+      stdout: 'tot hier kwam hij',
+      stderr: '',
+      afgekapt: true as const,
+    }));
+
+    const uitkomst = run('claude', ['-p', 'iets'], { timeoutMs: 1000 });
+
+    expect(uitkomst.afgekapt).toBe(true);
+    expect(uitkomst.stdout).toBe('tot hier kwam hij');
+  });
+
+  it('geeft de grens door aan de uitvoerder', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    run('claude', ['-p', 'iets'], { timeoutMs: 5_000, toleranter: true });
+
+    expect(aanroepen[0]?.timeoutMs).toBe(5_000);
+  });
+
+  it('laat een gewone mislukking gewoon gooien', () => {
+    // Zonder afgekapt blijft het oude gedrag staan: een niet-nul code is een fout.
+    stelUitvoerderIn(() => ({ code: 1, stdout: '', stderr: 'stuk' }));
+
+    expect(() => run('git', ['push'])).toThrow(/faalde met code 1/);
   });
 });
