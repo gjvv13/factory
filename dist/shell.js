@@ -158,6 +158,15 @@ export function pakketbeheerder() {
         ? { commando: 'pnpm', basisArgumenten: [] }
         : { commando: 'corepack', basisArgumenten: ['pnpm'] };
 }
+/**
+ * Installeert afhankelijkheden. `confirmModulesPurge=false` omdat de pipeline
+ * stdin dichtzet: wil pnpm node_modules opruimen, dan is er niemand om de
+ * bevestiging aan te vragen en zou de uitrol halverwege stoppen (#87).
+ */
+export function installeer(argumenten, options = {}) {
+    const { commando, basisArgumenten } = pakketbeheerder();
+    return run(commando, [...basisArgumenten, 'install', '--config.confirmModulesPurge=false', ...argumenten], options);
+}
 export function draaiScript(script, cwd, env) {
     const { commando, basisArgumenten } = pakketbeheerder();
     run(commando, [...basisArgumenten, 'run', script], {

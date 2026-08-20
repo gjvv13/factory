@@ -2,7 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
 import { zetItemsUitBereikOpDone } from '../board.js';
-import { bevestig, GebruikersFout, git, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
+import { bevestig, GebruikersFout, git, installeer, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
 import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
     // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
@@ -64,10 +64,7 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     ok(uitvoerVan('git', ['describe', '--tags'], werkmap) ?? tag);
     const { commando, basisArgumenten } = pakketbeheerder();
     kop('Afhankelijkheden installeren');
-    run(commando, [...basisArgumenten, 'install', '--frozen-lockfile', '--prod=false'], {
-        cwd: werkmap,
-        capture: true,
-    });
+    installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
     kop('Bouwen');
     run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
     kop('Database migreren');
@@ -139,10 +136,7 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     waarschuwing(`Terugrollen naar ${vorigeTag}`);
     git(['checkout', '-q', '--detach', vorigeTag], werkmap);
     git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'], werkmap);
-    run(commando, [...basisArgumenten, 'install', '--frozen-lockfile', '--prod=false'], {
-        cwd: werkmap,
-        capture: true,
-    });
+    installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
     run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
     herstartOmgeving(ecosystem, pm2Naam);
     if ((await wachtOpGezond(healthUrl, 30)) === undefined) {

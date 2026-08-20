@@ -3,7 +3,7 @@ import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { issueUitBranch, plaatsComment, zetKolom } from '../board.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
-import { GebruikersFout, git, kop, ok, pakketbeheerder, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
+import { GebruikersFout, git, installeer, kop, ok, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
 import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
 import { verify } from './verify.js';
 import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js';
@@ -58,11 +58,7 @@ export function inleveren(opties = {}) {
     // struikelt (`--frozen-lockfile`). `--lockfile-only`: alleen de lockfile, geen
     // volledige install van node_modules.
     kop('Lockfile bijwerken');
-    const { commando, basisArgumenten } = pakketbeheerder();
-    run(commando, [...basisArgumenten, 'install', '--lockfile-only'], {
-        cwd: repoDir,
-        capture: true,
-    });
+    installeer(['--lockfile-only'], { cwd: repoDir, capture: true });
     ok(commitAlsGewijzigd(repoDir, 'pnpm-lock.yaml', 'sync lockfile voor inleveren')
         ? 'lockfile bijgewerkt en gecommit'
         : 'lockfile al in lijn');

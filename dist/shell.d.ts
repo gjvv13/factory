@@ -96,6 +96,12 @@ export declare function pakketbeheerder(): {
     commando: string;
     basisArgumenten: string[];
 };
+/**
+ * Installeert afhankelijkheden. `confirmModulesPurge=false` omdat de pipeline
+ * stdin dichtzet: wil pnpm node_modules opruimen, dan is er niemand om de
+ * bevestiging aan te vragen en zou de uitrol halverwege stoppen (#87).
+ */
+export declare function installeer(argumenten: string[], options?: RunOptions): RunResult;
 export declare function draaiScript(script: string, cwd: string, env?: NodeJS.ProcessEnv): void;
 /** Of er een terminal aan stdin hangt, zodat we de gebruiker iets kunnen vragen. */
 export declare function isInteractief(): boolean;
