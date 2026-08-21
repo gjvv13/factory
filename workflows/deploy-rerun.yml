@@ -3,8 +3,9 @@ name: deploy-rerun
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Vangnet voor #122. De GitHub-runner haalt externe actions (actions/checkout,
-# actions/setup-node, pnpm/action-setup) op vóór er een factory-shellstap draait —
+# Vangnet voor #122. De runner haalt externe actions op vóór er een factory-shellstap
+# draait — sinds #270 op de mini alleen nog `actions/checkout`; `setup-node` en
+# `pnpm/action-setup` zijn daar weg omdat node en pnpm er al staan —
 # dus buiten het #99-retry-vangnet om, dat alleen om factory's eigen shell-stappen
 # (git push/fetch, pnpm install) zit. Faalt dat downloaden op een transiente hik, dan
 # valt de hele deploy-job om en blijft prod stil op de oude versie (zie #112).
