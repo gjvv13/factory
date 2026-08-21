@@ -16,6 +16,11 @@ import {
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
+import {
+  leesStaat,
+  standaardPaden,
+  type OrkestratorPaden,
+} from '../src/orkestrator-instellingen.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
@@ -384,6 +389,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   let herstelOmgeving: () => void;
   let uitvoer: string[];
   let wortel: string;
+  let home: string;
+  let paden: OrkestratorPaden;
 
   beforeEach(() => {
     uitvoer = [];
@@ -392,11 +399,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       return true;
     });
     wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-'));
+    // Een eigen home: sinds #264 boekt en logt ook een bouw-run, en die hoort niet in
+    // de echte `~/Library/Application Support/factory` van wie de tests draait.
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-home-'));
+    paden = standaardPaden(home);
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
   });
 
   afterEach(() => {
     rmSync(wortel, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
     herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
@@ -461,10 +473,23 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     orkestreerBouw({
       eenmalig: true,
       werkplaatsWortel: wortel,
+      paden,
       leverIn: (opties) => geleverd.push(opties),
     });
     return { aanroepen, geleverd };
   }
+
+  it('boekt en logt de bouw-run, met de soort erbij (#264)', () => {
+    draai(envelop('claude-bouw-klaar'));
+
+    // Tot #264 werd `logRun` alleen uit de nacht-lus aangeroepen, en die is refine-only:
+    // de duurste soort ($10 budget tegen $5) stond nergens. Op 2026-08-21 had het log
+    // twaalf refine-runs en nul bouw-runs.
+    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    const regels = readFileSync(paden.logPad, 'utf8').trim().split('\n');
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#\d+ \w+ bouw klaar/);
+  });
 
   it('claimt het item vóór de run, en levert in zonder auto-merge', () => {
     const { aanroepen, geleverd } = draai(envelop('claude-bouw-klaar'));
@@ -595,6 +620,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       eenmalig: true,
       issue: 106,
       werkplaatsWortel: wortel,
+      paden,
       leverIn: (opties) => geleverd.push(opties),
     });
 

@@ -860,6 +860,98 @@ describe('orkestreer antwoord', () => {
   });
 });
 
+describe('orkestreer — boekhouding per run (#264)', () => {
+  let uitvoer: string[];
+  let wortel: string;
+  let home: string;
+  let paden: OrkestratorPaden;
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-boek-'));
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-boek-home-'));
+    paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-boek\nFACTORY_BUDGET_USD=3\n`, {
+      mode: 0o600,
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    rmSync(LOCK_PAD, { force: true });
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    rmSync(LOCK_PAD, { force: true });
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  /** De regels van het runlog, zonder de kopregels van een nacht. */
+  function runRegels(): string[] {
+    if (!existsSync(paden.logPad)) return [];
+    return readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((regel) => regel.includes('#'));
+  }
+
+  it('boekt en logt een run die met de hand gestart is', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    // Tot #264 zat boeken en loggen in de nacht-lus: een `--eenmalig`-run telde niet mee
+    // in het dagmaximum en liet geen spoor na. Toen de teller vol zat werkte de wachtrij
+    // zich met losse aanroepen verder af — de geldrem was te omzeilen zonder omzeilen.
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
+
+    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    const regels = runRegels();
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#51 assistant refine klaar/);
+  });
+
+  it('noemt de soort in de logregel', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
+
+    // Een gemiddelde over refine en bouw door elkaar zegt niets: $5 budget tegen $10.
+    expect(runRegels()[0]).toContain(' refine ');
+  });
+
+  it('logt ook een run die omvalt, met de reden', () => {
+    const basis = bepaler();
+    const stuk: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
+        : basis(aanroep, index);
+    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+
+    expect(() => {
+      orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
+    }).toThrow(/claude/);
+
+    // Een teller op 1 met een leeg log is precies de stilte die je niet kunt lezen.
+    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    expect(runRegels()[0]).toMatch(/#51 assistant refine afgebroken/);
+  });
+
+  it('boekt en logt niets bij --dry', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    orkestreer({ dry: true, werkplaatsWortel: wortel, paden });
+
+    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(0);
+    expect(runRegels()).toHaveLength(0);
+  });
+});
+
 describe('orkestreer --nacht', () => {
   let uitvoer: string[];
   let wortel: string;
@@ -1042,7 +1134,7 @@ describe('orkestreer --nacht', () => {
     // Zonder eigen logregels zou alleen de stdout van launchd iets vastleggen, en dan
     // legt een handmatige run niets vast.
     const log = readFileSync(paden.logPad, 'utf8');
-    expect(log).toMatch(/#51 assistant klaar \$1\.25 12 beurten/);
+    expect(log).toMatch(/#51 assistant refine klaar \$1\.25 12 beurten/);
     // Drie regels: de startregel met de versie (#237), en twee runregels.
     expect(log.trim().split('\n')).toHaveLength(3);
   });
@@ -1058,7 +1150,7 @@ describe('orkestreer --nacht', () => {
     // hele nacht opnieuw mogen draaien. En een mislukking is een escalatie, dus het
     // item wordt niet vannacht nog eens gepakt.
     expect(leesStaat(paden, NU).gestart).toBe(2);
-    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt/);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine mislukt/);
   });
 
   it('laat een run die zijn budget opmaakt als escalatie achter', () => {
@@ -1077,7 +1169,7 @@ describe('orkestreer --nacht', () => {
 
     const label = ghArgs(aanroepen).find((a) => a.includes('--add-label'));
     expect(label).toContain('escalatie');
-    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant mislukt \$0\.10/);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine mislukt \$0\.10/);
   });
 
   it('slaat een item over dat na zijn run nog in de wachtrij staat, en gaat door met de rest', () => {
@@ -1171,7 +1263,7 @@ describe('orkestreer --nacht', () => {
     expect(claudeAanroepen(aanroepen)).toHaveLength(2);
     // De afkapping staat in het log, met de reden erin.
     // Zoals de uitwerking hem voorschrijft: "#93 beheer afgekapt (30 min)".
-    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#\d+ \w+ afgekapt \(30 min\)/);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#\d+ \w+ refine afgekapt \(30 min\)/);
     // En het item is geëscaleerd, niet stil overgeslagen.
     const label = ghArgs(aanroepen).find((a) => a.includes('--add-label'));
     expect(label).toContain('escalatie');
@@ -1191,7 +1283,7 @@ describe('orkestreer --nacht', () => {
       orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
     }).toThrow(/claude/);
 
-    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant afgebroken/);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine afgebroken/);
     expect(leesStaat(paden, NU).gestart).toBe(1);
   });
 

@@ -18,6 +18,8 @@ import { z } from 'zod';
  * met rechten 0600, waar de token toch al hoort te staan.
  */
 /** De paden buiten `~/Documents` waar de orkestrator zijn eigen staat bewaart. */
+/** De twee werkersoorten. Staat hier omdat het runlog en de dagteller ze beide kennen. */
+export type WerkerSoort = 'refine' | 'bouw';
 export interface OrkestratorPaden {
     /** Instellingen én token: `~/.config/factory/orkestrator.env`, rechten 0600. */
     readonly envPad: string;
@@ -107,10 +109,42 @@ export declare function boekRun(paden: OrkestratorPaden, nu: Date): number;
 export declare function logRun(paden: OrkestratorPaden, moment: Date, regel: {
     readonly issue: number;
     readonly app: string;
+    /**
+     * Refine of bouw. Zonder dit veld is een gemiddelde over het log misleidend: een
+     * refine-run heeft $5 budget en een bouw-run $10, en op 2026-08-21 stonden er
+     * twaalf refine-runs in het log en nul bouw-runs (#264).
+     */
+    readonly soort: WerkerSoort;
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
 }): void;
+/** Wat er van een afgeronde run in het log komt; per soort anders opgebouwd. */
+export interface RunRegel {
+    readonly uitkomst: string;
+    readonly kosten?: number;
+    readonly beurten?: number;
+}
+/**
+ * Boekt één run en logt hem, ook als hij omvalt.
+ *
+ * Dit stond in de nacht-lus, en daarom telde een `--eenmalig`-run niet mee in het
+ * dagmaximum en liet hij geen spoor na; een bouw-run kwam helemaal niet in het log
+ * (#264). De geldrem was daarmee te omzeilen zonder dat iemand iets omzeilde: toen de
+ * teller vol zat (9 van 4) werkte de wachtrij zich verder af met losse aanroepen, en
+ * die boekten niet.
+ *
+ * Boeken gebeurt vóór de run, niet erna: een run die omvalt heeft wél geld gekost. En
+ * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
+ * de stilte die je 's ochtends niet kunt lezen.
+ */
+export declare function metBoekhouding<T>(paden: OrkestratorPaden, nu: Date, soort: WerkerSoort, item: {
+    readonly issue: number;
+    readonly app: string;
+}, draai: () => T, beschrijf: (uitkomst: T) => RunRegel): {
+    readonly uitkomst: T;
+    readonly gestart: number;
+};
 /**
  * Voegt een regel toe aan het runlog.
  *

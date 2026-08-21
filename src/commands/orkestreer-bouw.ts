@@ -14,6 +14,8 @@ import {
 } from '../board.js';
 import {
   leesInstellingen,
+  metBoekhouding,
+  type RunRegel,
   standaardPaden,
   type OrkestratorPaden,
 } from '../orkestrator-instellingen.js';
@@ -267,7 +269,8 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
     );
   }
   const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
-  const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
+  const paden = opties.paden ?? standaardPaden();
+  const instellingen = leesInstellingen(paden);
   const wachtrij = bouwWachtrij(items);
   const geclaimd = items.filter((item) => item.kolom === GECLAIMD_KOLOM).length;
 
@@ -317,7 +320,33 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
     return;
   }
 
-  bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren);
+  // Een bouw-run stond tot #264 nergens: `logRun` werd alleen uit de nacht-lus
+  // aangeroepen, en die is refine-only. Juist de duurste soort was dus onzichtbaar.
+  metBoekhouding(
+    paden,
+    new Date(Date.now()),
+    'bouw',
+    eerste,
+    () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren),
+    beschrijfBouw,
+  );
+}
+
+/**
+ * Wat er van een bouw-run in het log komt.
+ *
+ * Zelfde vorm als bij een refine-run, inclusief de eigen tekst voor een afkapping
+ * (#206): "afgekapt (30 min)" is 's ochtends leesbaar, "mislukt" niet.
+ */
+function beschrijfBouw(uitkomst: BouwUitkomst): RunRegel {
+  return {
+    uitkomst:
+      uitkomst.afgekaptNaMinuten === undefined
+        ? uitkomst.afloop
+        : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
+    ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+    ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+  };
 }
 
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
@@ -360,7 +389,7 @@ function bouwAf(
   wortel: string,
   budgetUsd: number,
   leverIn: (opties: InleverenOpties) => void,
-): void {
+): BouwUitkomst {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
   zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -413,6 +442,7 @@ function bouwAf(
   ruimBronMapOp(bronWortel);
 
   verwerkBouw(item, uitkomst, cwd, wortel, leverIn);
+  return uitkomst;
 }
 
 /** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */

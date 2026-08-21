@@ -31,6 +31,9 @@ import { GebruikersFout, waarschuwing } from './shell.js';
  */
 
 /** De paden buiten `~/Documents` waar de orkestrator zijn eigen staat bewaart. */
+/** De twee werkersoorten. Staat hier omdat het runlog en de dagteller ze beide kennen. */
+export type WerkerSoort = 'refine' | 'bouw';
+
 export interface OrkestratorPaden {
   /** Instellingen én token: `~/.config/factory/orkestrator.env`, rechten 0600. */
   readonly envPad: string;
@@ -285,6 +288,12 @@ export function logRun(
   regel: {
     readonly issue: number;
     readonly app: string;
+    /**
+     * Refine of bouw. Zonder dit veld is een gemiddelde over het log misleidend: een
+     * refine-run heeft $5 budget en een bouw-run $10, en op 2026-08-21 stonden er
+     * twaalf refine-runs in het log en nul bouw-runs (#264).
+     */
+    readonly soort: WerkerSoort;
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
@@ -294,8 +303,58 @@ export function logRun(
   const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
   schrijfLog(
     paden,
-    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
+    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
   );
+}
+
+/** Wat er van een afgeronde run in het log komt; per soort anders opgebouwd. */
+export interface RunRegel {
+  readonly uitkomst: string;
+  readonly kosten?: number;
+  readonly beurten?: number;
+}
+
+/**
+ * Boekt één run en logt hem, ook als hij omvalt.
+ *
+ * Dit stond in de nacht-lus, en daarom telde een `--eenmalig`-run niet mee in het
+ * dagmaximum en liet hij geen spoor na; een bouw-run kwam helemaal niet in het log
+ * (#264). De geldrem was daarmee te omzeilen zonder dat iemand iets omzeilde: toen de
+ * teller vol zat (9 van 4) werkte de wachtrij zich verder af met losse aanroepen, en
+ * die boekten niet.
+ *
+ * Boeken gebeurt vóór de run, niet erna: een run die omvalt heeft wél geld gekost. En
+ * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
+ * de stilte die je 's ochtends niet kunt lezen.
+ */
+export function metBoekhouding<T>(
+  paden: OrkestratorPaden,
+  nu: Date,
+  soort: WerkerSoort,
+  item: { readonly issue: number; readonly app: string },
+  draai: () => T,
+  beschrijf: (uitkomst: T) => RunRegel,
+): { readonly uitkomst: T; readonly gestart: number } {
+  const gestart = boekRun(paden, nu);
+  let uitkomst: T;
+  try {
+    uitkomst = draai();
+  } catch (fout) {
+    logRun(paden, new Date(Date.now()), {
+      issue: item.issue,
+      app: item.app,
+      soort,
+      uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+    });
+    throw fout;
+  }
+  logRun(paden, new Date(Date.now()), {
+    issue: item.issue,
+    app: item.app,
+    soort,
+    ...beschrijf(uitkomst),
+  });
+  return { uitkomst, gestart };
 }
 
 /**

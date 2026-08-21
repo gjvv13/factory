@@ -3,7 +3,7 @@ import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, stat
 import os from 'node:os';
 import path from 'node:path';
 import { bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
-import { boekRun, kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, logRun, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
+import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
@@ -196,12 +196,29 @@ export function orkestreer(opties = {}) {
     }
     try {
         // Met de hand: het budget uit de instellingen, maar geen token vereist — dan draait
-        // `claude` op de gewone keychain-auth van de terminal waarin je dit typt.
-        werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun });
+        // `claude` op de gewone keychain-auth van de terminal waarin je dit typt. Boeken en
+        // loggen gaan wél mee: een run met de hand kost hetzelfde geld als een run in de
+        // nacht, en stond tot #264 nergens.
+        metBoekhouding(paden, opties.nu ?? new Date(Date.now()), 'refine', eerste, () => werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun }), beschrijfRun);
     }
     finally {
         geefLockVrij();
     }
+}
+/**
+ * Wat er van een refine-run in het log komt.
+ *
+ * Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik zien dat
+ * de tijd op was en niet dat "iets" faalde (#206).
+ */
+function beschrijfRun(uitkomst) {
+    return {
+        uitkomst: uitkomst.afgekaptNaMinuten === undefined
+            ? uitkomst.afloop
+            : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
+        ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+        ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+    };
 }
 /**
  * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
@@ -265,35 +282,8 @@ function draaiNacht(cwd, wortel, paden, nu) {
                 break;
             }
             gedaan.add(eerste.issue);
-            // Boeken vóór de run: een run die omvalt heeft wél geld gekost.
-            gestart = boekRun(paden, nu);
-            let uitkomst;
-            try {
-                uitkomst = werkAf(eerste, cwd, wortel, draaiOpties);
-            }
-            catch (fout) {
-                // Ook een run die de CLI omvertrekt hoort in het log. Anders staat de teller op
-                // 1 en het log op niets, en dat is precies de stilte die je 's ochtends niet
-                // kunt lezen. Daarna alsnog doorgooien: dit is een probleem van de machine, en
-                // elke volgende run loopt er net zo goed op stuk.
-                logRun(paden, new Date(Date.now()), {
-                    issue: eerste.issue,
-                    app: eerste.app,
-                    uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
-                });
-                throw fout;
-            }
-            logRun(paden, new Date(Date.now()), {
-                issue: eerste.issue,
-                app: eerste.app,
-                // Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik
-                // zien dat de tijd op was en niet dat "iets" faalde (#206).
-                uitkomst: uitkomst.afgekaptNaMinuten === undefined
-                    ? uitkomst.afloop
-                    : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
-                ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
-                ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
-            });
+            // Boeken en loggen zitten in `metBoekhouding`, zodat elk startpad het deelt (#264).
+            gestart = metBoekhouding(paden, nu, 'refine', eerste, () => werkAf(eerste, cwd, wortel, draaiOpties), beschrijfRun).gestart;
             ok(`${String(gestart)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
         }
     }

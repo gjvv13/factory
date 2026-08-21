@@ -207,7 +207,43 @@ export function boekRun(paden, nu) {
 export function logRun(paden, moment, regel) {
     const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
     const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
-    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+}
+/**
+ * Boekt één run en logt hem, ook als hij omvalt.
+ *
+ * Dit stond in de nacht-lus, en daarom telde een `--eenmalig`-run niet mee in het
+ * dagmaximum en liet hij geen spoor na; een bouw-run kwam helemaal niet in het log
+ * (#264). De geldrem was daarmee te omzeilen zonder dat iemand iets omzeilde: toen de
+ * teller vol zat (9 van 4) werkte de wachtrij zich verder af met losse aanroepen, en
+ * die boekten niet.
+ *
+ * Boeken gebeurt vóór de run, niet erna: een run die omvalt heeft wél geld gekost. En
+ * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
+ * de stilte die je 's ochtends niet kunt lezen.
+ */
+export function metBoekhouding(paden, nu, soort, item, draai, beschrijf) {
+    const gestart = boekRun(paden, nu);
+    let uitkomst;
+    try {
+        uitkomst = draai();
+    }
+    catch (fout) {
+        logRun(paden, new Date(Date.now()), {
+            issue: item.issue,
+            app: item.app,
+            soort,
+            uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+        });
+        throw fout;
+    }
+    logRun(paden, new Date(Date.now()), {
+        issue: item.issue,
+        app: item.app,
+        soort,
+        ...beschrijf(uitkomst),
+    });
+    return { uitkomst, gestart };
 }
 /**
  * Voegt een regel toe aan het runlog.

@@ -212,17 +212,18 @@ describe('orkestrator-instellingen', () => {
       const nu = new Date('2026-08-19T04:12:03Z');
       logRun(paden, nu, {
         issue: 131,
+        soort: 'refine',
         app: 'factory',
         uitkomst: 'klaar',
         kosten: 0.42,
         beurten: 9,
       });
-      logRun(paden, nu, { issue: 51, app: 'assistant', uitkomst: 'escalatie' });
+      logRun(paden, nu, { issue: 51, app: 'assistant', soort: 'bouw', uitkomst: 'escalatie' });
 
       const regels = readFileSync(paden.logPad, 'utf8').trim().split('\n');
-      expect(regels[0]).toMatch(/#131 factory klaar \$0\.42 9 beurten/);
+      expect(regels[0]).toMatch(/#131 factory refine klaar \$0\.42 9 beurten/);
       // Onbekende kosten worden een `?` en niet stil $0,00 — dat laatste liegt.
-      expect(regels[1]).toMatch(/#51 assistant escalatie \? \? beurten/);
+      expect(regels[1]).toMatch(/#51 assistant bouw escalatie \? \? beurten/);
     });
   });
 });

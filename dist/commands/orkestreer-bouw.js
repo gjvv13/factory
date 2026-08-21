@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { bordItems, ESCALATIE_LABEL, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
-import { leesInstellingen, standaardPaden, } from '../orkestrator-instellingen.js';
+import { leesInstellingen, metBoekhouding, standaardPaden, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiBouwer } from '../werker.js';
@@ -186,7 +186,8 @@ export function orkestreerBouw(opties = {}) {
             '  (`gh api rate_limit --jq .resources.graphql`).');
     }
     const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
-    const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
+    const paden = opties.paden ?? standaardPaden();
+    const instellingen = leesInstellingen(paden);
     const wachtrij = bouwWachtrij(items);
     const geclaimd = items.filter((item) => item.kolom === GECLAIMD_KOLOM).length;
     kop(`Bouw-wachtrij: ${BOUW_KOLOM}`);
@@ -230,7 +231,24 @@ export function orkestreerBouw(opties = {}) {
             `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`);
         return;
     }
-    bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren);
+    // Een bouw-run stond tot #264 nergens: `logRun` werd alleen uit de nacht-lus
+    // aangeroepen, en die is refine-only. Juist de duurste soort was dus onzichtbaar.
+    metBoekhouding(paden, new Date(Date.now()), 'bouw', eerste, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren), beschrijfBouw);
+}
+/**
+ * Wat er van een bouw-run in het log komt.
+ *
+ * Zelfde vorm als bij een refine-run, inclusief de eigen tekst voor een afkapping
+ * (#206): "afgekapt (30 min)" is 's ochtends leesbaar, "mislukt" niet.
+ */
+function beschrijfBouw(uitkomst) {
+    return {
+        uitkomst: uitkomst.afgekaptNaMinuten === undefined
+            ? uitkomst.afloop
+            : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
+        ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+        ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+    };
 }
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export function bouwPrompt(item, werkmap, factoryMap, bronMappen = []) {
@@ -303,6 +321,7 @@ function bouwAf(item, cwd, wortel, budgetUsd, leverIn) {
     // volgende run in de weg kan zitten.
     ruimBronMapOp(bronWortel);
     verwerkBouw(item, uitkomst, cwd, wortel, leverIn);
+    return uitkomst;
 }
 /** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
 function verwerkBouw(item, uitkomst, cwd, wortel, leverIn) {
