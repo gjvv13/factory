@@ -14,6 +14,7 @@ import {
   leesSoort,
   orkestreerBouw,
   redenBuitenDeRij,
+  reviewPrompt,
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
@@ -163,8 +164,9 @@ describe('orkestreer --soort bouw --dry', () => {
     expect(tekst).toContain('slice/177-1');
     // Het epic staat erbij, zodat je vóór het geld kost ziet dat het een slice is.
     expect(tekst).toContain('(onder #169)');
-    // Zonder instellingenbestand is het bouwbudget de default van $10.
-    expect(tekst).toContain('$10');
+    // Zonder instellingenbestand is het bouwbudget de default van $10 + $3 review.
+    expect(tekst).toContain('$10 bouw');
+    expect(tekst).toContain('$3 review');
   });
 
   it('schrijft niets', () => {
@@ -421,11 +423,18 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     return readFileSync(path.join(hier, 'fixtures', `${naam}.json`), 'utf8');
   }
 
-  /** Een machine waarop het board de fixture teruggeeft en claude een gegeven envelop. */
-  function machine(werker: string): UitkomstBepaler {
+  /**
+   * Een machine waarop het board de fixture teruggeeft en claude envelops teruggeeft.
+   * De eerste `claude`-aanroep is de bouw, de tweede is de review (#184).
+   */
+  function machine(werker: string, review?: string): UitkomstBepaler {
     let huidig = 'Klaar voor Bouwen';
+    let claudeTeller = 0;
     return ({ commando, argumenten }) => {
-      if (commando === 'claude') return { stdout: werker };
+      if (commando === 'claude') {
+        claudeTeller++;
+        return { stdout: claudeTeller === 1 ? werker : (review ?? '') };
+      }
       if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
         const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
         if (query.includes('items(first:100')) return { stdout: bord() };
@@ -457,6 +466,19 @@ describe('orkestreer --soort bouw --eenmalig', () => {
           }),
         };
       }
+      if (
+        commando === 'gh' &&
+        argumenten[0] === 'api' &&
+        typeof argumenten[1] === 'string' &&
+        argumenten[1].includes('/comments')
+      ) {
+        // PR-comment plaatsen via gh api (#184).
+        return {};
+      }
+      if (commando === 'gh' && argumenten[0] === 'pr' && argumenten[1] === 'view') {
+        // PR-nummer opzoeken voor de review-comment (#184).
+        return { stdout: '42' };
+      }
       if (commando === 'gh' && argumenten[0] === 'project') {
         const optie = argumenten[argumenten.indexOf('--single-select-option-id') + 1];
         huidig = optie === 'optie-bouwen' ? 'Bouwen' : 'Klaar voor Bouwen';
@@ -467,9 +489,12 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     };
   }
 
-  function draai(werker: string): { aanroepen: ProcesAanroep[]; geleverd: unknown[] } {
+  function draai(
+    werker: string,
+    review?: string,
+  ): { aanroepen: ProcesAanroep[]; geleverd: unknown[] } {
     const geleverd: unknown[] = [];
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine(werker));
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine(werker, review));
     stelUitvoerderIn(uitvoerder);
     orkestreerBouw({
       eenmalig: true,
@@ -484,13 +509,30 @@ describe('orkestreer --soort bouw --eenmalig', () => {
    * Een machine die per issue bijhoudt waar het staat, zodat een reeks van meer runs
    * telkens een volgend item pakt in plaats van hetzelfde.
    */
-  function reeksMachine(werker: string): UitkomstBepaler {
+  function reeksMachine(werker: string, review?: string): UitkomstBepaler {
     const geclaimd = new Set<number>();
+    // Teller om bouw- en review-aanroepen te onderscheiden: oneven = bouw, even = review.
+    let claudeTeller = 0;
     return ({ commando, argumenten }) => {
       if (commando === 'claude') {
+        claudeTeller++;
+        if (claudeTeller % 2 === 0 && review !== undefined) {
+          return { stdout: review };
+        }
         const gevraagd = /- Issue: \*\*#(\d+)\*\*/.exec(argumenten.join('\n'))?.[1];
         if (gevraagd !== undefined) geclaimd.add(Number.parseInt(gevraagd, 10));
         return { stdout: werker };
+      }
+      if (
+        commando === 'gh' &&
+        argumenten[0] === 'api' &&
+        typeof argumenten[1] === 'string' &&
+        argumenten[1].includes('/comments')
+      ) {
+        return {};
+      }
+      if (commando === 'gh' && argumenten[0] === 'pr' && argumenten[1] === 'view') {
+        return { stdout: '42' };
       }
       if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
         const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
@@ -540,7 +582,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
 
   it('--reeks bouwt meer items achter elkaar, elk met zijn eigen werkplek (#265)', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
-      reeksMachine(envelop('claude-bouw-klaar')),
+      reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
     stelUitvoerderIn(uitvoerder);
     const geleverd: unknown[] = [];
@@ -552,17 +594,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       leverIn: (opties) => geleverd.push(opties),
     });
 
-    // Twee runs, twee verschillende items, twee keer ingeleverd — en beide geboekt in de
-    // interactieve pot, want een bouw-nacht bestaat nog niet.
+    // Twee runs: elk item krijgt een bouw-run én een review-run, dus vier claude-aanroepen.
     const claudes = aanroepen.filter((a) => a.commando === 'claude');
-    expect(claudes).toHaveLength(2);
+    expect(claudes).toHaveLength(4);
     expect(geleverd).toHaveLength(2);
     expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(2);
   });
 
   it('--reeks met een lijst doet precies die items, in die volgorde (#265)', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
-      reeksMachine(envelop('claude-bouw-klaar')),
+      reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
     stelUitvoerderIn(uitvoerder);
 
@@ -574,16 +615,18 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     });
 
     // De kop van de rij is #91 (ouder), maar gevraagd is eerst #126: de lijst bepaalt de
-    // volgorde, niet het board.
+    // volgorde, niet het board. De bouw-prompt herken je aan "onbemande werker" (de review-
+    // prompt zegt "onafhankelijke reviewer").
     const gevraagd = aanroepen
       .filter((a) => a.commando === 'claude')
+      .filter((a) => a.argumenten.join('\n').includes('onbemande werker'))
       .map((a) => /- Issue: \*\*#(\d+)\*\*/.exec(a.argumenten.join('\n'))?.[1]);
     expect(gevraagd).toEqual(['126', '91']);
   });
 
   it('--reeks slaat een nummer buiten de wachtrij over, met de reden, en gaat door', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
-      reeksMachine(envelop('claude-bouw-klaar')),
+      reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
     stelUitvoerderIn(uitvoerder);
 
@@ -596,14 +639,15 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     });
 
     // Eén typefout of één geblokkeerd item mag een reeks van vier niet kosten — maar
-    // stil overslaan zou betekenen dat je denkt dat het gebouwd is.
-    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(1);
+    // stil overslaan zou betekenen dat je denkt dat het gebouwd is. Twee claude-aanroepen:
+    // één bouw + één review voor het ene bouwbare item.
+    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(2);
     expect(uitvoer.join('')).toMatch(/#149 staat niet in de wachtrij.*escalatie/);
   });
 
   it('--reeks weigert een nummer dat niet op het board staat, vóór de eerste run', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
-      reeksMachine(envelop('claude-bouw-klaar')),
+      reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
     stelUitvoerderIn(uitvoerder);
 
@@ -620,7 +664,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   });
 
   it('boekt en logt de bouw-run, met de soort erbij (#264)', () => {
-    draai(envelop('claude-bouw-klaar'));
+    draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     // Tot #264 werd `logRun` alleen uit de nacht-lus aangeroepen, en die is refine-only:
     // de duurste soort ($10 budget tegen $5) stond nergens. Op 2026-08-21 had het log
@@ -632,7 +676,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   });
 
   it('claimt het item vóór de run, en levert in zonder auto-merge', () => {
-    const { aanroepen, geleverd } = draai(envelop('claude-bouw-klaar'));
+    const { aanroepen, geleverd } = draai(
+      envelop('claude-bouw-klaar'),
+      envelop('claude-review-leeg'),
+    );
 
     // De claim gaat vóór alles wat geld kost: twee werkers op één item leveren twee
     // branches op waarvan er één weg moet.
@@ -658,7 +705,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   });
 
   it('geeft het bouwbudget mee, niet het refinement-budget', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const werker = aanroepen.find((a) => a.commando === 'claude');
     // Default $10 voor bouwen tegen $5 voor een refinement: bouwen is meer beurten.
@@ -666,7 +713,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   });
 
   it('mag schrijven maar niet pushen', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const args = (aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? []).join(' ');
     // Schrijven is de opdracht; de PR is de grens tussen voorstellen en landen.
@@ -712,7 +759,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   });
 
   it('zet de comment met bewijs per criterium op het issue', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const comment = aanroepen.find(
       (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
@@ -734,7 +781,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
   it('geeft bron-mappen mee als extraMappen aan de werker', () => {
     // #106 draagt bron:assistant. De momentopname moet als extraMap meegaan, zodat de
     // werker die map kan lezen. De factory-map staat er sowieso bij.
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     // De kop van de rij is #177 (geen bron-labels), dus dit test dat een item zonder
     // bron-labels gewoon draait — de extraMappen bevatten dan alleen de factory-map.
@@ -749,6 +796,139 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     }, []);
     // Tenminste de factory-map als extra leesbare map.
     expect(addDirs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('draait een review na een geslaagde bouw, met het reviewprompt en lees-alleen-rechten', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+
+    // Twee claude-aanroepen: eerst de bouw, dan de review.
+    const claudes = aanroepen.filter((a) => a.commando === 'claude');
+    expect(claudes).toHaveLength(2);
+
+    // De tweede aanroep is de review: lees-alleen. Write en Edit staan in de
+    // verbodslijst, niet in de toestemmingslijst.
+    const reviewArgLijst = claudes[1]?.argumenten ?? [];
+    const allowedStart = reviewArgLijst.indexOf('--allowedTools');
+    const disallowedStart = reviewArgLijst.indexOf('--disallowedTools');
+    const toegestaan = reviewArgLijst.slice(allowedStart + 1, disallowedStart);
+    expect(toegestaan).toContain('Read');
+    expect(toegestaan).toContain('Grep');
+    expect(toegestaan).not.toContain('Write');
+    expect(toegestaan).not.toContain('Edit');
+    // Reviewbudget is $3 (default), niet $10.
+    const budgetIndex = reviewArgLijst.indexOf('--max-budget-usd');
+    expect(reviewArgLijst[budgetIndex + 1]).toBe('3');
+  });
+
+  it('plaatst de bevindingen als precies één PR-comment na het inleveren', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+
+    // De review-bevindingen gaan als PR-comment via `gh api`.
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(1);
+    const body = prComment[0]?.argumenten.find((a) => a.startsWith('body=')) ?? '';
+    expect(body).toContain('Code-review door een onbemande reviewer');
+    expect(body).toContain('src/commands/promote.ts');
+    expect(body).toContain('hoog');
+  });
+
+  it('plaatst ook een comment bij nul bevindingen — stilte is geen uitkomst', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(1);
+    const body = prComment[0]?.argumenten.find((a) => a.startsWith('body=')) ?? '';
+    expect(body).toContain('Geen bevindingen');
+  });
+
+  it('laat de PR staan als de review-run mislukt, met een aparte melding', () => {
+    const { aanroepen, geleverd } = draai(
+      envelop('claude-bouw-klaar'),
+      envelop('claude-review-fout'),
+    );
+
+    // De bouw slaagde, dus er wordt ingeleverd — de review is geen voorwaarde.
+    expect(geleverd).toHaveLength(1);
+    // Er staat een comment dat de review niet gelukt is.
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(1);
+    const body = prComment[0]?.argumenten.find((a) => a.startsWith('body=')) ?? '';
+    expect(body).toContain('Code-review niet gelukt');
+  });
+
+  it('plaatst bevindingen op het issue als inleveren mislukt', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      machine(envelop('claude-bouw-klaar'), envelop('claude-review-klaar')),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    // Een `leverIn` die gooit, zoals bij een rode poort of een conflict.
+    expect(() => {
+      orkestreerBouw({
+        eenmalig: true,
+        werkplaatsWortel: wortel,
+        paden,
+        leverIn: () => {
+          throw new Error('poort rood');
+        },
+      });
+    }).toThrow(/poort rood/);
+
+    // De review-bevindingen staan op het issue, niet op een PR die niet bestaat.
+    const issueComments = aanroepen.filter(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const reviewComment = issueComments.find((a) =>
+      a.argumenten.join(' ').includes('Code-review door een onbemande reviewer'),
+    );
+    expect(reviewComment).toBeDefined();
+    // Geen PR-comment: het inleveren is mislukt.
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(0);
+  });
+
+  it('draait geen review als de bouw escaleert of mislukt', () => {
+    const { aanroepen: aanroepenEscalatie } = draai(envelop('claude-bouw-escalatie'));
+    expect(aanroepenEscalatie.filter((a) => a.commando === 'claude')).toHaveLength(1);
+
+    const { aanroepen: aanroepenFout } = draai(envelop('claude-bouw-fout'));
+    expect(aanroepenFout.filter((a) => a.commando === 'claude')).toHaveLength(1);
+  });
+
+  it('neemt review-kosten op in de voetnoot', () => {
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+
+    const issueComment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = issueComment?.argumenten.join(' ') ?? '';
+    // De voetnoot bevat zowel de bouwkosten als de reviewkosten.
+    expect(tekst).toContain('review $1.23');
+    expect(tekst).toContain('review-sessie=review-sessie-1');
   });
 
   it('ruimt de bron-map op na de run, ook bij escalatie', () => {
@@ -884,6 +1064,32 @@ describe('--dry met bron-labels', () => {
 
     const tekst = uitvoer.join('');
     expect(tekst).not.toContain('bron:');
+  });
+});
+
+describe('reviewPrompt', () => {
+  it('vult de placeholders en bevat de review-opdracht', () => {
+    const prompt = reviewPrompt(
+      {
+        issue: 91,
+        titel: 'Test',
+        app: 'factory',
+        kolom: 'Klaar voor Bouwen',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/factory-wt/91',
+      '/w/factory',
+    );
+
+    expect(prompt).toContain('#91');
+    expect(prompt).toContain('Test');
+    expect(prompt).toContain('factory');
+    expect(prompt).toContain('/w/factory-wt/91');
+    expect(prompt).toContain('/w/factory');
+    expect(prompt).toContain('onafhankelijke reviewer');
+    // Mag niet schrijven, mag niet repareren.
+    expect(prompt).toContain('schrijft niets');
   });
 });
 
