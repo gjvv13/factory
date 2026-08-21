@@ -3,19 +3,27 @@ name: bump-factory
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Houdt de app automatisch op de nieuwste factory (#132). Pollt periodiek de tags van
-# de publieke factory-repo; is er een nieuwere dan de pin in package.json, dan bumpt
-# hij de dep, draait `factory sync` (zodat CLI én workflow/skill/hook-wijzigingen
-# meekomen), commit dat naar main en tript de deploy-pijplijn af. Zo bereikt een
-# factory-release deze app zonder handwerk.
+# Houdt de app automatisch op de nieuwste factory (#132). Is er een nieuwere tag dan de
+# pin in package.json, dan bumpt hij de dep, draait `factory sync` (zodat CLI én
+# workflow/skill/hook-wijzigingen meekomen), commit dat naar main en tript de
+# deploy-pijplijn af. Zo bereikt een factory-release deze app zonder handwerk.
+#
+# De factory **vertelt** het zelf: `release.yml` daar dispatcht deze workflow zodra de tag
+# staat (#236). De cron is alleen nog het vangnet voor een gemiste dispatch en draait
+# daarom één keer per dag. Hij stond op elke 30 minuten: dat waren 165 runs per dag over
+# vijf apps, met 7 mislukkingen — allemaal in `Set up job`, de fase waarin de runner zijn
+# actions ophaalt, waar geen retry in de workflow mogelijk is (#99, #122). Zeven mails per
+# dag voor een vraag die bijna altijd "niets veranderd" oplevert.
 #
 # Draait op de mini-runner (dezelfde als de deploy). Een push met GITHUB_TOKEN triggert
 # `deploy.yml` niet vanzelf, dus dispatchen we die expliciet. De bestaande vangnetten
 # (rooktest, versie-check, migratie-gate, dekkings-ratchet) blijven op die uitrol gelden.
 
 on:
+  # Vangnet, niet de gewone weg: de release dispatcht deze workflow zelf (#236). Eén keer
+  # per dag betekent dat een gemiste dispatch binnen 24 uur zelf herstelt.
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '17 5 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -70,3 +78,25 @@ jobs:
           # De push hierboven is met GITHUB_TOKEN en triggert deploy.yml niet; expliciet
           # aftrappen zodat de nieuwe versie via de gewone pijplijn naar acc en prod gaat.
           gh workflow run deploy.yml --ref main
+
+      # Een mislukte bump was alleen een faalmail; die gaat nu naar de ops-room, waar de
+      # deploy- en board-meldingen ook al langskomen (#123, #236). Draait ook als een
+      # eerdere stap omviel — inclusief `Set up job`-fouten die de checkout nooit haalden,
+      # vandaar geen enkele afhankelijkheid van bestanden uit de repo.
+      - name: Melden bij een gefaalde bump
+        if: failure()
+        env:
+          NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
+          NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
+        run: |
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          bericht="⚠ ${{ github.repository }}: bump naar de nieuwste factory mislukt. Run: $run_url"
+          if [ -z "$NOTIFY_URL" ]; then
+            echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
+            exit 0
+          fi
+          curl -fsS -m 10 -X POST "$NOTIFY_URL" \
+            -H "Authorization: Bearer $NOTIFY_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "{\"tekst\":\"$bericht\"}" \
+            || echo "::warning::kon de bump-melding niet aan de assistent versturen."
