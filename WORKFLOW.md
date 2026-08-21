@@ -207,12 +207,12 @@ De pijplijn schrijft zelf op het board (#128, #185). Lokaal gebruikt hij jouw ei
 en het board hangt onder een persoonlijk account. Daarvoor staan deze op
 `gjvv13/factory` (en `PROJECT_TOKEN` ook op elke app-repo):
 
-| Naam                  | Soort     | Waarvoor                                                                                                                                                             |
-| --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PROJECT_TOKEN`       | secret    | het board schrijven: classic PAT met scope `project` + `repo`, plus `read:org` en `read:discussion` — die eisen de `gh project`-subcommando's er bovenop             |
-| `RELEASE_PAT`         | secret    | de release-PR openen én de vijf apps van een nieuwe tag op de hoogte brengen (`gh workflow run` op een ánder repo; daar komt het ingebouwde `GITHUB_TOKEN` niet bij) |
-| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                                                                                                            |
-| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                                                                                                       |
+| Naam                  | Soort     | Waarvoor                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT_TOKEN`       | secret    | het board schrijven: classic PAT met scope `project` + `repo`, plus `read:org` en `read:discussion` — die eisen de `gh project`-subcommando's er bovenop                                                                                                                                                                                    |
+| `RELEASE_PAT`         | secret    | de release-PR openen én de vijf apps van een nieuwe tag op de hoogte brengen (`gh workflow run` op een ánder repo; daar komt het ingebouwde `GITHUB_TOKEN` niet bij). De apps zijn privé, dus dit vraagt de volle `repo`-scope: met alleen `public_repo` antwoordt GitHub met `HTTP 404: workflow not found` in plaats van een rechten-fout |
+| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                                                                                                                                                                                                                                                                                   |
+| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                                                                                                                                                                                                                                                                              |
 
 Ontbreekt `PROJECT_TOKEN`, dan slaat de bordstap zacht over en blijven items op
 **Uitrollen** staan — een release wordt daar nooit rood van. Dat liep één keer stil vol
@@ -224,3 +224,24 @@ dispatchen, dan blijft de release groen, komt er een waarschuwing per app plus �
 in de ops-room, en pikt de dagelijkse cron in de app het alsnog op. Die cron stond op elke
 30 minuten — 165 runs per dag over vijf apps, met zeven faalmails, allemaal in `Set up job`
 waar geen retry mogelijk is — en is nu het vangnet in plaats van de gewone weg.
+
+### Wat elke app-repo aan secrets nodig heeft
+
+| Naam                  | Soort     | Waarvoor                                                                        |
+| --------------------- | --------- | ------------------------------------------------------------------------------- |
+| `BUMP_PAT`            | secret    | de bump naar een nieuwe factory-tag pushen: classic PAT met `repo` + `workflow` |
+| `PROJECT_TOKEN`       | secret    | het board schrijven vanuit de deploy, zelfde token als hierboven                |
+| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                       |
+| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                  |
+| `PROD_SECRETS_ENV`    | secret    | de prod-env die de deploy uitrolt                                               |
+
+`BUMP_PAT` is er omdat `factory sync` ook workflow-bestanden meebrengt, en het ingebouwde
+`GITHUB_TOKEN` die niet mag schrijven: GitHub weigert zo'n push met `remote rejected …
+without 'workflows' permission`. Dat blokkeerde op 2026-08-21 alle vijf de apps op v1.15.25
+en v1.15.26 terwijl de factory op v1.15.28 stond (#245) — en de dagelijkse cron was geen
+vangnet, want die deed dezelfde push. Ontbreekt het secret, dan stopt de bump met een
+`::error::` die zegt wat er moet gebeuren, vóór hij iets probeert; is er niets te bumpen,
+dan blijft de run groen zonder token.
+
+Een push met dit PAT triggert `deploy.yml` zelf (een push met `GITHUB_TOKEN` doet dat niet).
+Daarom dispatcht de bump de deploy niet meer: dat gaf een tweede, identieke uitrol.
