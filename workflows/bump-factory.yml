@@ -15,8 +15,8 @@ name: bump-factory
 # actions ophaalt, waar geen retry in de workflow mogelijk is (#99, #122). Zeven mails per
 # dag voor een vraag die bijna altijd "niets veranderd" oplevert.
 #
-# Draait op de mini-runner (dezelfde als de deploy). De push gaat met `BUMP_PAT`, een PAT
-# met `repo` + `workflow`: het ingebouwde GITHUB_TOKEN mag geen workflow-bestanden schrijven
+# Draait op de mini-runner (dezelfde als de deploy). De push gaat met `PROJECT_TOKEN`, een
+# PAT met `repo` + `workflow`: het ingebouwde GITHUB_TOKEN mag geen workflow-bestanden schrijven
 # en `factory sync` brengt die wel mee (#245). Zo'n push triggert `deploy.yml` zelf, dus
 # hier wordt niets gedispatcht. De bestaande vangnetten (rooktest, versie-check,
 # migratie-gate, dekkings-ratchet) blijven op die uitrol gelden.
@@ -45,10 +45,12 @@ jobs:
           fetch-depth: 0
           # `factory sync` brengt ook workflow-wijzigingen mee, en die mag het ingebouwde
           # GITHUB_TOKEN niet pushen — GitHub weigert dat met `remote rejected` (#245).
-          # Vandaar een PAT met `repo` + `workflow`. Ontbreekt het secret, dan valt de
-          # checkout terug op het ingebouwde token en stopt de bump-stap hieronder met een
-          # duidelijke melding vóór hij iets probeert te pushen.
-          token: ${{ secrets.BUMP_PAT || github.token }}
+          # Vandaar `PROJECT_TOKEN`: het pijplijn-PAT dat al in elke app-repo staat en
+          # `repo` + `workflow` heeft. Eén token, twee rollen — het board schrijven en dit
+          # pushen (#257). Ontbreekt het secret, dan valt de checkout terug op het
+          # ingebouwde token en stopt de bump-stap hieronder met een duidelijke melding
+          # vóór hij iets probeert te pushen.
+          token: ${{ secrets.PROJECT_TOKEN || github.token }}
       - uses: pnpm/action-setup@v6
         with:
           dest: ${{ runner.temp }}/pnpm
@@ -58,7 +60,7 @@ jobs:
       - name: Bump de factory als er een nieuwere tag is
         env:
           GH_TOKEN: ${{ github.token }}
-          BUMP_PAT: ${{ secrets.BUMP_PAT }}
+          PUSH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         run: |
           huidig=$(node -p "require('./package.json').devDependencies.factory.split('#').pop()")
           # Nieuwste factory-tag, semver-gesorteerd. De factory-repo is publiek, dus
@@ -71,8 +73,8 @@ jobs:
           fi
           # Hier, en niet bij het begin van de run: een bump die er niet is hoeft geen
           # token en mag geen rode run opleveren.
-          if [ -z "$BUMP_PAT" ]; then
-            echo "::error::geen BUMP_PAT in deze repo — de bump naar $nieuwste kan niet gepusht worden. Het ingebouwde GITHUB_TOKEN mag geen workflow-bestanden schrijven (#245). Zet BUMP_PAT als secret: classic PAT met de scopes repo en workflow."
+          if [ -z "$PUSH_TOKEN" ]; then
+            echo "::error::geen PROJECT_TOKEN in deze repo — de bump naar $nieuwste kan niet gepusht worden. Het ingebouwde GITHUB_TOKEN mag geen workflow-bestanden schrijven (#245). Zet PROJECT_TOKEN als secret: classic PAT met de scopes repo en workflow (plus project voor het board)."
             exit 1
           fi
           echo "::notice::factory bumpen van $huidig naar $nieuwste"
@@ -89,7 +91,7 @@ jobs:
           git add -A
           git commit -m "bump: factory naar $nieuwste (+ sync)"
           git push origin main
-          # Deze push gaat met BUMP_PAT en triggert `deploy.yml` (push op main) dus wél —
+          # Deze push gaat met PROJECT_TOKEN en triggert `deploy.yml` (push op main) dus wél —
           # anders dan een push met GITHUB_TOKEN. Daarom geen expliciete dispatch meer:
           # die leverde vanaf hier een tweede, identieke deploy-run op (#245).
 
