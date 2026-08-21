@@ -13,6 +13,19 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
     /** Hoeveel items deze reeks maximaal afwerkt. */
     readonly aantal: number;
     /**
+     * De items die deze reeks moet doen, in deze volgorde. Afwezig betekent: pak de kop
+     * van de wachtrij (en dan bepaalt het board de volgorde).
+     *
+     * Een nummer dat niet in de wachtrij staat wordt overgeslagen met een melding, en de
+     * reeks gaat door met het volgende: één typefout mag een reeks van vier niet kosten.
+     */
+    readonly lijst?: readonly number[];
+    /**
+     * Waarom een gevraagd item niet in de wachtrij staat, als de aanroeper dat kan zeggen.
+     * Zonder dit staat er alleen dát het niet in de rij staat, en dan ga je zelf zoeken.
+     */
+    readonly reden?: (issue: number) => string | undefined;
+    /**
      * Leest de wachtrij. Wordt per ronde opnieuw aangeroepen: de vorige run heeft het
      * board net veranderd, en doorwerken op de oude lijst pakt hetzelfde item nog eens.
      */

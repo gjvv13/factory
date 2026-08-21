@@ -6,6 +6,7 @@ import { bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLa
 import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
+import {} from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -168,8 +169,12 @@ export function orkestreer(opties = {}) {
             throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
         }
         const instellingen = leesInstellingen(paden);
+        const keuze = opties.reeks;
+        const lijst = keuze.soort === 'lijst' ? keuze.issues : undefined;
         try {
-            kop(`Reeks van ${String(opties.reeks)}`);
+            kop(keuze.soort === 'aantal'
+                ? `Reeks van ${String(keuze.aantal)}`
+                : `Reeks: ${keuze.issues.map((n) => `#${String(n)}`).join(', ')}`);
             meldReeks(draaiReeks({
                 paden,
                 nu: opties.nu ?? new Date(Date.now()),
@@ -177,7 +182,8 @@ export function orkestreer(opties = {}) {
                 // Jij startte deze reeks, dus hij komt niet uit de pot van de nacht (#264).
                 pot: 'interactief',
                 noemer: 'deze reeks',
-                aantal: opties.reeks,
+                aantal: keuze.soort === 'aantal' ? keuze.aantal : keuze.issues.length,
+                ...(lijst === undefined ? {} : { lijst }),
                 leesRij: () => bouwWachtrij(cwd),
                 werkAf: (item) => werkAf(item, cwd, wortel, {
                     budgetUsd: instellingen.budgetPerRun,

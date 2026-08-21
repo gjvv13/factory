@@ -1064,7 +1064,7 @@ describe('orkestreer --nacht', () => {
 
     // Dagmaximum 2 in het instellingenbestand, en toch drie runs: op wat jij zelf start
     // staat geen maximum, want dat aantal geef je hier mee. De nachtpot blijft leeg.
-    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
 
     expect(claudeAanroepen(aanroepen)).toHaveLength(3);
     const staat = leesStaat(paden, NU);
@@ -1076,7 +1076,7 @@ describe('orkestreer --nacht', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(uitvoerder);
 
-    orkestreer({ reeks: 2, werkplaatsWortel: wortel, paden, nu: NU });
+    orkestreer({ reeks: { soort: 'aantal', aantal: 2 }, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Een hangende werker in een reeks van vier is even duur als een hangende werker om
     // 04:00 (#206); zonder deze grens loopt hij door tot iemand hem stopt.
@@ -1098,7 +1098,7 @@ describe('orkestreer --nacht', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(eersteMislukt);
     stelUitvoerderIn(uitvoerder);
 
-    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Eén escalatie is gewoon werk en kost alleen dat item — de les van #202.
     expect(claudeAanroepen(aanroepen)).toHaveLength(3);
@@ -1110,7 +1110,7 @@ describe('orkestreer --nacht', () => {
     );
     stelUitvoerderIn(uitvoerder);
 
-    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Twee achter elkaar betekent dat de machine zelf stuk is; doorgaan is dan geld
     // weggooien. Wel luid, want dit is een andere uitkomst dan "de rij is leeg".
@@ -1121,7 +1121,7 @@ describe('orkestreer --nacht', () => {
   it('--reeks sluit af met wat er gedaan is en wat het kostte', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
 
-    orkestreer({ reeks: 2, werkplaatsWortel: wortel, paden, nu: NU });
+    orkestreer({ reeks: { soort: 'aantal', aantal: 2 }, werkplaatsWortel: wortel, paden, nu: NU });
 
     expect(uitvoer.join('')).toMatch(/reeks klaar: 2 gedaan, 2 geslaagd, \$\d+\.\d\d/);
   });

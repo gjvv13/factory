@@ -1,5 +1,6 @@
 import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type ReeksKeuze } from './orkestreer-bouw.js';
 import { type WerkerUitkomst } from '../werker.js';
 export interface OrkestreerOpties {
     /** Toont de wachtrij en wat er zou gebeuren, en schrijft niets. */
@@ -9,11 +10,11 @@ export interface OrkestreerOpties {
     /** Werkt de wachtrij af tot het dagmaximum of tot hij leeg is — de onbemande modus. */
     readonly nacht?: boolean;
     /**
-     * Werkt dit aantal items af, met dezelfde vangnetten als de nacht (#265). Het
-     * aantal is de rem: hierop staat geen dagmaximum, want jij zegt bij het starten
-     * hoeveel het mag zijn.
+     * Werkt een reeks af, met dezelfde vangnetten als de nacht (#265): een aantal van de
+     * kop van de wachtrij, of precies de opgegeven items. Wat je hier meegeeft is de rem —
+     * hierop staat geen dagmaximum, want jij zegt bij het starten hoeveel het mag zijn.
      */
-    readonly reeks?: number;
+    readonly reeks?: ReeksKeuze;
     /** Zet de LaunchAgent op die `--nacht` één keer per nacht draait. */
     readonly installeer?: boolean;
     /** Haalt die LaunchAgent weg. */
