@@ -29,12 +29,12 @@ import {
   type Kolom,
 } from '../board.js';
 import {
-  boekRun,
   kalenderdag,
   LAUNCH_LABEL,
   leesInstellingen,
   leesStaat,
-  logRun,
+  metBoekhouding,
+  type RunRegel,
   schrijfLog,
   standaardPaden,
   TOKEN_SLEUTEL,
@@ -308,11 +308,41 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
   }
   try {
     // Met de hand: het budget uit de instellingen, maar geen token vereist — dan draait
-    // `claude` op de gewone keychain-auth van de terminal waarin je dit typt.
-    werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun });
+    // `claude` op de gewone keychain-auth van de terminal waarin je dit typt. Boeken en
+    // loggen gaan wél mee: een run met de hand kost hetzelfde geld als een run in de
+    // nacht, en stond tot #264 nergens.
+    metBoekhouding(
+      {
+        paden,
+        nu: opties.nu ?? new Date(Date.now()),
+        soort: 'refine',
+        // Jij startte deze run, dus hij komt niet uit de pot van de nacht.
+        pot: 'interactief',
+        item: eerste,
+      },
+      () => werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun }),
+      beschrijfRun,
+    );
   } finally {
     geefLockVrij();
   }
+}
+
+/**
+ * Wat er van een refine-run in het log komt.
+ *
+ * Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik zien dat
+ * de tijd op was en niet dat "iets" faalde (#206).
+ */
+function beschrijfRun(uitkomst: RunUitkomst): RunRegel {
+  return {
+    uitkomst:
+      uitkomst.afgekaptNaMinuten === undefined
+        ? uitkomst.afloop
+        : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
+    ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+    ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+  };
 }
 
 /**
@@ -384,35 +414,12 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
       }
       gedaan.add(eerste.issue);
 
-      // Boeken vóór de run: een run die omvalt heeft wél geld gekost.
-      gestart = boekRun(paden, nu);
-      let uitkomst: RunUitkomst;
-      try {
-        uitkomst = werkAf(eerste, cwd, wortel, draaiOpties);
-      } catch (fout) {
-        // Ook een run die de CLI omvertrekt hoort in het log. Anders staat de teller op
-        // 1 en het log op niets, en dat is precies de stilte die je 's ochtends niet
-        // kunt lezen. Daarna alsnog doorgooien: dit is een probleem van de machine, en
-        // elke volgende run loopt er net zo goed op stuk.
-        logRun(paden, new Date(Date.now()), {
-          issue: eerste.issue,
-          app: eerste.app,
-          uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
-        });
-        throw fout;
-      }
-      logRun(paden, new Date(Date.now()), {
-        issue: eerste.issue,
-        app: eerste.app,
-        // Een afkapping is een eigen soort mislukking: 's ochtends wil je in één blik
-        // zien dat de tijd op was en niet dat "iets" faalde (#206).
-        uitkomst:
-          uitkomst.afgekaptNaMinuten === undefined
-            ? uitkomst.afloop
-            : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
-        ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
-        ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
-      });
+      // Boeken en loggen zitten in `metBoekhouding`, zodat elk startpad het deelt (#264).
+      gestart = metBoekhouding(
+        { paden, nu, soort: 'refine', pot: 'nacht', item: eerste },
+        () => werkAf(eerste, cwd, wortel, draaiOpties),
+        beschrijfRun,
+      ).gestart;
       ok(`${String(gestart)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
     }
   } finally {
@@ -712,7 +719,10 @@ function voetnoot(uitkomst: WerkerUitkomst, werkmap: string): string {
  * Eén board-lezing voor alle drie de blokken; het escalatie-blok haalt zijn vraag en
  * advies uit de comment die de orkestrator zelf schreef.
  */
-export function orkestreerStatus(cwd: string): void {
+export function orkestreerStatus(
+  cwd: string,
+  opties: { readonly paden?: OrkestratorPaden } = {},
+): void {
   const items = bordItems(cwd);
   if (items === undefined) {
     throw new GebruikersFout('Kon het board niet lezen.');
@@ -728,6 +738,18 @@ export function orkestreerStatus(cwd: string): void {
   const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
   const wachtrij = items.filter(
     (item) => item.kolom === WACHTRIJ_KOLOM && !geblokkeerd.has(item.issue),
+  );
+
+  // De tellers eerst: dit is de enige plek waar je ziet wat er vandaag al gedraaid heeft,
+  // en sinds #264 zijn dat twee potten. Zonder deze regel zou je de nachtpot pas leeg
+  // zien als de nacht meldt dat hij niets doet.
+  const paden = opties.paden ?? standaardPaden();
+  const staat = leesStaat(paden, new Date(Date.now()));
+  const dagmaximum = leesInstellingen(paden).dagmaximum;
+  kop('Vandaag');
+  process.stdout.write(
+    `  nacht:       ${String(staat.gestart)}/${String(dagmaximum)}\n` +
+      `  zelf gestart: ${String(staat.interactief)} (geen maximum; het aantal geef je mee bij het starten)\n`,
   );
 
   kop(`Technisch uitgewerkt, wacht op jouw akkoord (${String(wachtOpAkkoord.length)})`);

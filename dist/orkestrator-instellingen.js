@@ -139,7 +139,16 @@ export function zorgVoorEnvBestand(paden) {
 // --- De dagteller: wat GitHub niet weet --------------------------------------
 const staatSchema = z.object({
     dag: z.string().min(1),
+    /** Runs die de LaunchAgent vannacht gestart heeft; hierop staat het dagmaximum. */
     gestart: z.number().int().nonnegative(),
+    /**
+     * Runs die je zelf gestart hebt vandaag. Een eigen teller, zodat een middag
+     * experimenteren de nacht niet leegtrekt (#264). Hier staat geen maximum op: het
+     * aantal geef je mee bij het starten, en dat is de rem.
+     *
+     * `.default(0)` zodat een staatbestand van vóór deze splitsing gewoon leesbaar blijft.
+     */
+    interactief: z.number().int().nonnegative().default(0),
     laatsteRun: z.string().optional(),
 });
 /**
@@ -164,7 +173,7 @@ export function kalenderdag(nu) {
 export function leesStaat(paden, nu) {
     const vandaag = kalenderdag(nu);
     if (!existsSync(paden.staatPad)) {
-        return { dag: vandaag, gestart: 0 };
+        return { dag: vandaag, gestart: 0, interactief: 0 };
     }
     let gelezen;
     try {
@@ -172,16 +181,16 @@ export function leesStaat(paden, nu) {
     }
     catch {
         waarschuwing(`${paden.staatPad} is niet te lezen; de dagteller begint vandaag opnieuw.`);
-        return { dag: vandaag, gestart: 0 };
+        return { dag: vandaag, gestart: 0, interactief: 0 };
     }
     const staat = staatSchema.safeParse(gelezen);
     if (!staat.success) {
         waarschuwing(`${paden.staatPad} wijkt af; de dagteller begint vandaag opnieuw.`);
-        return { dag: vandaag, gestart: 0 };
+        return { dag: vandaag, gestart: 0, interactief: 0 };
     }
     // Een andere dag betekent een schone lei — daarom staat de dag in het bestand en
     // niet alleen een teller.
-    return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0 };
+    return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0, interactief: 0 };
 }
 /**
  * Boekt één gestarte run en levert de nieuwe stand.
@@ -190,12 +199,13 @@ export function leesStaat(paden, nu) {
  * gekost, en een teller die alleen geslaagde runs telt is geen rem maar een
  * aanmoediging om te blijven proberen.
  */
-export function boekRun(paden, nu) {
+export function boekRun(paden, nu, pot) {
     const staat = leesStaat(paden, nu);
-    const gestart = staat.gestart + 1;
+    const gestart = pot === 'nacht' ? staat.gestart + 1 : staat.gestart;
+    const interactief = pot === 'interactief' ? staat.interactief + 1 : staat.interactief;
     mkdirSync(path.dirname(paden.staatPad), { recursive: true });
-    writeFileSync(paden.staatPad, `${JSON.stringify({ dag: kalenderdag(nu), gestart, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`);
-    return gestart;
+    writeFileSync(paden.staatPad, `${JSON.stringify({ dag: kalenderdag(nu), gestart, interactief, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`);
+    return pot === 'nacht' ? gestart : interactief;
 }
 /**
  * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
@@ -207,7 +217,44 @@ export function boekRun(paden, nu) {
 export function logRun(paden, moment, regel) {
     const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
     const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
-    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+}
+/**
+ * Boekt één run en logt hem, ook als hij omvalt.
+ *
+ * Dit stond in de nacht-lus, en daarom telde een `--eenmalig`-run niet mee in het
+ * dagmaximum en liet hij geen spoor na; een bouw-run kwam helemaal niet in het log
+ * (#264). De geldrem was daarmee te omzeilen zonder dat iemand iets omzeilde: toen de
+ * teller vol zat (9 van 4) werkte de wachtrij zich verder af met losse aanroepen, en
+ * die boekten niet.
+ *
+ * Boeken gebeurt vóór de run, niet erna: een run die omvalt heeft wél geld gekost. En
+ * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
+ * de stilte die je 's ochtends niet kunt lezen.
+ */
+export function metBoekhouding(opzet, draai, beschrijf) {
+    const { paden, nu, soort, item } = opzet;
+    const gestart = boekRun(paden, nu, opzet.pot);
+    let uitkomst;
+    try {
+        uitkomst = draai();
+    }
+    catch (fout) {
+        logRun(paden, new Date(Date.now()), {
+            issue: item.issue,
+            app: item.app,
+            soort,
+            uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+        });
+        throw fout;
+    }
+    logRun(paden, new Date(Date.now()), {
+        issue: item.issue,
+        app: item.app,
+        soort,
+        ...beschrijf(uitkomst),
+    });
+    return { uitkomst, gestart };
 }
 /**
  * Voegt een regel toe aan het runlog.

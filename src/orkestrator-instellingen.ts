@@ -31,6 +31,9 @@ import { GebruikersFout, waarschuwing } from './shell.js';
  */
 
 /** De paden buiten `~/Documents` waar de orkestrator zijn eigen staat bewaart. */
+/** De twee werkersoorten. Staat hier omdat het runlog en de dagteller ze beide kennen. */
+export type WerkerSoort = 'refine' | 'bouw';
+
 export interface OrkestratorPaden {
   /** Instellingen én token: `~/.config/factory/orkestrator.env`, rechten 0600. */
   readonly envPad: string;
@@ -206,9 +209,21 @@ export function zorgVoorEnvBestand(paden: OrkestratorPaden): void {
 
 const staatSchema = z.object({
   dag: z.string().min(1),
+  /** Runs die de LaunchAgent vannacht gestart heeft; hierop staat het dagmaximum. */
   gestart: z.number().int().nonnegative(),
+  /**
+   * Runs die je zelf gestart hebt vandaag. Een eigen teller, zodat een middag
+   * experimenteren de nacht niet leegtrekt (#264). Hier staat geen maximum op: het
+   * aantal geef je mee bij het starten, en dat is de rem.
+   *
+   * `.default(0)` zodat een staatbestand van vóór deze splitsing gewoon leesbaar blijft.
+   */
+  interactief: z.number().int().nonnegative().default(0),
   laatsteRun: z.string().optional(),
 });
+
+/** Uit welke pot een run geboekt wordt. */
+export type RunPot = 'nacht' | 'interactief';
 
 export type OrkestratorStaat = z.infer<typeof staatSchema>;
 
@@ -235,23 +250,23 @@ export function kalenderdag(nu: Date): string {
 export function leesStaat(paden: OrkestratorPaden, nu: Date): OrkestratorStaat {
   const vandaag = kalenderdag(nu);
   if (!existsSync(paden.staatPad)) {
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   let gelezen: unknown;
   try {
     gelezen = JSON.parse(readFileSync(paden.staatPad, 'utf8'));
   } catch {
     waarschuwing(`${paden.staatPad} is niet te lezen; de dagteller begint vandaag opnieuw.`);
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   const staat = staatSchema.safeParse(gelezen);
   if (!staat.success) {
     waarschuwing(`${paden.staatPad} wijkt af; de dagteller begint vandaag opnieuw.`);
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   // Een andere dag betekent een schone lei — daarom staat de dag in het bestand en
   // niet alleen een teller.
-  return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0 };
+  return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0, interactief: 0 };
 }
 
 /**
@@ -261,15 +276,16 @@ export function leesStaat(paden: OrkestratorPaden, nu: Date): OrkestratorStaat {
  * gekost, en een teller die alleen geslaagde runs telt is geen rem maar een
  * aanmoediging om te blijven proberen.
  */
-export function boekRun(paden: OrkestratorPaden, nu: Date): number {
+export function boekRun(paden: OrkestratorPaden, nu: Date, pot: RunPot): number {
   const staat = leesStaat(paden, nu);
-  const gestart = staat.gestart + 1;
+  const gestart = pot === 'nacht' ? staat.gestart + 1 : staat.gestart;
+  const interactief = pot === 'interactief' ? staat.interactief + 1 : staat.interactief;
   mkdirSync(path.dirname(paden.staatPad), { recursive: true });
   writeFileSync(
     paden.staatPad,
-    `${JSON.stringify({ dag: kalenderdag(nu), gestart, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ dag: kalenderdag(nu), gestart, interactief, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`,
   );
-  return gestart;
+  return pot === 'nacht' ? gestart : interactief;
 }
 
 /**
@@ -285,6 +301,12 @@ export function logRun(
   regel: {
     readonly issue: number;
     readonly app: string;
+    /**
+     * Refine of bouw. Zonder dit veld is een gemiddelde over het log misleidend: een
+     * refine-run heeft $5 budget en een bouw-run $10, en op 2026-08-21 stonden er
+     * twaalf refine-runs in het log en nul bouw-runs (#264).
+     */
+    readonly soort: WerkerSoort;
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
@@ -294,8 +316,63 @@ export function logRun(
   const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
   schrijfLog(
     paden,
-    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
+    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
   );
+}
+
+/** Wat er van een afgeronde run in het log komt; per soort anders opgebouwd. */
+export interface RunRegel {
+  readonly uitkomst: string;
+  readonly kosten?: number;
+  readonly beurten?: number;
+}
+
+/**
+ * Boekt één run en logt hem, ook als hij omvalt.
+ *
+ * Dit stond in de nacht-lus, en daarom telde een `--eenmalig`-run niet mee in het
+ * dagmaximum en liet hij geen spoor na; een bouw-run kwam helemaal niet in het log
+ * (#264). De geldrem was daarmee te omzeilen zonder dat iemand iets omzeilde: toen de
+ * teller vol zat (9 van 4) werkte de wachtrij zich verder af met losse aanroepen, en
+ * die boekten niet.
+ *
+ * Boeken gebeurt vóór de run, niet erna: een run die omvalt heeft wél geld gekost. En
+ * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
+ * de stilte die je 's ochtends niet kunt lezen.
+ */
+export function metBoekhouding<T>(
+  opzet: {
+    readonly paden: OrkestratorPaden;
+    readonly nu: Date;
+    readonly soort: WerkerSoort;
+    /** Nacht of interactief; bepaalt welke teller omhoog gaat. */
+    readonly pot: RunPot;
+    readonly item: { readonly issue: number; readonly app: string };
+  },
+  draai: () => T,
+  beschrijf: (uitkomst: T) => RunRegel,
+): { readonly uitkomst: T; readonly gestart: number } {
+  const { paden, nu, soort, item } = opzet;
+  const gestart = boekRun(paden, nu, opzet.pot);
+  let uitkomst: T;
+  try {
+    uitkomst = draai();
+  } catch (fout) {
+    logRun(paden, new Date(Date.now()), {
+      issue: item.issue,
+      app: item.app,
+      soort,
+      uitkomst: `afgebroken (${fout instanceof Error ? (fout.message.split('\n')[0] ?? '') : String(fout)})`,
+    });
+    throw fout;
+  }
+  logRun(paden, new Date(Date.now()), {
+    issue: item.issue,
+    app: item.app,
+    soort,
+    ...beschrijf(uitkomst),
+  });
+  return { uitkomst, gestart };
 }
 
 /**
