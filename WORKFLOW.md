@@ -227,21 +227,26 @@ waar geen retry mogelijk is — en is nu het vangnet in plaats van de gewone weg
 
 ### Wat elke app-repo aan secrets nodig heeft
 
-| Naam                  | Soort     | Waarvoor                                                                        |
-| --------------------- | --------- | ------------------------------------------------------------------------------- |
-| `BUMP_PAT`            | secret    | de bump naar een nieuwe factory-tag pushen: classic PAT met `repo` + `workflow` |
-| `PROJECT_TOKEN`       | secret    | het board schrijven vanuit de deploy, zelfde token als hierboven                |
-| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                       |
-| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                  |
-| `PROD_SECRETS_ENV`    | secret    | de prod-env die de deploy uitrolt                                               |
+| Naam                  | Soort     | Waarvoor                                                                                                                   |
+| --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT_TOKEN`       | secret    | het pijplijn-token met twee rollen: het board schrijven én de bump pushen. Classic PAT met `repo` + `workflow` + `project` |
+| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                                                                  |
+| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                                                             |
+| `PROD_SECRETS_ENV`    | secret    | de prod-env die de deploy uitrolt                                                                                          |
 
-`BUMP_PAT` is er omdat `factory sync` ook workflow-bestanden meebrengt, en het ingebouwde
-`GITHUB_TOKEN` die niet mag schrijven: GitHub weigert zo'n push met `remote rejected …
+De `workflow`-scope zit erop omdat `factory sync` ook workflow-bestanden meebrengt, en het
+ingebouwde `GITHUB_TOKEN` die niet mag schrijven: GitHub weigert zo'n push met `remote rejected …
 without 'workflows' permission`. Dat blokkeerde op 2026-08-21 alle vijf de apps op v1.15.25
 en v1.15.26 terwijl de factory op v1.15.28 stond (#245) — en de dagelijkse cron was geen
 vangnet, want die deed dezelfde push. Ontbreekt het secret, dan stopt de bump met een
 `::error::` die zegt wat er moet gebeuren, vóór hij iets probeert; is er niets te bumpen,
 dan blijft de run groen zonder token.
+
+Dat één token beide rollen doet is een besluit, geen slordigheid (#257). Een eigen secret
+voor de push zou betekenen dat het PAT geregenereerd moet worden om aan de waarde te komen —
+GitHub laat die maar één keer zien — en dan is elke andere plek waar datzelfde token staat
+óók ongeldig. Bij classic PAT's zijn scopes alles-of-niets en is er één gebruiker, dus het
+scheiden was papier, geen bescherming.
 
 Een push met dit PAT triggert `deploy.yml` zelf (een push met `GITHUB_TOKEN` doet dat niet).
 Daarom dispatcht de bump de deploy niet meer: dat gaf een tweede, identieke uitrol.
