@@ -135,7 +135,7 @@ export function bordBereikbaar(): boolean {
   return ghOmgeving().kan;
 }
 
-interface Doelwit {
+export interface Doelwit {
   readonly itemId: string;
   readonly projectId: string;
   readonly veldId: string;
@@ -177,6 +177,39 @@ interface OpzoekAntwoord {
   };
 }
 
+/**
+ * Parset het ruwe JSON-antwoord van de opzoek-query tot een Doelwit, of undefined
+ * als de structuur afwijkt van wat de query oplevert. Geëxporteerd zodat de
+ * contract-tests de GraphQL-interpretatie kunnen vastpinnen tegen een opgenomen
+ * respons, los van de gh-aanroep.
+ */
+export function parseOpzoekAntwoord(ruw: string, kolom: Kolom): Doelwit | undefined {
+  let antwoord: OpzoekAntwoord;
+  try {
+    antwoord = JSON.parse(ruw) as OpzoekAntwoord;
+  } catch {
+    return undefined;
+  }
+  const project = antwoord.data?.user?.projectV2;
+  const projectId = project?.id;
+  const veldId = project?.field?.id;
+  const optieId = project?.field?.options?.find((optie) => optie.name === kolom)?.id;
+  const knoop = antwoord.data?.repository?.issue?.projectItems?.nodes?.find(
+    (node) => node.project?.number === PROJECT_NUMMER,
+  );
+  const itemId = knoop?.id;
+  if (
+    projectId === undefined ||
+    veldId === undefined ||
+    optieId === undefined ||
+    itemId === undefined
+  ) {
+    return undefined;
+  }
+  const huidig = knoop?.fieldValueByName?.name;
+  return { itemId, projectId, veldId, optieId, ...(huidig === undefined ? {} : { huidig }) };
+}
+
 /** Zoekt in één aanroep alles op wat nodig is om de kolom te kunnen zetten. */
 function zoekDoelwit(
   issue: number,
@@ -206,30 +239,7 @@ function zoekDoelwit(
   if (ruw === undefined || ruw === '') {
     return undefined;
   }
-  let antwoord: OpzoekAntwoord;
-  try {
-    antwoord = JSON.parse(ruw) as OpzoekAntwoord;
-  } catch {
-    return undefined;
-  }
-  const project = antwoord.data?.user?.projectV2;
-  const projectId = project?.id;
-  const veldId = project?.field?.id;
-  const optieId = project?.field?.options?.find((optie) => optie.name === kolom)?.id;
-  const knoop = antwoord.data?.repository?.issue?.projectItems?.nodes?.find(
-    (node) => node.project?.number === PROJECT_NUMMER,
-  );
-  const itemId = knoop?.id;
-  if (
-    projectId === undefined ||
-    veldId === undefined ||
-    optieId === undefined ||
-    itemId === undefined
-  ) {
-    return undefined;
-  }
-  const huidig = knoop?.fieldValueByName?.name;
-  return { itemId, projectId, veldId, optieId, ...(huidig === undefined ? {} : { huidig }) };
+  return parseOpzoekAntwoord(ruw, kolom);
 }
 
 /**
@@ -364,11 +374,12 @@ export function plaatsComment(issue: number, tekst: string, cwd?: string): void 
  * Branches zonder slice-vorm leveren niets op — dat is bedoeld: van de tien merges in
  * v1.15.1 waren er vijf een fix- of docs-branch.
  */
-export function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[] {
-  const log = uitvoerVan('git', ['log', '--format=%s', `${vorigeTag}..${tag}`], cwd);
-  if (log === undefined || log === '') {
-    return [];
-  }
+/**
+ * Parset ruwe `git log --format=%s`-uitvoer naar ontdubbelde, gesorteerde
+ * issuenummers. Geëxporteerd zodat de contract-tests de git-log-interpretatie
+ * kunnen vastpinnen tegen een opgenomen uitvoer, los van het git-commando.
+ */
+export function parseIssuesUitLog(log: string): number[] {
   const gevonden = new Set<number>();
   for (const regel of log.split('\n')) {
     const match = /^Merge pull request #\d+ from [^/]+\/slice\/(\d+)-\d+$/.exec(regel.trim());
@@ -381,6 +392,14 @@ export function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): n
     }
   }
   return [...gevonden].sort((a, b) => a - b);
+}
+
+export function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[] {
+  const log = uitvoerVan('git', ['log', '--format=%s', `${vorigeTag}..${tag}`], cwd);
+  if (log === undefined || log === '') {
+    return [];
+  }
+  return parseIssuesUitLog(log);
 }
 
 /** Leest één veld van een backlog-issue via REST; undefined als het er niet is. */
@@ -398,18 +417,15 @@ function issueVeld(issue: number, jq: string, cwd?: string): string | undefined 
   return ruw === undefined || ruw === '' || ruw === 'null' ? undefined : ruw;
 }
 
+/** De jq-expressie waarmee `ouderVan` het oudernummer uit een issue leest. */
+export const JQ_OUDER = '.parent_issue_url';
+
 /**
- * Het issuenummer van de ouder-epic, of undefined als dit issue er geen heeft.
- *
- * REST geeft `parent_issue_url` (een API-url die op het nummer eindigt). Dat is
- * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
+ * Parset de ruwe jq-uitvoer van `JQ_OUDER` tot een issuenummer. Geëxporteerd
+ * zodat de contract-tests de interpretatie kunnen vastpinnen.
  */
-export function ouderVan(issue: number, cwd?: string): number | undefined {
-  const url = issueVeld(issue, '.parent_issue_url', cwd);
-  if (url === undefined) {
-    return undefined;
-  }
-  const match = /\/(\d+)$/.exec(url.trim());
+export function parseOuderAntwoord(ruw: string): number | undefined {
+  const match = /\/(\d+)$/.exec(ruw.trim());
   if (match?.[1] === undefined) {
     return undefined;
   }
@@ -418,17 +434,46 @@ export function ouderVan(issue: number, cwd?: string): number | undefined {
 }
 
 /**
+ * Het issuenummer van de ouder-epic, of undefined als dit issue er geen heeft.
+ *
+ * REST geeft `parent_issue_url` (een API-url die op het nummer eindigt). Dat is
+ * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
+ */
+export function ouderVan(issue: number, cwd?: string): number | undefined {
+  const url = issueVeld(issue, JQ_OUDER, cwd);
+  if (url === undefined) {
+    return undefined;
+  }
+  return parseOuderAntwoord(url);
+}
+
+/**
+ * De jq-expressie waarmee `alleKinderenDicht` de voortgang van een epic leest.
+ * De interpolatie (`\(…)`) moet escapen naar `\\(…)` in de TypeScript-string zodat
+ * jq de werkelijke veldwaarde invult, niet de letterlijke tekst.
+ */
+export const JQ_KINDEREN = '.sub_issues_summary | "\\(.completed)/\\(.total)"';
+
+/**
+ * Parset de ruwe jq-uitvoer van `JQ_KINDEREN` tot een boolean. Geëxporteerd
+ * zodat de contract-tests de interpretatie kunnen vastpinnen.
+ */
+export function parseKinderenAntwoord(ruw: string): boolean {
+  const [gedaan, totaal] = ruw.trim().split('/').map(Number);
+  return totaal !== undefined && totaal > 0 && gedaan === totaal;
+}
+
+/**
  * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
  * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.
  * False bij een issue zonder kinderen: dan valt er niets af te ronden.
  */
 export function alleKinderenDicht(ouder: number, cwd?: string): boolean {
-  const ruw = issueVeld(ouder, '.sub_issues_summary | "\\(.completed)/\\(.total)"', cwd);
+  const ruw = issueVeld(ouder, JQ_KINDEREN, cwd);
   if (ruw === undefined) {
     return false;
   }
-  const [gedaan, totaal] = ruw.trim().split('/').map(Number);
-  return totaal !== undefined && totaal > 0 && gedaan === totaal;
+  return parseKinderenAntwoord(ruw);
 }
 
 /** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
