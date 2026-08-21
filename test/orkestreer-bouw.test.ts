@@ -64,34 +64,34 @@ describe('de bouw-wachtrij', () => {
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // #91 (bug, 5 aug) vóór #126 (task, 10 aug). En verder niets:
-    // #164 is een epic, #182 een slice daaronder, #149 draagt escalatie, #200 heeft geen
-    // App, #87 staat al op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
-    expect(rij.map((item) => item.issue)).toEqual([91, 126]);
+    // Oudste eerst: #177 (4 aug), #91 (5 aug), #126 (10 aug), #182 (19 aug). En verder
+    // niets: #164 is een epic, #149 draagt escalatie, #200 heeft geen App, #87 staat al
+    // op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
+    expect(rij.map((item) => item.issue)).toEqual([177, 91, 126, 182]);
   });
 
-  it('laat een epic en zijn slices staan', () => {
+  it('laat het epic zelf staan, maar neemt zijn slice wel mee', () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // Een epic is geen bouwopdracht, en een slice hoort in de volgorde van zijn epic —
-    // niet losgepikt omdat hij toevallig vooraan staat.
+    // Een epic is geen bouwopdracht: #164 draagt type:epic en staat niet in
+    // BOUWBARE_SOORTEN. Zijn slice #182 wél — die staat op Klaar voor Bouwen, en dat is
+    // volgens #131 de beslissing die telt.
     expect(rij.map((item) => item.issue)).not.toContain(164);
-    expect(rij.map((item) => item.issue)).not.toContain(182);
+    expect(rij.map((item) => item.issue)).toContain(182);
   });
 
-  it('laat een slice staan waarvan het epic niet eens in de lezing zit', () => {
+  it('neemt een slice mee waarvan het epic niet eens in de lezing zit', () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // De echte val van 2026-08-20: `bordItems` slaat items zonder Status-waarde over, en
-    // #164/#169/#171 hebben die niet. Een filter dat de ouder moet kunnen opzoeken laat
-    // hun slices dan gewoon in de bouw-wachtrij staan. #177 hangt hier onder een epic dat
-    // niet in de lezing voorkomt en hoort er alsnog uit.
-    expect(rij.map((item) => item.issue)).not.toContain(177);
-    expect(rij.map((item) => item.issue)).toEqual([91, 126]);
+    // #177 hangt onder epic #169, dat niet in de lezing voorkomt: `bordItems` slaat items
+    // zonder Status-waarde over. Precies daarom mag de wachtrij niet van de ouder
+    // afhangen — dan bepaalt een onvolledige lezing wat er gebouwd wordt (#232). De kolom
+    // van het item zelf staat er wél in, en die is genoeg.
+    expect(rij.map((item) => item.issue)).toContain(177);
   });
 
   it('slaat een geëscaleerd item over', () => {
@@ -143,10 +143,15 @@ describe('orkestreer --soort bouw --dry', () => {
 
     orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
+    // De kop van de rij is #177: een slice onder epic #169, dat zonder Status-waarde
+    // buiten de lezing valt. Sinds #232 is dat geen reden om hem over te slaan, dus
+    // draait de hele doorloop hier op precies het geval dat eerst uitgesloten werd.
     const tekst = uitvoer.join('');
-    expect(tekst).toContain('#91');
-    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/91');
-    expect(tekst).toContain('slice/91-1');
+    expect(tekst).toContain('#177');
+    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/177');
+    expect(tekst).toContain('slice/177-1');
+    // Het epic staat erbij, zodat je vóór het geld kost ziet dat het een slice is.
+    expect(tekst).toContain('(onder #169)');
     // Zonder instellingenbestand is het bouwbudget de default van $10.
     expect(tekst).toContain('$10');
   });
@@ -331,10 +336,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     // Inleveren gebeurt met geenAutomerge, en nooit via `gh pr merge --auto`.
     expect(geleverd).toEqual([
       {
-        cwd: path.join(wortel, 'factory-wt', '91'),
+        cwd: path.join(wortel, 'factory-wt', '177'),
         geenAutomerge: true,
-        // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/91 1".
-        titel: '#91 — factory nieuw levert een app zonder .gitignore',
+        // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/177 1".
+        titel: '#177 — Slice onder een epic dat geen Status heeft',
       },
     ]);
     expect(

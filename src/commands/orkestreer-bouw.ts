@@ -69,7 +69,15 @@ export function bouwBranch(issue: number): string {
 
 /**
  * De bouw-wachtrij uit één board-lezing: open items op **Klaar voor Bouwen** die klein
- * genoeg zijn, niet geclaimd, niet geëscaleerd en geen slice onder een epic.
+ * genoeg zijn, niet geclaimd en niet geëscaleerd.
+ *
+ * Een slice onder een epic hoort hier wél in. Tot #232 viel die eruit, met het argument
+ * dat een slice in de volgorde van zijn epic gebouwd hoort te worden. Dat spreekt #131
+ * tegen: de kolom is de bron van waarheid, en een item staat alleen op Klaar voor Bouwen
+ * omdat iemand het daar heeft neergezet. Gemeten op 2026-08-21 hield dat filter #184
+ * tegen nadat het juist voor de bouw was vrijgegeven — het overruled de beslissing die
+ * het board vastlegt. Een epic zélf valt nog steeds af: `type:epic` staat niet in
+ * BOUWBARE_SOORTEN.
  *
  * Alles komt uit dezelfde lezing — labels en de ouder-relatie zitten sinds #182 in de
  * board-query. Een filter dat per item een tweede aanroep doet zou het GraphQL-budget
@@ -85,19 +93,6 @@ export function bouwWachtrij(items: readonly BacklogItem[]): Bouwitem[] {
       continue;
     }
     if (item.labels.includes(ESCALATIE_LABEL)) {
-      continue;
-    }
-    if (item.ouder !== undefined) {
-      // Een slice hoort bij zijn ouder: die wordt in de volgorde van dat epic gebouwd,
-      // niet los opgepikt omdat hij toevallig vooraan staat.
-      //
-      // Bewust "heeft een ouder" en niet "heeft een ouder mét type:epic", ook al vraagt
-      // #182 het laatste. Gemeten op 2026-08-20: `bordItems` slaat items zonder
-      // Status-waarde over, en de epics #164, #169 en #171 hebben die niet — ze zijn dus
-      // onzichtbaar in dezelfde lezing waarin we hun kinderen zien. Een filter dat de
-      // ouder moet kunnen opzoeken liet daardoor zes slices in de bouw-wachtrij staan.
-      // Deze vorm is strikter en kan niet stil falen; een kind van een niet-epic bestaat
-      // op deze backlog niet, en zou óók bij zijn ouder horen.
       continue;
     }
     if (item.app === undefined || item.app === '') {
@@ -162,7 +157,10 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
   }
   for (const item of wachtrij) {
     const nummer = `#${String(item.issue)}`.padEnd(6);
-    process.stdout.write(`  ${nummer} ${item.app.padEnd(12)} ${item.titel}\n`);
+    // Het epic erbij, als het item er een heeft: sinds #232 mag een slice gewoon
+    // gebouwd worden, en dan wil je vóór het geld kost zien dat hij ergens bij hoort.
+    const onder = item.ouder === undefined ? '' : ` (onder #${String(item.ouder)})`;
+    process.stdout.write(`  ${nummer} ${item.app.padEnd(12)} ${item.titel}${onder}\n`);
   }
   if (geclaimd > 0) {
     // Zichtbaar maken wat er buiten de rij valt: een geclaimd item is niet vergeten

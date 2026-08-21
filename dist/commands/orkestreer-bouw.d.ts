@@ -18,7 +18,15 @@ export declare function bouwWerkplek(app: string, issue: number, wortel?: string
 export declare function bouwBranch(issue: number): string;
 /**
  * De bouw-wachtrij uit één board-lezing: open items op **Klaar voor Bouwen** die klein
- * genoeg zijn, niet geclaimd, niet geëscaleerd en geen slice onder een epic.
+ * genoeg zijn, niet geclaimd en niet geëscaleerd.
+ *
+ * Een slice onder een epic hoort hier wél in. Tot #232 viel die eruit, met het argument
+ * dat een slice in de volgorde van zijn epic gebouwd hoort te worden. Dat spreekt #131
+ * tegen: de kolom is de bron van waarheid, en een item staat alleen op Klaar voor Bouwen
+ * omdat iemand het daar heeft neergezet. Gemeten op 2026-08-21 hield dat filter #184
+ * tegen nadat het juist voor de bouw was vrijgegeven — het overruled de beslissing die
+ * het board vastlegt. Een epic zélf valt nog steeds af: `type:epic` staat niet in
+ * BOUWBARE_SOORTEN.
  *
  * Alles komt uit dezelfde lezing — labels en de ouder-relatie zitten sinds #182 in de
  * board-query. Een filter dat per item een tweede aanroep doet zou het GraphQL-budget
