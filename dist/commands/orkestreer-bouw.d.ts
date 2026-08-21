@@ -33,10 +33,38 @@ export declare function bouwBranch(issue: number): string;
  * opeten dat #104 juist bewaakt.
  */
 export declare function bouwWachtrij(items: readonly BacklogItem[]): Bouwitem[];
+/** Waarom een item niet in de bouw-wachtrij staat. */
+export interface BuitenDeRij {
+    readonly grond: 'kolom' | 'soort' | 'escalatie' | 'geen-app';
+    /** Eén zin, bedoeld om achter "#123 staat niet in de bouw-wachtrij: " te zetten. */
+    readonly zin: string;
+}
+/**
+ * De uitsluitingsgrond van één item, of `undefined` als het in de rij hoort.
+ *
+ * Eén functie voor het filter én voor de melding van `--issue`, en niet twee keer
+ * dezelfde kennis. De vorige vorm was een reeks kale `continue`-regels: die kon geen
+ * reden noemen, en toen het filter in #232 veranderde bleef de documentatie erover
+ * achter zonder dat iets rood werd. Wie hier een grond toevoegt, levert de uitleg mee.
+ */
+export declare function redenBuitenDeRij(item: BacklogItem): BuitenDeRij | undefined;
+/**
+ * Het item waar deze run over gaat: de kop van de rij, of het gevraagde issue.
+ *
+ * Een gevraagd issue dat niet in de rij staat is een fout mét de reden. `--issue`
+ * filtert de rij die de filters al gemaakt hebben; hij bouwt geen tweede rij, dus hij
+ * kan een item dat niet mag ook niet laten bouwen.
+ */
+export declare function kiesItem(wachtrij: readonly Bouwitem[], alles: readonly BacklogItem[], issue: number | undefined, cwd: string): Bouwitem | undefined;
 export interface BouwOpties {
     readonly dry?: boolean;
     /** Bouwt één item en stopt. */
     readonly eenmalig?: boolean;
+    /**
+     * Richt de run op dit issue in plaats van op de kop van de rij (#210). Staat het niet
+     * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
+     */
+    readonly issue?: number;
     /** Injecteerbaar voor tests; in productie de echte wortel in `$HOME`. */
     readonly werkplaatsWortel?: string;
     readonly paden?: OrkestratorPaden;
@@ -54,4 +82,12 @@ export declare function orkestreerBouw(opties?: BouwOpties): void;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/**
+ * Leest `--issue`: een positief geheel getal, of niets.
+ *
+ * Bewust een fout vóór de board-lezing. `--issue abc` zou anders een lezing kosten om
+ * daarna niets te vinden, en de melding zou over de wachtrij gaan in plaats van over
+ * de typefout.
+ */
+export declare function leesIssue(waarde: string | undefined): number | undefined;
 export declare function leesSoort(waarde: string | undefined): 'refine' | 'bouw';

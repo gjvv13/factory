@@ -164,6 +164,31 @@ function zoekDoelwit(issue, kolom, cwd, env) {
     const huidig = knoop?.fieldValueByName?.name;
     return { itemId, projectId, veldId, optieId, ...(huidig === undefined ? {} : { huidig }) };
 }
+/**
+ * Zet een issue in een kolom. Levert true als er iets veranderd is.
+ *
+ * Faalt nooit hard: de pijplijn levert software af, en de administratie mag dat niet
+ * tegenhouden. Een leeg board, een rate-limit of een ontbrekend item geeft een
+ * waarschuwing en gaat door — anders valt een uitrol om op boekhouding.
+ */
+/**
+ * Op welke kolom een issue nu staat, of `undefined` als dat niet te bepalen is.
+ *
+ * Dit is de gerichte opzoeking (1 à 2 punten), niet de volledige board-lezing. Hij
+ * bestaat voor de foutmelding van `--issue` (#210): `bordItems` laat items zonder
+ * Status-waarde en gesloten items weg, dus "hij zit niet in de lezing" is daar geen
+ * verklaring. Alleen op het foutpad aanroepen — de gewone doorloop leest het board
+ * één keer en heeft dit niet nodig.
+ */
+export function kolomVan(issue, cwd) {
+    const omgeving = ghOmgeving();
+    if (!omgeving.kan) {
+        return undefined;
+    }
+    // De kolom komt mee bij het opzoeken van élk doelwit; welke kolom we meegeven doet
+    // voor het antwoord niet uit, dus nemen we de eerste van de pijplijn.
+    return zoekDoelwit(issue, 'Idee', cwd, omgeving.env)?.huidig;
+}
 /** Zet de kolom en vertel welke van de drie uitkomsten het was. */
 export function zetKolomUitkomst(issue, kolom, cwd) {
     const omgeving = ghOmgeving();

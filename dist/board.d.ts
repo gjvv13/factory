@@ -32,6 +32,16 @@ export declare function bordBereikbaar(): boolean;
  * waarschuwing en gaat door — anders valt een uitrol om op boekhouding.
  */
 /**
+ * Op welke kolom een issue nu staat, of `undefined` als dat niet te bepalen is.
+ *
+ * Dit is de gerichte opzoeking (1 à 2 punten), niet de volledige board-lezing. Hij
+ * bestaat voor de foutmelding van `--issue` (#210): `bordItems` laat items zonder
+ * Status-waarde en gesloten items weg, dus "hij zit niet in de lezing" is daar geen
+ * verklaring. Alleen op het foutpad aanroepen — de gewone doorloop leest het board
+ * één keer en heeft dit niet nodig.
+ */
+export declare function kolomVan(issue: number, cwd?: string): string | undefined;
+/**
  * Wat een poging tot verplaatsen opleverde.
  *
  * `al-goed` en `mislukt` zijn allebei "niet verzet", maar ze vragen het tegenovergestelde:

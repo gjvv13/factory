@@ -15,6 +15,7 @@ import {
   bordItems,
   escalaties,
   ESCALATIE_LABEL,
+  kolomVan,
   isBacklogRepo,
   haalLabelWeg,
   orkestratorComments,
@@ -117,6 +118,11 @@ export interface OrkestreerOpties {
   readonly paden?: OrkestratorPaden;
   /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
   readonly nu?: Date;
+  /**
+   * Richt de run op dit issue in plaats van op de kop van de rij (#210). Staat het niet
+   * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
+   */
+  readonly issue?: number;
 }
 
 /** Een item uit de wachtrij dat een werker aankan: het `App`-veld moet gezet zijn. */
@@ -131,6 +137,51 @@ interface Opdrachtitem extends BacklogItem {
  * werker. Dertien werkers die elk het board opzoeken kosten een kwart van het
  * uurbudget om iets op te halen wat de supervisor al weet — zie #104.
  */
+/**
+ * Het item waar deze run over gaat: de kop van de rij, of het gevraagde issue.
+ *
+ * `--issue` filtert de rij die `bouwWachtrij` al gemaakt heeft; hij bouwt geen tweede
+ * rij en kan dus een item dat niet mag ook niet laten draaien. Staat het er niet in,
+ * dan is dat een fout mét de reden — stilte kostte gisteren een halfuur zoeken.
+ *
+ * De opzoekingen hieronder draaien alléén op dit foutpad. De gewone doorloop leest het
+ * board één keer, en dat blijft zo.
+ */
+function kiesOpdracht(
+  wachtrij: readonly Opdrachtitem[],
+  issue: number | undefined,
+  cwd: string,
+): Opdrachtitem | undefined {
+  if (issue === undefined) {
+    return wachtrij[0];
+  }
+  const gevraagd = wachtrij.find((item) => item.issue === issue);
+  if (gevraagd !== undefined) {
+    return gevraagd;
+  }
+  const nummer = `#${String(issue)}`;
+  if (escalaties(cwd)?.has(issue) === true) {
+    throw new GebruikersFout(
+      `${nummer} staat niet in de wachtrij: het draagt het label ${ESCALATIE_LABEL}.\n` +
+        `  Antwoord eerst: factory orkestreer antwoord ${String(issue)} "…"`,
+    );
+  }
+  const kolom = kolomVan(issue, cwd);
+  if (kolom === undefined) {
+    throw new GebruikersFout(
+      `${nummer} staat niet in de wachtrij: hij heeft geen kolom op het board, of hij is gesloten.`,
+    );
+  }
+  if (kolom !== WACHTRIJ_KOLOM) {
+    throw new GebruikersFout(
+      `${nummer} staat niet in de wachtrij: het staat op ${kolom}, niet op ${WACHTRIJ_KOLOM}.`,
+    );
+  }
+  throw new GebruikersFout(
+    `${nummer} staat niet in de wachtrij: het heeft geen App-veld, dus geen code om te lezen.`,
+  );
+}
+
 function bouwWachtrij(cwd: string): Opdrachtitem[] {
   const alles = wachtrijVan(WACHTRIJ_KOLOM, cwd);
   if (alles === undefined) {
@@ -211,6 +262,13 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
   const cwd = process.cwd();
   const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
   if (opties.nacht === true) {
+    if (opties.issue !== undefined) {
+      // Een nachtrun draait tot het dagmaximum. Op één item gericht zou hij dat item één
+      // keer doen en daarna op de lus-vanger stuiten: dan is de vlag een dure manier om
+      // `--eenmalig` te zeggen. De controle staat hier en niet in `cli.ts`, zodat een
+      // test hem kan bereiken zonder de CLI te starten.
+      throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
+    }
     draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
     return;
   }
@@ -218,7 +276,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
   const wachtrij = bouwWachtrij(cwd);
 
   kop(`Wachtrij: ${WACHTRIJ_KOLOM}`);
-  if (wachtrij.length === 0) {
+  if (wachtrij.length === 0 && opties.issue === undefined) {
     ok('niets te doen');
     return;
   }
@@ -227,7 +285,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
     process.stdout.write(`  ${nummer} ${item.app.padEnd(12)} ${item.titel}\n`);
   }
 
-  const eerste = wachtrij[0];
+  const eerste = kiesOpdracht(wachtrij, opties.issue, cwd);
   if (eerste === undefined) {
     return;
   }
