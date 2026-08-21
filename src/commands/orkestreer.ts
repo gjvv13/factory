@@ -44,6 +44,7 @@ import {
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
+import { type ReeksKeuze } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker, type Afloop, type WerkerUitkomst } from '../werker.js';
@@ -104,11 +105,11 @@ export interface OrkestreerOpties {
   /** Werkt de wachtrij af tot het dagmaximum of tot hij leeg is — de onbemande modus. */
   readonly nacht?: boolean;
   /**
-   * Werkt dit aantal items af, met dezelfde vangnetten als de nacht (#265). Het
-   * aantal is de rem: hierop staat geen dagmaximum, want jij zegt bij het starten
-   * hoeveel het mag zijn.
+   * Werkt een reeks af, met dezelfde vangnetten als de nacht (#265): een aantal van de
+   * kop van de wachtrij, of precies de opgegeven items. Wat je hier meegeeft is de rem —
+   * hierop staat geen dagmaximum, want jij zegt bij het starten hoeveel het mag zijn.
    */
-  readonly reeks?: number;
+  readonly reeks?: ReeksKeuze;
   /** Zet de LaunchAgent op die `--nacht` één keer per nacht draait. */
   readonly installeer?: boolean;
   /** Haalt die LaunchAgent weg. */
@@ -281,8 +282,14 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
       throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
     }
     const instellingen = leesInstellingen(paden);
+    const keuze = opties.reeks;
+    const lijst = keuze.soort === 'lijst' ? keuze.issues : undefined;
     try {
-      kop(`Reeks van ${String(opties.reeks)}`);
+      kop(
+        keuze.soort === 'aantal'
+          ? `Reeks van ${String(keuze.aantal)}`
+          : `Reeks: ${keuze.issues.map((n) => `#${String(n)}`).join(', ')}`,
+      );
       meldReeks(
         draaiReeks({
           paden,
@@ -291,7 +298,8 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
           // Jij startte deze reeks, dus hij komt niet uit de pot van de nacht (#264).
           pot: 'interactief',
           noemer: 'deze reeks',
-          aantal: opties.reeks,
+          aantal: keuze.soort === 'aantal' ? keuze.aantal : keuze.issues.length,
+          ...(lijst === undefined ? {} : { lijst }),
           leesRij: () => bouwWachtrij(cwd),
           werkAf: (item) =>
             werkAf(item, cwd, wortel, {

@@ -67,8 +67,8 @@ export interface BouwOpties {
     readonly dry?: boolean;
     /** Bouwt één item en stopt. */
     readonly eenmalig?: boolean;
-    /** Bouwt dit aantal items af, met dezelfde vangnetten als de nacht (#265). */
-    readonly reeks?: number;
+    /** Bouwt een reeks af: een aantal van de kop, of precies deze items (#265). */
+    readonly reeks?: ReeksKeuze;
     /**
      * Richt de run op dit issue in plaats van op de kop van de rij (#210). Staat het niet
      * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
@@ -91,13 +91,26 @@ export declare function orkestreerBouw(opties?: BouwOpties): void;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/** Wat `--reeks` kan zijn: een aantal van de kop, of precies deze items. */
+export type ReeksKeuze = {
+    readonly soort: 'aantal';
+    readonly aantal: number;
+} | {
+    readonly soort: 'lijst';
+    readonly issues: readonly number[];
+};
 /**
- * Leest `--reeks`: hoeveel items deze reeks maximaal afwerkt.
+ * Leest `--reeks`: een aantal (`--reeks 4`) of een lijst (`--reeks 126,186,263`).
  *
- * Een bovengrens van 20 en geen willekeurig groot getal: dit start werkers die geld
- * kosten, en een typefout van één nul is dan duur. Wie meer wil doet het twee keer.
+ * Twee vormen op één vlag, en niet een aparte vlag voor de lijst: de vraag is dezelfde
+ * ("werk deze reeks af"), alleen het antwoord op *welke* items verschilt. `--issue`
+ * blijft wat het was — één item voor `--eenmalig` of `--dry` — zodat elke vlag één
+ * betekenis houdt.
+ *
+ * Een bovengrens van 20 op het aantal: dit start werkers die geld kosten, en een
+ * typefout van één nul is dan duur. Wie meer wil doet het twee keer.
  */
-export declare function leesReeks(waarde: string | undefined): number | undefined;
+export declare function leesReeks(waarde: string | undefined): ReeksKeuze | undefined;
 /**
  * Leest `--issue`: een positief geheel getal, of niets.
  *

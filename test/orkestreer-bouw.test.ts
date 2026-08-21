@@ -10,6 +10,7 @@ import {
   bouwWerkplek,
   bronAppsVan,
   leesIssue,
+  leesReeks,
   leesSoort,
   orkestreerBouw,
   redenBuitenDeRij,
@@ -545,7 +546,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     const geleverd: unknown[] = [];
 
     orkestreerBouw({
-      reeks: 2,
+      reeks: { soort: 'aantal', aantal: 2 },
       werkplaatsWortel: wortel,
       paden,
       leverIn: (opties) => geleverd.push(opties),
@@ -557,6 +558,65 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(claudes).toHaveLength(2);
     expect(geleverd).toHaveLength(2);
     expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(2);
+  });
+
+  it('--reeks met een lijst doet precies die items, in die volgorde (#265)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      reeksMachine(envelop('claude-bouw-klaar')),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreerBouw({
+      reeks: { soort: 'lijst', issues: [126, 91] },
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: () => undefined,
+    });
+
+    // De kop van de rij is #91 (ouder), maar gevraagd is eerst #126: de lijst bepaalt de
+    // volgorde, niet het board.
+    const gevraagd = aanroepen
+      .filter((a) => a.commando === 'claude')
+      .map((a) => /- Issue: \*\*#(\d+)\*\*/.exec(a.argumenten.join('\n'))?.[1]);
+    expect(gevraagd).toEqual(['126', '91']);
+  });
+
+  it('--reeks slaat een nummer buiten de wachtrij over, met de reden, en gaat door', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      reeksMachine(envelop('claude-bouw-klaar')),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    // #149 staat op het board maar draagt het escalatie-label; #126 is gewoon bouwbaar.
+    orkestreerBouw({
+      reeks: { soort: 'lijst', issues: [149, 126] },
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: () => undefined,
+    });
+
+    // Eén typefout of één geblokkeerd item mag een reeks van vier niet kosten — maar
+    // stil overslaan zou betekenen dat je denkt dat het gebouwd is.
+    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(1);
+    expect(uitvoer.join('')).toMatch(/#149 staat niet in de wachtrij.*escalatie/);
+  });
+
+  it('--reeks weigert een nummer dat niet op het board staat, vóór de eerste run', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      reeksMachine(envelop('claude-bouw-klaar')),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    // Anders betaal je drie runs en hoor je pas daarna dat de vierde een typefout was.
+    expect(() => {
+      orkestreerBouw({
+        reeks: { soort: 'lijst', issues: [126, 99999] },
+        werkplaatsWortel: wortel,
+        paden,
+        leverIn: () => undefined,
+      });
+    }).toThrow(/#99999/);
+    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(0);
   });
 
   it('boekt en logt de bouw-run, met de soort erbij (#264)', () => {
@@ -708,6 +768,32 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     // zijn. Er is een `rmSync` op het bron-pad, dat attesteert de cleanup. Belangrijker:
     // de run gooit niet — de opruiming verhindert geen voortgang.
     expect(geleverd).toEqual([]);
+  });
+});
+
+describe('leesReeks', () => {
+  it('leest een aantal', () => {
+    expect(leesReeks('4')).toEqual({ soort: 'aantal', aantal: 4 });
+  });
+
+  it('leest een lijst', () => {
+    expect(leesReeks('126,186, 263')).toEqual({ soort: 'lijst', issues: [126, 186, 263] });
+  });
+
+  it('ontdubbelt een lijst en zegt dat', () => {
+    // Stil ontdubbelen betekent dat je denkt vier items te doen en het er drie zijn.
+    expect(leesReeks('126,126,186')).toEqual({ soort: 'lijst', issues: [126, 186] });
+  });
+
+  it('weigert rommel, een nul en een te grote reeks', () => {
+    expect(() => leesReeks('vier')).toThrow(/geheel getal/);
+    expect(() => leesReeks('0')).toThrow(/geheel getal/);
+    expect(() => leesReeks('21')).toThrow(/geheel getal/);
+    expect(() => leesReeks('126,nul')).toThrow(/issuenummers/);
+  });
+
+  it('laat niets zonder waarde', () => {
+    expect(leesReeks(undefined)).toBeUndefined();
   });
 });
 

@@ -236,14 +236,32 @@ export function orkestreerBouw(opties = {}) {
         return;
     }
     if (opties.reeks !== undefined) {
-        kop(`Reeks van ${String(opties.reeks)}`);
+        const keuze = opties.reeks;
+        const lijst = keuze.soort === 'lijst' ? keuze.issues : undefined;
+        if (lijst !== undefined) {
+            // Een nummer dat niet bestaat is een fout vóór de eerste `claude`-aanroep: anders
+            // betaal je drie runs en hoor je pas daarna dat de vierde een typefout was.
+            const bekend = new Set(items.map((item) => item.issue));
+            const onbekend = lijst.filter((nummer) => !bekend.has(nummer));
+            if (onbekend.length > 0) {
+                throw new GebruikersFout(`Niet op het board: ${onbekend.map((n) => `#${String(n)}`).join(', ')}.`);
+            }
+        }
+        kop(keuze.soort === 'aantal'
+            ? `Reeks van ${String(keuze.aantal)}`
+            : `Reeks: ${keuze.issues.map((n) => `#${String(n)}`).join(', ')}`);
         meldReeks(draaiReeks({
             paden,
             nu: new Date(Date.now()),
             soort: 'bouw',
             pot: 'interactief',
             noemer: 'deze reeks',
-            aantal: opties.reeks,
+            aantal: keuze.soort === 'aantal' ? keuze.aantal : keuze.issues.length,
+            ...(lijst === undefined ? {} : { lijst }),
+            reden: (issue) => {
+                const item = items.find((kandidaat) => kandidaat.issue === issue);
+                return item === undefined ? undefined : redenBuitenDeRij(item)?.zin;
+            },
             // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
             // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
             leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
@@ -407,21 +425,43 @@ function blokkeer(item, cwd) {
     zetKolom(item.issue, BOUW_KOLOM, cwd);
     zetLabel(item.issue, ESCALATIE_LABEL, cwd);
 }
-/** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 /**
- * Leest `--reeks`: hoeveel items deze reeks maximaal afwerkt.
+ * Leest `--reeks`: een aantal (`--reeks 4`) of een lijst (`--reeks 126,186,263`).
  *
- * Een bovengrens van 20 en geen willekeurig groot getal: dit start werkers die geld
- * kosten, en een typefout van één nul is dan duur. Wie meer wil doet het twee keer.
+ * Twee vormen op één vlag, en niet een aparte vlag voor de lijst: de vraag is dezelfde
+ * ("werk deze reeks af"), alleen het antwoord op *welke* items verschilt. `--issue`
+ * blijft wat het was — één item voor `--eenmalig` of `--dry` — zodat elke vlag één
+ * betekenis houdt.
+ *
+ * Een bovengrens van 20 op het aantal: dit start werkers die geld kosten, en een
+ * typefout van één nul is dan duur. Wie meer wil doet het twee keer.
  */
 export function leesReeks(waarde) {
     if (waarde === undefined)
         return undefined;
+    if (waarde.includes(',')) {
+        const issues = waarde.split(',').map((deel) => {
+            const nummer = Number(deel.trim());
+            if (!Number.isInteger(nummer) || nummer < 1) {
+                throw new GebruikersFout(`--reeks wil issuenummers, niet "${deel.trim()}".`);
+            }
+            return nummer;
+        });
+        const ontdubbeld = [...new Set(issues)];
+        if (ontdubbeld.length !== issues.length) {
+            // Niet stil ontdubbelen: dan denk je vier items te doen en zijn het er drie.
+            waarschuwing('dubbele nummers in --reeks; elk item draait één keer.');
+        }
+        if (ontdubbeld.length > 20) {
+            throw new GebruikersFout('--reeks doet er maximaal 20 in één keer.');
+        }
+        return { soort: 'lijst', issues: ontdubbeld };
+    }
     const aantal = Number(waarde);
     if (!Number.isInteger(aantal) || aantal < 1 || aantal > 20) {
         throw new GebruikersFout(`--reeks wil een geheel getal van 1 tot 20, niet "${waarde}".`);
     }
-    return aantal;
+    return { soort: 'aantal', aantal };
 }
 /**
  * Leest `--issue`: een positief geheel getal, of niets.

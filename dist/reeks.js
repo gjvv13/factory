@@ -41,7 +41,9 @@ export function draaiReeks(opzet) {
                 waarschuwing(`#${String(item.issue)} staat na zijn run nog in de wachtrij — overgeslagen voor ${opzet.noemer}.`);
             }
         }
-        const volgende = rij.find((item) => !gedaanIssues.has(item.issue));
+        const volgende = opzet.lijst === undefined
+            ? rij.find((item) => !gedaanIssues.has(item.issue))
+            : kiesUitLijst(opzet, rij, gedaanIssues);
         if (volgende === undefined) {
             einde = 'niets-nieuws';
             break;
@@ -73,6 +75,27 @@ export function draaiReeks(opzet) {
         }
     }
     return { gedaan, geslaagd, kosten, einde };
+}
+/**
+ * Het volgende item uit een gevraagde lijst, in de opgegeven volgorde.
+ *
+ * Nummers die niet in de wachtrij staan worden één keer gemeld en dan overgeslagen: een
+ * typefout in één nummer mag een reeks van vier niet afbreken, en stil overslaan zou
+ * betekenen dat je denkt dat het gebouwd is.
+ */
+function kiesUitLijst(keuze, rij, gedaanIssues) {
+    for (const nummer of keuze.lijst ?? []) {
+        if (gedaanIssues.has(nummer))
+            continue;
+        const item = rij.find((kandidaat) => kandidaat.issue === nummer);
+        if (item !== undefined)
+            return item;
+        const reden = keuze.reden?.(nummer);
+        waarschuwing(`#${String(nummer)} staat niet in de wachtrij${reden === undefined ? '' : `: ${reden}`} — overgeslagen.`);
+        // In `gedaanIssues` zetten zodat de melding niet elke ronde terugkomt.
+        gedaanIssues.add(nummer);
+    }
+    return undefined;
 }
 /** De slotregel van een reeks: wat er gedaan is en wat het kostte. */
 export function meldReeks(uitkomst) {
