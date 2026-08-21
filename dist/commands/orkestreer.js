@@ -224,7 +224,9 @@ function draaiNacht(cwd, wortel, paden, nu) {
         // run die ik zelf start onder mijn ogen gebeurt en gewoon met ctrl-c stopt.
         timeoutMs: instellingen.runTimeoutMs,
     };
+    const versie = eigenVersie();
     kop(`Nacht van ${kalenderdag(nu)}`);
+    schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} nacht gestart (factory ${versie})`);
     let gestart = leesStaat(paden, nu).gestart;
     if (gestart >= instellingen.dagmaximum) {
         // Meerdere runs op één kalenderdag delen hetzelfde maximum; anders is een handmatige
@@ -651,7 +653,7 @@ const NACHT_UUR = 4;
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
  *
- * Drie keuzes die een lezer zou willen aanvechten:
+ * Vier keuzes die een lezer zou willen aanvechten:
  *
  * **`StartCalendarInterval` en niet `StartInterval`.** De integreer-agent tikt elke
  * minuut een wachtrij af; die kost niets. Deze start werkers die geld kosten, dus hij
@@ -663,11 +665,18 @@ const NACHT_UUR = 4;
  *
  * **Geen token in de plist.** Een plist in `~/Library/LaunchAgents` is gewoon
  * leesbaar; de token staat in een 0600-bestand dat de run zelf leest.
+ *
+ * **De install-stap vóór `--nacht`, niet erin (#237).** De plist draait een shellscript
+ * dat eerst de nieuwste tag globaal installeert en dan `exec` doet naar `--nacht`. Zo
+ * vervangt de run nooit zijn eigen bin terwijl hij draait: `exec` vervangt het proces
+ * pas als de installatie al klaar is. Faalt het bijwerken, dan draait de nacht alsnog
+ * op de oude bin, met een waarschuwing in het log.
  */
 export function bouwOrkestreerPlist(opzet) {
     // De PATH van de installerende shell meebakken: launchd start anders met een kale
     // PATH en vindt node, gh of claude dan niet.
     const pad = process.env.PATH ?? '/usr/bin:/bin';
+    const script = bouwNachtScript(opzet);
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -675,9 +684,9 @@ export function bouwOrkestreerPlist(opzet) {
   <key>Label</key><string>${LAUNCH_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${opzet.bin}</string>
-    <string>orkestreer</string>
-    <string>--nacht</string>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>${script}</string>
   </array>
   <key>WorkingDirectory</key><string>${opzet.werkmap}</string>
   <key>StartCalendarInterval</key>
@@ -689,6 +698,55 @@ export function bouwOrkestreerPlist(opzet) {
 </dict>
 </plist>
 `;
+}
+/**
+ * Het shellscript dat de LaunchAgent draait: eerst bijwerken, dan de nacht starten.
+ *
+ * Twee dingen zijn bewust zo:
+ *
+ * - **`exec` als laatste regel.** Zo draait `--nacht` als hetzelfde PID en krijgt
+ *   launchd de exitcode; zonder `exec` zou de shell na het kind afsluiten en zou een
+ *   afgebroken nacht als een schoon exit terugkomen.
+ * - **Geen `set -e`.** Het bijwerken mag falen zonder de hele nacht te stoppen; de
+ *   if/else handelt dat af, en `exec` draait altijd.
+ *
+ * Het script vermijdt `&` in de tekst: die is XML-speciaal en zou in de plist als
+ * `&amp;` moeten, wat de leesbaarheid van de bron en het log kapotmaakt. Vandaar
+ * if/then/else in plaats van `&&`/`||`.
+ */
+export function bouwNachtScript(opzet) {
+    return [
+        `git -C "${opzet.factoryRepo}" fetch --tags --force origin 2>/dev/null || true`,
+        `TAG=$(git -C "${opzet.factoryRepo}" tag --list 'v*' --sort=-v:refname | head -1)`,
+        'if [ -n "$TAG" ]; then',
+        `  if npm install -g "https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/$TAG" >/dev/null 2>/dev/null; then`,
+        '    echo "==> factory bijgewerkt naar $TAG"',
+        '  else',
+        '    echo "WARNING bijwerken naar $TAG mislukt; nacht draait op de huidige versie"',
+        '  fi',
+        'else',
+        '  echo "WARNING kon de nieuwste tag niet ophalen; nacht draait op de huidige versie"',
+        'fi',
+        `exec "${opzet.bin}" orkestreer --nacht`,
+    ].join('\n');
+}
+/**
+ * De versie van de draaiende factory-bin, uit het eigen `package.json`.
+ *
+ * Dit is het antwoord op "met welke versie draaide de nacht" (#237): het staat in
+ * het runlog, zodat je 's ochtends in één blik ziet of het bijwerken gewerkt heeft.
+ * Een onleesbare versie is geen reden om de nacht over te slaan; vandaar 'onbekend'.
+ */
+export function eigenVersie() {
+    try {
+        const pj = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+        return typeof pj === 'object' && pj !== null && 'version' in pj
+            ? String(pj.version)
+            : 'onbekend';
+    }
+    catch {
+        return 'onbekend';
+    }
 }
 /**
  * De nieuwste release-tag van de factory, waaruit de globale bin geïnstalleerd wordt.
@@ -743,7 +801,7 @@ function installeerAgent(paden) {
     kop('LaunchAgent laden');
     const pad = paden.agentPad;
     mkdirSync(path.dirname(pad), { recursive: true });
-    writeFileSync(pad, bouwOrkestreerPlist({ bin, werkmap: os.homedir(), logPad: paden.logPad }));
+    writeFileSync(pad, bouwOrkestreerPlist({ bin, werkmap: os.homedir(), logPad: paden.logPad, factoryRepo: cwd }));
     run('launchctl', ['unload', pad], { toleranter: true, capture: true });
     run('launchctl', ['load', pad]);
     schrijfLog(paden, `${new Date(Date.now()).toISOString()} agent geladen (${tag}, ${bin})`);
