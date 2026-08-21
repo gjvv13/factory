@@ -34,6 +34,13 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     });
   }
 
+  it('de rerun-waakhond bewaakt ook de bump, niet alleen de deploy (#270)', () => {
+    // Alle vijftien de action-download-mislukkingen van de week tot 2026-08-21 zaten in
+    // `bump-factory`, en juist die had geen vangnet — de deploy had het al sinds #122.
+    const inhoud = readFileSync('workflows/deploy-rerun.yml', 'utf8');
+    expect(inhoud).toContain('workflows: [deploy, bump-factory]');
+  });
+
   it('ci.yml houdt de actions, want die draait op ubuntu-latest', () => {
     const inhoud = readFileSync('workflows/ci.yml', 'utf8');
     expect(inhoud).toContain('ubuntu-latest');
