@@ -83,6 +83,60 @@ declare const bouwVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     advies: z.ZodString;
 }, z.core.$strip>], "uitkomst">;
 export type BouwVerdict = z.infer<typeof bouwVerdictSchema>;
+declare const reviewVerdictSchema: z.ZodObject<{
+    bevindingen: z.ZodArray<z.ZodObject<{
+        bestand: z.ZodString;
+        regel: z.ZodOptional<z.ZodNumber>;
+        ernst: z.ZodEnum<{
+            laag: "laag";
+            midden: "midden";
+            hoog: "hoog";
+        }>;
+        bevinding: z.ZodString;
+    }, z.core.$strip>>;
+    oordeel: z.ZodString;
+}, z.core.$strip>;
+export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;
+/** Als `BOUW_JSON_SCHEMA`, maar voor een review: plat, met de hand, om dezelfde redenen. */
+export declare const REVIEW_JSON_SCHEMA: {
+    readonly type: "object";
+    readonly properties: {
+        readonly bevindingen: {
+            readonly type: "array";
+            readonly description: "lijst van bevindingen; een lege lijst is een geldige uitkomst";
+            readonly items: {
+                readonly type: "object";
+                readonly properties: {
+                    readonly bestand: {
+                        readonly type: "string";
+                        readonly description: "het bestand waar de bevinding in zit";
+                    };
+                    readonly regel: {
+                        readonly type: "integer";
+                        readonly description: "optioneel: het regelnummer";
+                    };
+                    readonly ernst: {
+                        readonly type: "string";
+                        readonly enum: readonly ["laag", "midden", "hoog"];
+                        readonly description: "ernst van de bevinding";
+                    };
+                    readonly bevinding: {
+                        readonly type: "string";
+                        readonly description: "de bevinding zelf";
+                    };
+                };
+                readonly required: readonly ["bestand", "ernst", "bevinding"];
+                readonly additionalProperties: false;
+            };
+        };
+        readonly oordeel: {
+            readonly type: "string";
+            readonly description: "samenvatting: is het werk goed afgeleverd, en waarom wel of niet";
+        };
+    };
+    readonly required: readonly ["bevindingen", "oordeel"];
+    readonly additionalProperties: false;
+};
 /** Als `VERDICT_JSON_SCHEMA`, maar voor een bouw-run: plat, met de hand, om dezelfde redenen. */
 export declare const BOUW_JSON_SCHEMA: {
     readonly type: "object";
@@ -256,5 +310,18 @@ export interface BouwUitkomst extends WerkerBasis {
  * verschil is het schema — een criterium zonder bewijs komt er niet als `klaar` door.
  */
 export declare function draaiBouwer(opdracht: WerkerOpdracht): BouwUitkomst;
+/** Wat een review-run oplevert: dezelfde envelop-informatie, een ander verdict. */
+export interface ReviewUitkomst extends WerkerBasis {
+    readonly verdict?: ReviewVerdict;
+}
+/**
+ * Draait één review-werker (#184) en vertaalt zijn uitvoer naar een uitkomst.
+ *
+ * De reviewer is lees-alleen: dezelfde toestemmingslijst als de refine-werker, niet
+ * die van de bouwer. Hij beoordeelt, hij repareert niet. Faalt de review-run, dan is
+ * dat geen reden om het inleveren te blokkeren — de review is een extra poort, geen
+ * voorwaarde.
+ */
+export declare function draaiReviewer(opdracht: WerkerOpdracht): ReviewUitkomst;
 export declare function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst;
 export {};

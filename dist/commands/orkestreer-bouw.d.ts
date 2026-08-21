@@ -90,6 +90,8 @@ export interface BouwOpties {
 export declare function orkestreerBouw(opties?: BouwOpties): void;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
+/** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
+export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 /** Wat `--reeks` kan zijn: een aantal van de kop, of precies deze items. */
 export type ReeksKeuze = {

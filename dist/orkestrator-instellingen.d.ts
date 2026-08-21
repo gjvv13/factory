@@ -43,6 +43,8 @@ export interface Instellingen {
     readonly dagmaximum: number;
     readonly budgetPerRun: number;
     readonly bouwBudgetPerRun: number;
+    /** Kostenrem voor een review-run (#184). */
+    readonly reviewBudgetPerRun: number;
     /** Tijdsgrens per werker-run, in milliseconden (#206). */
     readonly runTimeoutMs: number;
     /** Undefined als er (nog) geen token in het bestand staat. */
