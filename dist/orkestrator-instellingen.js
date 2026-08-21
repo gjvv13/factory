@@ -7,12 +7,20 @@ import { GebruikersFout, waarschuwing } from './shell.js';
  * De echte paden. `home` is er zodat een test met een tijdelijke map kan werken in
  * plaats van in de home-map te schrijven; in productie staat hij altijd op `os.homedir()`.
  */
-export function standaardPaden(home = os.homedir()) {
+export function standaardPaden(home) {
+    const wortel = home ?? os.homedir();
+    // De echte home is in een test verboden. `test/setup.ts` zet daar een tijdelijke home
+    // voor; deze grens is het vangnet als die opzet stuk is. Zonder dat vangnet schreef de
+    // suite in het runlog en de dagteller van de gebruiker: 369 regels ruis en een teller
+    // op 93 van 4, waarna een nachtrun op diezelfde dag niets meer zou doen (#278).
+    if (process.env['VITEST'] !== undefined && wortel === process.env['FACTORY_ECHTE_HOME']) {
+        throw new Error(`standaardPaden() wees naar de echte home (${wortel}) tijdens een test — zie test/setup.ts (#278).`);
+    }
     return {
-        envPad: path.join(home, '.config', 'factory', 'orkestrator.env'),
-        staatPad: path.join(home, 'Library', 'Application Support', 'factory', 'orkestrator.json'),
-        logPad: path.join(home, 'Library', 'Logs', 'nl.factory.orkestreer.log'),
-        agentPad: path.join(home, 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`),
+        envPad: path.join(wortel, '.config', 'factory', 'orkestrator.env'),
+        staatPad: path.join(wortel, 'Library', 'Application Support', 'factory', 'orkestrator.json'),
+        logPad: path.join(wortel, 'Library', 'Logs', 'nl.factory.orkestreer.log'),
+        agentPad: path.join(wortel, 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`),
     };
 }
 /** Het launchd-label van de nachtelijke agent; ook de basis van zijn plist-naam. */
