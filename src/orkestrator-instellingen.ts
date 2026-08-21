@@ -85,6 +85,11 @@ const instellingenSchema = z.object({
    */
   FACTORY_BOUW_BUDGET_USD: z.coerce.number().positive().max(100).default(10),
   /**
+   * Kostenrem voor een review-run (#184). Lager dan een bouw-run: de reviewer leest
+   * en beoordeelt, hij schrijft niet.
+   */
+  FACTORY_REVIEW_BUDGET_USD: z.coerce.number().positive().max(100).default(3),
+  /**
    * Tijdsgrens per werker-run in minuten (#206). Default 30.
    *
    * De bovengrens is niet willekeurig: hij moet ónder de slotgeldigheid van de
@@ -100,6 +105,8 @@ export interface Instellingen {
   readonly dagmaximum: number;
   readonly budgetPerRun: number;
   readonly bouwBudgetPerRun: number;
+  /** Kostenrem voor een review-run (#184). */
+  readonly reviewBudgetPerRun: number;
   /** Tijdsgrens per werker-run, in milliseconden (#206). */
   readonly runTimeoutMs: number;
   /** Undefined als er (nog) geen token in het bestand staat. */
@@ -139,7 +146,13 @@ function leesEnvBestand(bestand: string): Record<string, string> {
  */
 export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
   if (!existsSync(paden.envPad)) {
-    return { dagmaximum: 4, budgetPerRun: 5, bouwBudgetPerRun: 10, runTimeoutMs: 30 * 60_000 };
+    return {
+      dagmaximum: 4,
+      budgetPerRun: 5,
+      bouwBudgetPerRun: 10,
+      reviewBudgetPerRun: 3,
+      runTimeoutMs: 30 * 60_000,
+    };
   }
   waarschuwBijSlappeRechten(paden.envPad);
   const gelezen = instellingenSchema.safeParse(leesEnvBestand(paden.envPad));
@@ -154,6 +167,7 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
     dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
     budgetPerRun: gelezen.data.FACTORY_BUDGET_USD,
     bouwBudgetPerRun: gelezen.data.FACTORY_BOUW_BUDGET_USD,
+    reviewBudgetPerRun: gelezen.data.FACTORY_REVIEW_BUDGET_USD,
     runTimeoutMs: gelezen.data.FACTORY_RUN_TIMEOUT_MIN * 60_000,
     ...(token === undefined ? {} : { token }),
   };
