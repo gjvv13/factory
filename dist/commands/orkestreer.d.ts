@@ -93,11 +93,17 @@ export interface OrkestreerPlistOpzet {
     readonly werkmap: string;
     /** TCC-vrij logpad, hetzelfde bestand waar de runregels in gaan. */
     readonly logPad: string;
+    /**
+     * Absoluut pad naar de factory-repo, waar de release-tags staan. De LaunchAgent
+     * haalt hier vóór elke nacht de nieuwste tag op om de globale bin bij te werken
+     * (#237); de run zelf vervangt zijn eigen bin niet terwijl hij draait.
+     */
+    readonly factoryRepo: string;
 }
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
  *
- * Drie keuzes die een lezer zou willen aanvechten:
+ * Vier keuzes die een lezer zou willen aanvechten:
  *
  * **`StartCalendarInterval` en niet `StartInterval`.** De integreer-agent tikt elke
  * minuut een wachtrij af; die kost niets. Deze start werkers die geld kosten, dus hij
@@ -109,6 +115,36 @@ export interface OrkestreerPlistOpzet {
  *
  * **Geen token in de plist.** Een plist in `~/Library/LaunchAgents` is gewoon
  * leesbaar; de token staat in een 0600-bestand dat de run zelf leest.
+ *
+ * **De install-stap vóór `--nacht`, niet erin (#237).** De plist draait een shellscript
+ * dat eerst de nieuwste tag globaal installeert en dan `exec` doet naar `--nacht`. Zo
+ * vervangt de run nooit zijn eigen bin terwijl hij draait: `exec` vervangt het proces
+ * pas als de installatie al klaar is. Faalt het bijwerken, dan draait de nacht alsnog
+ * op de oude bin, met een waarschuwing in het log.
  */
 export declare function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string;
+/**
+ * Het shellscript dat de LaunchAgent draait: eerst bijwerken, dan de nacht starten.
+ *
+ * Twee dingen zijn bewust zo:
+ *
+ * - **`exec` als laatste regel.** Zo draait `--nacht` als hetzelfde PID en krijgt
+ *   launchd de exitcode; zonder `exec` zou de shell na het kind afsluiten en zou een
+ *   afgebroken nacht als een schoon exit terugkomen.
+ * - **Geen `set -e`.** Het bijwerken mag falen zonder de hele nacht te stoppen; de
+ *   if/else handelt dat af, en `exec` draait altijd.
+ *
+ * Het script vermijdt `&` in de tekst: die is XML-speciaal en zou in de plist als
+ * `&amp;` moeten, wat de leesbaarheid van de bron en het log kapotmaakt. Vandaar
+ * if/then/else in plaats van `&&`/`||`.
+ */
+export declare function bouwNachtScript(opzet: OrkestreerPlistOpzet): string;
+/**
+ * De versie van de draaiende factory-bin, uit het eigen `package.json`.
+ *
+ * Dit is het antwoord op "met welke versie draaide de nacht" (#237): het staat in
+ * het runlog, zodat je 's ochtends in één blik ziet of het bijwerken gewerkt heeft.
+ * Een onleesbare versie is geen reden om de nacht over te slaan; vandaar 'onbekend'.
+ */
+export declare function eigenVersie(): string;
 export {};

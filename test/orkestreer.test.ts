@@ -14,7 +14,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  bouwNachtScript,
   bouwOrkestreerPlist,
+  eigenVersie,
   escalatieComment,
   leesEscalatie,
   orkestreer,
@@ -1041,7 +1043,8 @@ describe('orkestreer --nacht', () => {
     // legt een handmatige run niets vast.
     const log = readFileSync(paden.logPad, 'utf8');
     expect(log).toMatch(/#51 assistant klaar \$1\.25 12 beurten/);
-    expect(log.trim().split('\n')).toHaveLength(2);
+    // Drie regels: de startregel met de versie (#237), en twee runregels.
+    expect(log.trim().split('\n')).toHaveLength(3);
   });
 
   it('telt een run mee die niet oplevert wat hij moest opleveren', () => {
@@ -1197,13 +1200,23 @@ describe('orkestreer --nacht', () => {
 
     orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
-    // Twee regels met hetzelfde tijdstempel zeggen niets over hoe lang een run duurde.
-    const stempels = readFileSync(paden.logPad, 'utf8')
-      .trim()
-      .split('\n')
-      .map((regel) => regel.split(' ')[0]);
-    expect(stempels).toHaveLength(2);
-    expect(stempels[0]).not.toBe(NU.toISOString());
+    // Drie regels: de startregel en twee runs. De runregels hebben elk hun eigen
+    // tijdstempel; twee gelijke stempels zeggen niets over hoe lang een run duurde.
+    const regels = readFileSync(paden.logPad, 'utf8').trim().split('\n');
+    expect(regels).toHaveLength(3);
+    const runStempels = regels.slice(1).map((regel) => regel.split(' ')[0]);
+    expect(runStempels[0]).not.toBe(NU.toISOString());
+  });
+
+  it('logt met welke versie de nacht draaide (#237)', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // De eerste logregel vermeldt de factory-versie, zodat je 's ochtends ziet of het
+    // bijwerken gewerkt heeft.
+    const log = readFileSync(paden.logPad, 'utf8');
+    expect(log).toMatch(/nacht gestart \(factory \d+\.\d+\.\d+/);
   });
 
   it('weigert onbemand te draaien zonder token, met het recept erbij', () => {
@@ -1233,13 +1246,14 @@ describe('de LaunchAgent van de orkestrator', () => {
     bin: '/usr/local/bin/factory',
     werkmap: '/Users/gjvv',
     logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
+    factoryRepo: '/Users/gjvv/Documents/Software/factory',
   };
 
   it('draait --nacht één keer per nacht, buiten ~/Documents', () => {
     const plist = bouwOrkestreerPlist(opzet);
 
     expect(plist).toContain('<key>Label</key><string>nl.factory.orkestreer</string>');
-    expect(plist).toContain('<string>--nacht</string>');
+    expect(plist).toContain('orkestreer --nacht');
     expect(plist).toContain('<key>WorkingDirectory</key><string>/Users/gjvv</string>');
     // Een moment, geen frequentie: deze agent start werkers die geld kosten.
     expect(plist).toContain('<key>Hour</key><integer>4</integer>');
@@ -1254,6 +1268,46 @@ describe('de LaunchAgent van de orkestrator', () => {
     // die voor iedereen leesbaar is.
     expect(plist).not.toContain('RunAtLoad');
     expect(plist).not.toContain(TOKEN_SLEUTEL);
+  });
+
+  it('werkt de globale bin bij vóór --nacht, en draait alsnog bij een mislukte update (#237)', () => {
+    const plist = bouwOrkestreerPlist(opzet);
+
+    // De plist draait nu een shellscript via /bin/sh: eerst bijwerken, dan exec.
+    expect(plist).toContain('<string>/bin/sh</string>');
+    expect(plist).toContain('<string>-c</string>');
+
+    // De install-stap staat vóór de exec naar --nacht.
+    const script = bouwNachtScript(opzet);
+    const installIndex = script.indexOf('npm install -g');
+    const execIndex = script.indexOf('exec');
+    expect(installIndex).toBeGreaterThan(-1);
+    expect(execIndex).toBeGreaterThan(installIndex);
+
+    // Faalt het bijwerken, dan draait de nacht alsnog: de exec is onvoorwaardelijk.
+    expect(script).toContain('WARNING bijwerken naar');
+    expect(script).toContain('nacht draait op de huidige versie');
+    // De exec staat buiten elke if/fi, dus hij draait altijd.
+    const regels = script.split('\n');
+    const execRegel = regels[regels.length - 1];
+    expect(execRegel).toMatch(/^exec /);
+  });
+
+  it('haalt tags op uit de meegegeven factory-repo', () => {
+    const script = bouwNachtScript(opzet);
+
+    expect(script).toContain(`git -C "${opzet.factoryRepo}"`);
+    // Twee keer: één keer fetch, één keer tag --list
+    const gitAanroepen = script.match(new RegExp(`git -C "${opzet.factoryRepo}"`, 'g'));
+    expect(gitAanroepen?.length).toBe(2);
+  });
+});
+
+describe('eigenVersie', () => {
+  it('leest de versie uit het eigen package.json', () => {
+    // De draaiende code is de factory zelf, dus eigenVersie levert een geldige semver.
+    const versie = eigenVersie();
+    expect(versie).toMatch(/^\d+\.\d+\.\d+/);
   });
 });
 
@@ -1319,9 +1373,13 @@ describe('orkestreer --installeer en --verwijder', () => {
       'https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/v1.15.13',
     );
     // De bin komt uit de globale prefix en dus niet uit deze werkkopie in ~/Documents.
-    expect(readFileSync(paden.agentPad, 'utf8')).toContain(
-      '<string>/opt/homebrew/bin/factory</string>',
-    );
+    // In de plist staat hij in het shellscript dat via /bin/sh -c draait.
+    expect(readFileSync(paden.agentPad, 'utf8')).toContain('/opt/homebrew/bin/factory');
+    // De plist bevat de install-stap vóór --nacht (#237).
+    const plistInhoud = readFileSync(paden.agentPad, 'utf8');
+    expect(plistInhoud).toContain('npm install -g');
+    expect(plistInhoud).toContain('exec');
+    expect(plistInhoud).toContain('orkestreer --nacht');
     // Ontladen vóór laden, zodat een tweede installatie geen dubbele agent oplevert.
     const launchctl = aanroepen
       .filter((a) => a.commando === 'launchctl')
