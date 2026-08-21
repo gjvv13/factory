@@ -164,6 +164,21 @@ describe('orkestrator-instellingen', () => {
     });
   });
 
+  describe('de echte home is voor tests verboden (#278)', () => {
+    it('gooit als standaardPaden tijdens een test naar de echte home wijst', () => {
+      // `test/setup.ts` zet een tijdelijke home; dit is het vangnet als die opzet stuk
+      // is. Zonder dat vangnet schreef de suite 369 regels in het runlog van de
+      // gebruiker en zette de dagteller op 93 van 4.
+      const echte = process.env['FACTORY_ECHTE_HOME'];
+      expect(echte).toBeDefined();
+      expect(() => standaardPaden(echte)).toThrow(/echte home/);
+    });
+
+    it('laat een tijdelijke home gewoon door', () => {
+      expect(standaardPaden('/var/tmp/wat-dan-ook').logPad).toContain('/var/tmp/wat-dan-ook');
+    });
+  });
+
   describe('de dagteller', () => {
     it('telt runs op dezelfde kalenderdag bij elkaar op', () => {
       const nu = new Date('2026-08-19T22:10:00');
