@@ -20,7 +20,14 @@ import {
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiBouwer, type BouwUitkomst } from '../werker.js';
-import { buitenDocumenten, versWerkplaats, werkplaatsWortel } from '../werkplaats.js';
+import {
+  bronMappenVan,
+  bronMomentopname,
+  buitenDocumenten,
+  ruimBronMapOp,
+  versWerkplaats,
+  werkplaatsWortel,
+} from '../werkplaats.js';
 import { inleveren, type InleverenOpties } from './inleveren.js';
 import { werkplek } from './werkplek.js';
 
@@ -182,6 +189,40 @@ export function kiesItem(
   );
 }
 
+/** Het prefix waarmee een bron-label begint; de rest is de app-naam. */
+const BRON_PREFIX = 'bron:';
+
+/**
+ * Leest de `bron:<app>`-labels van een item, ontdubbeld (#238).
+ *
+ * Een label naar de eigen app van het item is een waarschuwing en verder een no-op:
+ * die code staat al in de worktree. Levert een lege lijst als er geen bron-labels zijn.
+ */
+export function bronAppsVan(item: Bouwitem): string[] {
+  const gezien = new Set<string>();
+  const apps: string[] = [];
+  for (const label of item.labels) {
+    if (!label.startsWith(BRON_PREFIX)) {
+      continue;
+    }
+    const app = label.slice(BRON_PREFIX.length).trim();
+    if (app === '') {
+      continue;
+    }
+    if (app === item.app) {
+      waarschuwing(
+        `#${String(item.issue)} draagt ${label}, maar ${app} is zijn eigen app — overgeslagen.`,
+      );
+      continue;
+    }
+    if (!gezien.has(app)) {
+      gezien.add(app);
+      apps.push(app);
+    }
+  }
+  return apps;
+}
+
 export interface BouwOpties {
   readonly dry?: boolean;
   /** Bouwt één item en stopt. */
@@ -260,11 +301,17 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
   }
 
   if (opties.dry === true) {
+    const bronApps = bronAppsVan(eerste);
+    const bronWortel = bronMappenVan(werkplekPad);
+    const bronRegels = bronApps
+      .map((app) => `  bron:     ${app} → ${path.join(bronWortel, app)}`)
+      .join('\n');
     process.stdout.write(
       `\nZou nu bouwen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
         `  werkplek: ${werkplekPad}\n` +
         `  branch:   ${bouwBranch(eerste.issue)}\n` +
         `  budget:   $${String(instellingen.bouwBudgetPerRun)} voor deze run\n` +
+        (bronRegels === '' ? '' : `${bronRegels}\n`) +
         `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`,
     );
     return;
@@ -274,8 +321,17 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
 }
 
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string {
+export function bouwPrompt(
+  item: Bouwitem,
+  werkmap: string,
+  factoryMap: string,
+  bronMappen: readonly string[] = [],
+): string {
   const sjabloon = readFileSync(path.join(templatesDir, 'werker-bouw.md'), 'utf8');
+  const bronBlok =
+    bronMappen.length === 0
+      ? ''
+      : bronMappen.map((pad) => `- \`${pad}\` — **alleen lezen, wegwerpkopie**`).join('\n');
   const vervang: Record<string, string> = {
     '{{ISSUE}}': String(item.issue),
     '{{TITEL}}': item.titel,
@@ -283,6 +339,7 @@ export function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string):
     '{{BRANCH}}': bouwBranch(item.issue),
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
+    '{{BRON_MAPPEN}}': bronBlok,
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -314,28 +371,46 @@ function bouwAf(
     zetKolom(item.issue, BOUW_KOLOM, cwd);
   };
 
+  const bronApps = bronAppsVan(item);
+  const werkmap = bouwWerkplek(item.app, item.issue, wortel);
+  const bronWortel = bronMappenVan(werkmap);
+
   let uitkomst: BouwUitkomst;
   try {
     const spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
     const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+
+    // Bron-momentopnames vóór de claude-run: faalt de clone, dan is het een harde fout
+    // en kost hij niets. De map is naast de worktree, niet erin: verify in de worktree
+    // ziet hem niet, en het ergste wat de werker kan doen is zijn eigen wegwerpkopie
+    // verbouwen (#238).
+    const bronMappen: string[] = [];
+    for (const bronApp of bronApps) {
+      bronMappen.push(bronMomentopname(bronApp, bronWortel, EIGENAAR, wortel));
+    }
+
     // Via `factory werkplek` en niet met een eigen `git worktree add`: dan geldt hier
     // dezelfde padconventie en dezelfde branchnaam als voor een menselijke sessie, en
     // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
     werkplek(String(item.issue), { cwd: spiegel });
-    const werkmap = bouwWerkplek(item.app, item.issue, wortel);
 
     uitkomst = draaiBouwer({
-      prompt: bouwPrompt(item, werkmap, factoryMap),
+      prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen),
       werkmap,
       sessie: randomUUID(),
-      extraMappen: [factoryMap],
+      extraMappen: [factoryMap, ...bronMappen],
       budgetUsd,
       model: MODEL,
     });
   } catch (fout) {
+    ruimBronMapOp(bronWortel);
     terug();
     throw fout;
   }
+  // Na de run is de bron-map weg, ook als de run escaleerde of faalde — de uitkomst
+  // hoort er niet van af te hangen, en een achtergebleven map is rommel die bij de
+  // volgende run in de weg kan zitten.
+  ruimBronMapOp(bronWortel);
 
   verwerkBouw(item, uitkomst, cwd, wortel, leverIn);
 }

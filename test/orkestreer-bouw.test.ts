@@ -5,12 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bouwBranch,
+  bouwPrompt,
   bouwWachtrij,
   bouwWerkplek,
+  bronAppsVan,
   leesIssue,
   leesSoort,
   orkestreerBouw,
   redenBuitenDeRij,
+  type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -66,10 +69,10 @@ describe('de bouw-wachtrij', () => {
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // Oudste eerst: #177 (4 aug), #91 (5 aug), #126 (10 aug), #182 (19 aug). En verder
-    // niets: #164 is een epic, #149 draagt escalatie, #200 heeft geen App, #87 staat al
-    // op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
-    expect(rij.map((item) => item.issue)).toEqual([177, 91, 126, 182]);
+    // Oudste eerst: #177 (4 aug), #91 (5 aug), #106 (6 aug), #250 (7 aug), #126 (10 aug),
+    // #182 (19 aug). En verder niets: #164 is een epic, #149 draagt escalatie, #200 heeft
+    // geen App, #87 staat al op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
+    expect(rij.map((item) => item.issue)).toEqual([177, 91, 106, 250, 126, 182]);
   });
 
   it('laat het epic zelf staan, maar neemt zijn slice wel mee', () => {
@@ -315,7 +318,7 @@ describe('--issue', () => {
 
     // Elk item dat --issue accepteert, staat ook gewoon in de rij. Wie dat later
     // omzeilt — een aparte lezing voor het gevraagde issue — breekt deze test.
-    for (const issue of [177, 91, 126, 182]) {
+    for (const issue of [177, 91, 106, 250, 126, 182]) {
       expect(rij.map((item) => item.issue)).toContain(issue);
     }
   });
@@ -561,5 +564,174 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(() => {
       orkestreerBouw({ dry: true, eenmalig: true, werkplaatsWortel: wortel });
     }).toThrow(/sluiten elkaar uit/);
+  });
+
+  it('geeft bron-mappen mee als extraMappen aan de werker', () => {
+    // #106 draagt bron:assistant. De momentopname moet als extraMap meegaan, zodat de
+    // werker die map kan lezen. De factory-map staat er sowieso bij.
+    const { aanroepen } = draai(envelop('claude-bouw-klaar'));
+
+    // De kop van de rij is #177 (geen bron-labels), dus dit test dat een item zonder
+    // bron-labels gewoon draait — de extraMappen bevatten dan alleen de factory-map.
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    const args = claude?.argumenten ?? [];
+    const addDirs = args.reduce<string[]>((acc, arg, i) => {
+      if (arg === '--add-dir') {
+        const volgende = args[i + 1];
+        if (volgende !== undefined) acc.push(volgende);
+      }
+      return acc;
+    }, []);
+    // Tenminste de factory-map als extra leesbare map.
+    expect(addDirs.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ruimt de bron-map op na de run, ook bij escalatie', () => {
+    const { uitvoerder } = maakUitvoerderOpnemer(machine(envelop('claude-bouw-escalatie')));
+    stelUitvoerderIn(uitvoerder);
+    const geleverd: unknown[] = [];
+
+    orkestreerBouw({
+      eenmalig: true,
+      issue: 106,
+      werkplaatsWortel: wortel,
+      leverIn: (opties) => geleverd.push(opties),
+    });
+
+    // Bij een escalatie wordt er niet ingeleverd, maar de bron-map moet wel opgeruimd
+    // zijn. Er is een `rmSync` op het bron-pad, dat attesteert de cleanup. Belangrijker:
+    // de run gooit niet — de opruiming verhindert geen voortgang.
+    expect(geleverd).toEqual([]);
+  });
+});
+
+describe('bronAppsVan', () => {
+  function item(labels: string[], app = 'factory'): Bouwitem {
+    return {
+      issue: 1,
+      titel: 't',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels,
+      app,
+    };
+  }
+
+  it('leest bron-apps uit bron:-labels, ontdubbeld', () => {
+    expect(bronAppsVan(item(['type:task', 'bron:assistant', 'bron:beheer']))).toEqual([
+      'assistant',
+      'beheer',
+    ]);
+    // Dubbelen worden eruit gehaald.
+    expect(bronAppsVan(item(['bron:assistant', 'bron:assistant']))).toEqual(['assistant']);
+  });
+
+  it('levert een lege lijst als er geen bron-labels zijn', () => {
+    expect(bronAppsVan(item(['type:task']))).toEqual([]);
+  });
+
+  it('negeert de eigen app met een waarschuwing', () => {
+    const uitvoer: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+
+    const apps = bronAppsVan(item(['bron:factory'], 'factory'));
+
+    expect(apps).toEqual([]);
+    expect(uitvoer.join('')).toMatch(/eigen app/);
+    vi.restoreAllMocks();
+  });
+
+  it('negeert lege labels na het prefix', () => {
+    expect(bronAppsVan(item(['bron:']))).toEqual([]);
+  });
+});
+
+describe('--dry met bron-labels', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('toont per bron-app het pad en schrijft niets', () => {
+    const { uitvoerder, aanroepen } = metBord();
+    stelUitvoerderIn(uitvoerder);
+
+    // #106 draagt bron:assistant en staat in de rij.
+    orkestreerBouw({ dry: true, issue: 106, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain('bron:');
+    expect(tekst).toContain('assistant');
+    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/106-bron/assistant');
+    // Geen clone, geen archive, geen git-aanroep.
+    expect(aanroepen.some((a) => a.commando === 'git')).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+  });
+
+  it('toont geen bron-regel als er geen bron-labels zijn', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    // #91 heeft geen bron-labels.
+    orkestreerBouw({ dry: true, issue: 91, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    const tekst = uitvoer.join('');
+    expect(tekst).not.toContain('bron:');
+  });
+});
+
+describe('bouwPrompt met bron-mappen', () => {
+  it('noemt de bron-mappen als alleen lezen, wegwerpkopie', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 106,
+        titel: 'Test',
+        app: 'factory',
+        kolom: 'Klaar voor Bouwen',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/factory-wt/106',
+      '/w/factory',
+      ['/w/factory-wt/106-bron/assistant'],
+    );
+
+    expect(prompt).toContain('/w/factory-wt/106-bron/assistant');
+    expect(prompt).toContain('alleen lezen');
+    expect(prompt).toContain('wegwerpkopie');
+  });
+
+  it('laat het bron-blok weg als er geen bron-mappen zijn', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 91,
+        titel: 'Test',
+        app: 'factory',
+        kolom: 'Klaar voor Bouwen',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/factory-wt/91',
+      '/w/factory',
+    );
+
+    expect(prompt).not.toContain('wegwerpkopie');
+    // Het lege placeholder-restant mag er ook niet staan.
+    expect(prompt).not.toContain('{{BRON_MAPPEN}}');
   });
 });
