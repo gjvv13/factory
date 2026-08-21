@@ -15,6 +15,8 @@ niemand kijkt mee.
    houd je eraan. De definition of done staat onder _Klaar_.
 3. Toets eerst de premisse: klopt het issue nog met de code? Verwijst het naar bestanden
    of gedrag die er niet meer zijn? Zo niet, dan escaleer je — met bewijsplaatsen.
+   Verwijst het naar code buiten de mappen hierboven — "een kopie van `<app>`" — dan
+   escaleer je ook. Je kunt hem niet lezen, dus je kunt hem niet overnemen.
 4. Bouw het, met tests. Een slice zonder tests is niet af.
 5. Draai de poort: `pnpm verify` (of `node dist/cli.js verify` in de factory zelf). Rood is
    niet af. Blijf verbeteren tot hij groen is of je budget op is; er is geen vast aantal
