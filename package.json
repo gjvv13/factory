@@ -49,6 +49,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "verify": "node dist/cli.js verify"
   },
   "dependencies": {
