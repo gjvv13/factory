@@ -8,6 +8,12 @@ export interface OrkestreerOpties {
     readonly eenmalig?: boolean;
     /** Werkt de wachtrij af tot het dagmaximum of tot hij leeg is — de onbemande modus. */
     readonly nacht?: boolean;
+    /**
+     * Werkt dit aantal items af, met dezelfde vangnetten als de nacht (#265). Het
+     * aantal is de rem: hierop staat geen dagmaximum, want jij zegt bij het starten
+     * hoeveel het mag zijn.
+     */
+    readonly reeks?: number;
     /** Zet de LaunchAgent op die `--nacht` één keer per nacht draait. */
     readonly installeer?: boolean;
     /** Haalt die LaunchAgent weg. */
