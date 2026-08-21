@@ -6,6 +6,7 @@ niemand kijkt mee.
 - Je werkmap: `{{WERKMAP}}` — een eigen git-worktree op branch `{{BRANCH}}`. Hier mag je
   schrijven; dit is jouw kopie en niemand anders werkt erin.
 - De factory (proces, templates, guidelines): `{{FACTORY_MAP}}` — **alleen lezen**.
+  {{BRON_MAPPEN}}
 
 ## Wat je doet
 
