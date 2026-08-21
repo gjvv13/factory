@@ -36,3 +36,28 @@ export declare function buitenDocumenten(pad: string): boolean;
  * Levert het pad van de werkplaats op.
  */
 export declare function versWerkplaats(app: string, eigenaar: string, wortel?: string): string;
+/**
+ * Het pad waar bron-momentopnames naast een worktree komen.
+ *
+ * Naast de worktree, niet erin: een map ín de worktree zou door `verify` gelint en
+ * opgemaakt worden (`prettier --check .` scant alles) en kan per ongeluk in een commit
+ * belanden. `<worktree>-bron` valt er structureel buiten (#238).
+ */
+export declare function bronMappenVan(worktree: string): string;
+/**
+ * Zet een wegwerp-momentopname van een bron-app naast de worktree (#238).
+ *
+ * De spiegel wordt ververst op `origin/main`, en `git archive` levert de bestanden
+ * zonder `.git` — er is niets om vanuit de kopie naar te pushen. Faalt de clone of
+ * het archive, dan is dat een harde fout vóór de run: half toegang is erger dan geen
+ * toegang.
+ *
+ * Levert het pad van de momentopname op (`<bronWortel>/<bronApp>`).
+ */
+export declare function bronMomentopname(bronApp: string, bronWortel: string, eigenaar: string, wortel?: string): string;
+/**
+ * Ruimt de bron-map op. Bewust een eigen functie en niet een inline `rmSync`: de
+ * aanroeper moet dit in een `finally` doen, en de intentie mag niet verdrinken in de
+ * boilerplate.
+ */
+export declare function ruimBronMapOp(bronWortel: string): void;
