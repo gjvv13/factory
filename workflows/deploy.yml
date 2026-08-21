@@ -54,17 +54,24 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-        with:
-          # Per job een eigen pnpm-installatie. Twee runners op dezelfde mini draaien
-          # als dezelfde gebruiker en delen anders ~/setup-pnpm + de store; bij
-          # parallelle deploys slopen ze elkaar (ENOTEMPTY / verdwenen worker.js).
-          dest: ${{ runner.temp }}/pnpm
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
-          # op een blijvende self-hosted runner levert de Actions-cache weinig op.
+      # Geen `actions/setup-node` en `pnpm/action-setup` op de mini: node staat er al
+      # (de runner-`.env` zet `NVM_BIN`) en pnpm komt uit `corepack`, met de versie uit
+      # `packageManager`. Die twee actions werden élke job opnieuw van codeload gehaald —
+      # ook al staat de cache er lokaal — en dáár liepen de runs op stuk: 15 van 948 runs
+      # in de week tot 2026-08-21, allemaal in `Set up job` waar geen retry mogelijk is
+      # (#270, restpunt van #99).
+      - name: Node en pnpm van de runner
+        run: |
+          verwacht=$(tr -d ' \n' < .nvmrc)
+          huidig=$(node -p "process.versions.node.split('.')[0]")
+          if [ "$huidig" != "$verwacht" ]; then
+            # Luid, niet stil doorbouwen op de verkeerde node: dat is precies het soort
+            # verschil dat pas in productie opvalt.
+            echo "::error::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — installeer die node op de mini (nvm install $verwacht)."
+            exit 1
+          fi
+          corepack enable pnpm
+          echo "node $(node --version), pnpm $(pnpm --version)"
       # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
       # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
       # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI
@@ -158,17 +165,24 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-        with:
-          # Per job een eigen pnpm-installatie. Twee runners op dezelfde mini draaien
-          # als dezelfde gebruiker en delen anders ~/setup-pnpm + de store; bij
-          # parallelle deploys slopen ze elkaar (ENOTEMPTY / verdwenen worker.js).
-          dest: ${{ runner.temp }}/pnpm
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          # Geen cache: pnpm — die deelt de store-map en veroorzaakt dezelfde botsing;
-          # op een blijvende self-hosted runner levert de Actions-cache weinig op.
+      # Geen `actions/setup-node` en `pnpm/action-setup` op de mini: node staat er al
+      # (de runner-`.env` zet `NVM_BIN`) en pnpm komt uit `corepack`, met de versie uit
+      # `packageManager`. Die twee actions werden élke job opnieuw van codeload gehaald —
+      # ook al staat de cache er lokaal — en dáár liepen de runs op stuk: 15 van 948 runs
+      # in de week tot 2026-08-21, allemaal in `Set up job` waar geen retry mogelijk is
+      # (#270, restpunt van #99).
+      - name: Node en pnpm van de runner
+        run: |
+          verwacht=$(tr -d ' \n' < .nvmrc)
+          huidig=$(node -p "process.versions.node.split('.')[0]")
+          if [ "$huidig" != "$verwacht" ]; then
+            # Luid, niet stil doorbouwen op de verkeerde node: dat is precies het soort
+            # verschil dat pas in productie opvalt.
+            echo "::error::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — installeer die node op de mini (nvm install $verwacht)."
+            exit 1
+          fi
+          corepack enable pnpm
+          echo "node $(node --version), pnpm $(pnpm --version)"
       # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
       # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
       # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI

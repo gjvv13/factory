@@ -3,14 +3,19 @@ name: deploy-rerun
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Vangnet voor #122. De GitHub-runner haalt externe actions (actions/checkout,
-# actions/setup-node, pnpm/action-setup) op vóór er een factory-shellstap draait —
-# dus buiten het #99-retry-vangnet om, dat alleen om factory's eigen shell-stappen
-# (git push/fetch, pnpm install) zit. Faalt dat downloaden op een transiente hik, dan
-# valt de hele deploy-job om en blijft prod stil op de oude versie (zie #112).
+# Vangnet voor #122. Bewaakt inmiddels ook `bump-factory`, ondanks de naam: die volgt
+# het bestand, en een rename zou in vijf repo's een wees achterlaten.
 #
-# Deze workflow draait ná een afgeronde deploy-run. Faalde die op de
-# action-download-signatuur, dan start hij de gefaalde jobs eenmalig opnieuw. Alleen
+# De runner haalt externe actions op vóór er een factory-shellstap draait — sinds #270
+# op de mini alleen nog `actions/checkout`; `setup-node` en `pnpm/action-setup` zijn
+# daar weg omdat node en pnpm er al staan. Dat downloaden valt buiten het
+# #99-retry-vangnet, dat alleen om factory's eigen shell-stappen (git push/fetch, pnpm
+# install) zit. Faalt het op een transiente hik, dan valt de hele job om: bij een
+# deploy blijft prod stil op de oude versie (#112), bij een bump haalt de app de
+# nieuwe factory-tag niet.
+#
+# Deze workflow draait ná een afgeronde `deploy`- of `bump-factory`-run. Faalde die op
+# de action-download-signatuur, dan start hij de gefaalde jobs eenmalig opnieuw. Alleen
 # bij de eerste poging (run_attempt == 1), zodat een echte bouwfout na één rerun
 # alsnog rood blijft en niet in een lus opnieuw draait. Draait op een GitHub-hosted
 # runner (niet de mini): het is puur een gh-API-aanroep, en zo raakt de rerun-trigger
@@ -18,7 +23,10 @@ name: deploy-rerun
 
 on:
   workflow_run:
-    workflows: [deploy]
+    # Ook `bump-factory`: alle vijftien de action-download-mislukkingen in de week tot
+    # 2026-08-21 zaten in díe workflow, en die had geen vangnet (#270). De deploy had
+    # het al sinds #122.
+    workflows: [deploy, bump-factory]
     types: [completed]
 
 permissions:
