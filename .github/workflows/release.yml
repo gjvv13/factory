@@ -95,7 +95,10 @@ jobs:
           # ongeacht de staat van main.
           git fetch --tags --force origin >/dev/null 2>&1 || true
           laatste="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
-          laatste="${laatste:-v0.0.0}"
+          if [ -z "$laatste" ]; then
+            echo "::error::geen v*-tags gevonden na git fetch — de taglijst is leeg. Maak handmatig een initiële tag aan (bijv. v0.0.0) en draai de workflow opnieuw."
+            exit 1
+          fi
           # Reken de volgende versie rekenkundig uit de tag. Niet via `pnpm version`: dat
           # eist een schone git-tree, en we bumpen niet vanuit package.json (die loopt
           # achter). npm pkg set schrijft de nieuwe versie pas ná de branch-checkout, dus
