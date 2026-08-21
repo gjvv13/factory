@@ -1,0 +1,15 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "7c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "num_turns": 12,
+  "total_cost_usd": 1.23,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "uitkomst": "escalatie",
+    "vraag": "Het issue verwijst naar logger.ts in de assistant-app, maar die module is verplaatst.",
+    "advies": "Verplaats de verwijzing in het issue naar core/logging.ts."
+  }
+}

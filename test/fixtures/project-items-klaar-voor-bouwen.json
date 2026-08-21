@@ -142,6 +142,56 @@
             },
             {
               "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 106,
+                "title": "Skeleton levert de volledige admin-API",
+                "state": "OPEN",
+                "createdAt": "2026-08-06T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    },
+                    {
+                      "name": "bron:assistant"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 250,
+                "title": "Item met onbekende bron-app",
+                "state": "OPEN",
+                "createdAt": "2026-08-07T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    },
+                    {
+                      "name": "bron:onbestaand"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
                 "name": "Bouwen"
               },
               "app": {

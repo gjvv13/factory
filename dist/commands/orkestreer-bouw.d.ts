@@ -56,6 +56,13 @@ export declare function redenBuitenDeRij(item: BacklogItem): BuitenDeRij | undef
  * kan een item dat niet mag ook niet laten bouwen.
  */
 export declare function kiesItem(wachtrij: readonly Bouwitem[], alles: readonly BacklogItem[], issue: number | undefined, cwd: string): Bouwitem | undefined;
+/**
+ * Leest de `bron:<app>`-labels van een item, ontdubbeld (#238).
+ *
+ * Een label naar de eigen app van het item is een waarschuwing en verder een no-op:
+ * die code staat al in de worktree. Levert een lege lijst als er geen bron-labels zijn.
+ */
+export declare function bronAppsVan(item: Bouwitem): string[];
 export interface BouwOpties {
     readonly dry?: boolean;
     /** Bouwt één item en stopt. */
@@ -80,7 +87,7 @@ export interface BouwOpties {
  */
 export declare function orkestreerBouw(opties?: BouwOpties): void;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
+export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 /**
  * Leest `--issue`: een positief geheel getal, of niets.
