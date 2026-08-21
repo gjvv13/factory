@@ -4,6 +4,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
+  bronMappenVan,
+  bronMomentopname,
   buitenDocumenten,
   versWerkplaats,
   werkplaatsVan,
@@ -107,5 +109,79 @@ describe('versWerkplaats', () => {
     expect(() => versWerkplaats('beheer', 'gjvv13', path.join(os.homedir(), 'Documents'))).toThrow(
       /binnen ~\/Documents/,
     );
+  });
+});
+
+describe('bronMappenVan', () => {
+  it('legt bron-mappen naast de worktree, niet erin', () => {
+    // Naast, niet in: een map ín de worktree zou door `verify` gelint worden en kan per
+    // ongeluk in een commit belanden. `<worktree>-bron` valt er structureel buiten (#238).
+    expect(bronMappenVan('/w/factory-wt/106')).toBe('/w/factory-wt/106-bron');
+  });
+});
+
+describe('bronMomentopname', () => {
+  let wortel: string;
+
+  beforeEach(() => {
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bron-'));
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('ververst de spiegel, maakt een archive zonder .git en ruimt het tarbestand op', () => {
+    // Leg een echte tijdelijke git-repo aan als spiegel: dan test je dat `git archive`
+    // bestanden levert zonder `.git`, en dat het tar-tussenbestand weg is.
+    const spiegelPad = path.join(wortel, 'assistant');
+    mkdirSync(spiegelPad, { recursive: true });
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      // Bij het klonen laten we de spiegel als reeds bestaand met .git voordoen — die
+      // is er, en versWerkplaats slaat dan over naar fetch+reset.
+      if (commando === 'git' && argumenten[0] === 'archive') {
+        // Geef een lege uitvoer terug; het tar-bestand wordt niet echt geschreven in de
+        // opnemer, maar we controleren dat de stappen in de juiste volgorde draaien.
+        return { stdout: '' };
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+
+    // Maak .git aan zodat versWerkplaats denkt dat de spiegel al bestaat.
+    mkdirSync(path.join(spiegelPad, '.git'), { recursive: true });
+    const bronWortel = path.join(wortel, 'bron');
+    bronMomentopname('assistant', bronWortel, 'gjvv13', wortel);
+
+    // De aanroepen moeten bevatten: fetch, reset (spiegel verversen), archive, tar.
+    const gitCmds = aanroepen.filter((a) => a.commando === 'git').map((a) => a.argumenten[0]);
+    expect(gitCmds).toContain('fetch');
+    expect(gitCmds).toContain('reset');
+    expect(gitCmds).toContain('archive');
+
+    const tarCmds = aanroepen.filter((a) => a.commando === 'tar');
+    expect(tarCmds).toHaveLength(1);
+    // Het tar-commando pakt uit naar de juiste map.
+    expect(tarCmds[0]?.argumenten).toContain('-C');
+    expect(tarCmds[0]?.argumenten).toContain(path.join(bronWortel, 'assistant'));
+  });
+
+  it('draait het archive in de spiegel, niet in de doelmap', () => {
+    const spiegelPad = path.join(wortel, 'assistant');
+    mkdirSync(path.join(spiegelPad, '.git'), { recursive: true });
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    bronMomentopname('assistant', path.join(wortel, 'bron'), 'gjvv13', wortel);
+
+    const archiveAanroep = aanroepen.find(
+      (a) => a.commando === 'git' && a.argumenten[0] === 'archive',
+    );
+    // git archive moet in de spiegel draaien, niet ergens anders.
+    expect(archiveAanroep?.cwd).toBe(spiegelPad);
   });
 });

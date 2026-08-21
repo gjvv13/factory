@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { GebruikersFout, git, ok, run } from './shell.js';
@@ -74,4 +74,57 @@ export function versWerkplaats(
   git(['reset', '--hard', '-q', 'origin/main'], pad);
   ok(`werkplaats ${pad} ververst op origin/main`);
   return pad;
+}
+
+/**
+ * Het pad waar bron-momentopnames naast een worktree komen.
+ *
+ * Naast de worktree, niet erin: een map ín de worktree zou door `verify` gelint en
+ * opgemaakt worden (`prettier --check .` scant alles) en kan per ongeluk in een commit
+ * belanden. `<worktree>-bron` valt er structureel buiten (#238).
+ */
+export function bronMappenVan(worktree: string): string {
+  return `${worktree}-bron`;
+}
+
+/**
+ * Zet een wegwerp-momentopname van een bron-app naast de worktree (#238).
+ *
+ * De spiegel wordt ververst op `origin/main`, en `git archive` levert de bestanden
+ * zonder `.git` — er is niets om vanuit de kopie naar te pushen. Faalt de clone of
+ * het archive, dan is dat een harde fout vóór de run: half toegang is erger dan geen
+ * toegang.
+ *
+ * Levert het pad van de momentopname op (`<bronWortel>/<bronApp>`).
+ */
+export function bronMomentopname(
+  bronApp: string,
+  bronWortel: string,
+  eigenaar: string,
+  wortel: string = werkplaatsWortel,
+): string {
+  // Ververs de spiegel zodat de momentopname op origin/main staat, net als de worktree.
+  const spiegel = versWerkplaats(bronApp, eigenaar, wortel);
+
+  const doelMap = path.join(bronWortel, bronApp);
+  mkdirSync(doelMap, { recursive: true });
+
+  // `git archive --output` schrijft het archief naar een bestand, zodat we niet hoeven te
+  // pipen — de uitvoerder is synchroon en heeft geen stdin. `tar xf` pakt het daarna uit.
+  const archief = path.join(bronWortel, `${bronApp}.tar`);
+  git(['archive', '--format=tar', '--output', archief, 'HEAD'], spiegel, { capture: true });
+  run('tar', ['xf', archief, '-C', doelMap], { capture: true });
+  rmSync(archief, { force: true });
+
+  ok(`bron-momentopname ${bronApp} → ${doelMap}`);
+  return doelMap;
+}
+
+/**
+ * Ruimt de bron-map op. Bewust een eigen functie en niet een inline `rmSync`: de
+ * aanroeper moet dit in een `finally` doen, en de intentie mag niet verdrinken in de
+ * boilerplate.
+ */
+export function ruimBronMapOp(bronWortel: string): void {
+  rmSync(bronWortel, { recursive: true, force: true });
 }
