@@ -35,6 +35,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
 | `factory orkestreer <--installeer\|--verwijder>`      | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                |
 | `factory orkestreer --soort bouw <--dry\|--eenmalig>` | Bouw-werker: wachtrij tonen, of één item bouwen en als PR zonder auto-merge inleveren (#182, #183)        |
+| `factory orkestreer --issue <n>`                      | Deze run op dat item richten i.p.v. op de kop van de rij; werkt op beide soorten (#210)                   |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze
@@ -331,8 +332,15 @@ kolom **Klaar voor Bouwen** in plaats van op de refinement-wachtrij. Geen `--soo
 refinen, zodat bestaande aanroepen niet van betekenis veranderen.
 
 ```bash
-factory orkestreer --soort bouw --dry   # wachtrij + bouwplan; schrijft niets
+factory orkestreer --soort bouw --dry              # wachtrij + bouwplan; schrijft niets
+factory orkestreer --soort bouw --issue 238 --dry  # dat item i.p.v. de kop van de rij
 ```
+
+**`--issue` richt een run, hij omzeilt niets (#210).** De vlag filtert de wachtrij die de
+filters al gemaakt hebben, dus een geëscaleerd item of een item in de verkeerde kolom
+bouwt niet — je krijgt de reden te horen in plaats van stilte. Zonder de vlag blijft het
+de kop van de rij. Samen met `--nacht` is het een fout: die draait tot het dagmaximum en
+zou op één item na de eerste ronde tegen de lus-vanger lopen.
 
 De bouw-wachtrij is smaller dan de refinement-wachtrij: alleen `type:bug` en `type:task`,
 geen epic, niets met een `escalatie`-label, en niets dat al op **Bouwen** staat — dat

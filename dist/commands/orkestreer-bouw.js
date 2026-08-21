@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bordItems, ESCALATIE_LABEL, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { bordItems, ESCALATIE_LABEL, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { leesInstellingen, standaardPaden, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
@@ -59,25 +59,81 @@ export function bouwBranch(issue) {
 export function bouwWachtrij(items) {
     const bruikbaar = [];
     for (const item of items) {
-        if (item.kolom !== BOUW_KOLOM) {
+        const reden = redenBuitenDeRij(item);
+        if (reden !== undefined) {
+            if (reden.grond === 'geen-app') {
+                // Niet stil overslaan, net als in #153: zonder App weet de werker niet welke
+                // code hij moet lezen, en een item dat nooit aan de beurt komt zonder dat
+                // iemand het merkt is erger dan een item dat overgeslagen wordt met een melding.
+                waarschuwing(`#${String(item.issue)} heeft geen App-veld — overgeslagen.`);
+            }
             continue;
         }
-        if (!BOUWBARE_SOORTEN.some((soort) => item.labels.includes(soort))) {
-            continue;
-        }
-        if (item.labels.includes(ESCALATIE_LABEL)) {
-            continue;
-        }
-        if (item.app === undefined || item.app === '') {
-            // Niet stil overslaan, net als in #153: zonder App weet de werker niet welke code
-            // hij moet lezen, en een item dat nooit aan de beurt komt zonder dat iemand het
-            // merkt is erger dan een item dat overgeslagen wordt met een melding.
-            waarschuwing(`#${String(item.issue)} heeft geen App-veld — overgeslagen.`);
-            continue;
-        }
-        bruikbaar.push({ ...item, app: item.app });
+        // `redenBuitenDeRij` heeft de App al getoetst; deze regel maakt dat voor de types waar.
+        bruikbaar.push({ ...item, app: item.app ?? '' });
     }
     return bruikbaar;
+}
+/**
+ * De uitsluitingsgrond van één item, of `undefined` als het in de rij hoort.
+ *
+ * Eén functie voor het filter én voor de melding van `--issue`, en niet twee keer
+ * dezelfde kennis. De vorige vorm was een reeks kale `continue`-regels: die kon geen
+ * reden noemen, en toen het filter in #232 veranderde bleef de documentatie erover
+ * achter zonder dat iets rood werd. Wie hier een grond toevoegt, levert de uitleg mee.
+ */
+export function redenBuitenDeRij(item) {
+    if (item.kolom !== BOUW_KOLOM) {
+        return {
+            grond: 'kolom',
+            zin: `het staat op ${item.kolom}, niet op ${BOUW_KOLOM}`,
+        };
+    }
+    if (!BOUWBARE_SOORTEN.some((soort) => item.labels.includes(soort))) {
+        return {
+            grond: 'soort',
+            zin: `het draagt geen van de labels ${BOUWBARE_SOORTEN.join(' of ')}`,
+        };
+    }
+    if (item.labels.includes(ESCALATIE_LABEL)) {
+        return {
+            grond: 'escalatie',
+            zin: `het draagt het label ${ESCALATIE_LABEL} — haal dat er eerst af`,
+        };
+    }
+    if (item.app === undefined || item.app === '') {
+        return { grond: 'geen-app', zin: 'het heeft geen App-veld, dus geen code om te lezen' };
+    }
+    return undefined;
+}
+/**
+ * Het item waar deze run over gaat: de kop van de rij, of het gevraagde issue.
+ *
+ * Een gevraagd issue dat niet in de rij staat is een fout mét de reden. `--issue`
+ * filtert de rij die de filters al gemaakt hebben; hij bouwt geen tweede rij, dus hij
+ * kan een item dat niet mag ook niet laten bouwen.
+ */
+export function kiesItem(wachtrij, alles, issue, cwd) {
+    if (issue === undefined) {
+        return wachtrij[0];
+    }
+    const gevraagd = wachtrij.find((item) => item.issue === issue);
+    if (gevraagd !== undefined) {
+        return gevraagd;
+    }
+    const inLezing = alles.find((item) => item.issue === issue);
+    if (inLezing !== undefined) {
+        const reden = redenBuitenDeRij(inLezing);
+        throw new GebruikersFout(`#${String(issue)} staat niet in de bouw-wachtrij: ${reden?.zin ?? 'onbekende reden'}.`);
+    }
+    // Niet in de lezing: `bordItems` laat gesloten items en items zonder Status-waarde
+    // weg. Eén gerichte opzoeking maakt het verschil zichtbaar in plaats van te gokken.
+    const kolom = kolomVan(issue, cwd);
+    throw new GebruikersFout(kolom === undefined
+        ? `#${String(issue)} staat niet in de bouw-wachtrij: hij heeft geen kolom op het ` +
+            `board, of hij is gesloten.`
+        : `#${String(issue)} staat niet in de bouw-wachtrij: het staat op ${kolom}, ` +
+            `niet op ${BOUW_KOLOM}.`);
 }
 /**
  * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
@@ -104,7 +160,7 @@ export function orkestreerBouw(opties = {}) {
     const wachtrij = bouwWachtrij(items);
     const geclaimd = items.filter((item) => item.kolom === GECLAIMD_KOLOM).length;
     kop(`Bouw-wachtrij: ${BOUW_KOLOM}`);
-    if (wachtrij.length === 0) {
+    if (wachtrij.length === 0 && opties.issue === undefined) {
         ok('niets te bouwen');
         return;
     }
@@ -120,7 +176,7 @@ export function orkestreerBouw(opties = {}) {
         // maar in behandeling, en dat wil je kunnen zien zonder het board te openen.
         ok(`${String(geclaimd)} item(s) staan op ${GECLAIMD_KOLOM} en zijn dus geclaimd.`);
     }
-    const eerste = wachtrij[0];
+    const eerste = kiesItem(wachtrij, items, opties.issue, cwd);
     if (eerste === undefined) {
         return;
     }
@@ -249,6 +305,23 @@ function blokkeer(item, cwd) {
     zetLabel(item.issue, ESCALATIE_LABEL, cwd);
 }
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/**
+ * Leest `--issue`: een positief geheel getal, of niets.
+ *
+ * Bewust een fout vóór de board-lezing. `--issue abc` zou anders een lezing kosten om
+ * daarna niets te vinden, en de melding zou over de wachtrij gaan in plaats van over
+ * de typefout.
+ */
+export function leesIssue(waarde) {
+    if (waarde === undefined) {
+        return undefined;
+    }
+    const nummer = Number(waarde);
+    if (!Number.isInteger(nummer) || nummer < 1) {
+        throw new GebruikersFout(`--issue verwacht een issuenummer, geen '${waarde}'.`);
+    }
+    return nummer;
+}
 export function leesSoort(waarde) {
     if (waarde === undefined || waarde === 'refine') {
         return 'refine';

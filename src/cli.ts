@@ -9,7 +9,7 @@ import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
-import { leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
+import { leesIssue, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -41,6 +41,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer <--dry|--eenmalig|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
   factory orkestreer --soort bouw <--dry|--eenmalig>  bouw-werker: wachtrij tonen, of één item bouwen
+  factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
@@ -141,12 +142,14 @@ async function main(argumenten: string[]): Promise<void> {
     case 'orkestreer': {
       const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
         schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
-        waarden: ['--soort'],
+        waarden: ['--soort', '--issue'],
       });
+      const issue = leesIssue(waarden.get('--issue'));
       if (leesSoort(waarden.get('--soort')) === 'bouw') {
         orkestreerBouw({
           dry: schakelaars.has('--dry'),
           eenmalig: schakelaars.has('--eenmalig'),
+          ...(issue === undefined ? {} : { issue }),
         });
         return;
       }
@@ -169,6 +172,7 @@ async function main(argumenten: string[]): Promise<void> {
         nacht: schakelaars.has('--nacht'),
         installeer: schakelaars.has('--installeer'),
         verwijder: schakelaars.has('--verwijder'),
+        ...(issue === undefined ? {} : { issue }),
       });
       return;
     }

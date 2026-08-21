@@ -231,6 +231,47 @@ describe('orkestreer', () => {
     }).toThrow(/sluiten elkaar uit/);
   });
 
+  it('richt de run met --issue op dat item in plaats van op de kop', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    orkestreer({ dry: true, issue: 131, werkplaatsWortel: wortel });
+
+    // De kop is #51 (9 aug); gevraagd is #131.
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain('Zou nu draaien: #131');
+    expect(tekst).not.toContain('Zou nu draaien: #51');
+  });
+
+  it('noemt de reden als het gevraagde item niet in de wachtrij staat', () => {
+    // `escalaties` draait `gh api … --jq '.[].number'`, dus de uitvoer is één nummer
+    // per regel — niet de ruwe JSON.
+    const escalatie = '119';
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ escalaties: escalatie }));
+    stelUitvoerderIn(uitvoerder);
+
+    // #119 draagt escalatie, #77 staat in een andere kolom. Zonder deze meldingen zou
+    // een gerichte vraag hetzelfde stille antwoord geven als een lege rij (#210).
+    expect(() => {
+      orkestreer({ dry: true, issue: 119, werkplaatsWortel: wortel });
+    }).toThrow(/label escalatie/);
+    expect(() => {
+      orkestreer({ dry: true, issue: 77, werkplaatsWortel: wortel });
+    }).toThrow(/staat niet in de wachtrij/);
+
+    // Een geweigerde vraag kost geen werker.
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+  });
+
+  it('weigert --issue samen met --nacht', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    // Een nachtrun draait tot het dagmaximum; op één item gericht zou hij na de eerste
+    // ronde op de lus-vanger stuiten. Dan is de vlag een dure `--eenmalig`.
+    expect(() => {
+      orkestreer({ nacht: true, issue: 131, werkplaatsWortel: wortel });
+    }).toThrow(/gaan niet samen/);
+  });
+
   it('stopt als de escalatielijst niet gelezen kan worden', () => {
     const basis = bepaler();
     const stuk: UitkomstBepaler = (aanroep, index) =>

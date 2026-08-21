@@ -7,8 +7,10 @@ import {
   bouwBranch,
   bouwWachtrij,
   bouwWerkplek,
+  leesIssue,
   leesSoort,
   orkestreerBouw,
+  redenBuitenDeRij,
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -215,6 +217,146 @@ describe('orkestreer --soort bouw --dry', () => {
     expect(() => {
       orkestreerBouw({ dry: true, werkplaatsWortel: `${process.env.HOME ?? ''}/Documents/Werk` });
     }).toThrow(/binnen ~\/Documents/);
+  });
+});
+
+describe('--issue', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('leest een issuenummer en weigert wat dat niet is', () => {
+    expect(leesIssue(undefined)).toBeUndefined();
+    expect(leesIssue('238')).toBe(238);
+    // Vóór de board-lezing, zodat een typefout geen lezing kost en de melding over de
+    // typefout gaat in plaats van over de wachtrij.
+    expect(() => leesIssue('abc')).toThrow(/issuenummer/);
+    expect(() => leesIssue('0')).toThrow(/issuenummer/);
+    expect(() => leesIssue('1.5')).toThrow(/issuenummer/);
+  });
+
+  it('richt de run op het gevraagde item in plaats van op de kop', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    orkestreerBouw({ dry: true, issue: 126, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+
+    const tekst = uitvoer.join('');
+    // De kop van de rij is #177; gevraagd is #126.
+    expect(tekst).toContain('Zou nu bouwen: #126');
+    expect(tekst).toContain('slice/126-1');
+    expect(tekst).not.toContain('Zou nu bouwen: #177');
+  });
+
+  it('noemt de reden als het item niet in de rij staat, en raakt niets aan', () => {
+    const { uitvoerder, aanroepen } = metBord();
+    stelUitvoerderIn(uitvoerder);
+
+    // #149 draagt escalatie, #200 heeft geen App, #164 is een epic, #87 staat al op
+    // Bouwen. Vier gronden, vier meldingen — geen stilte, want stilte kostte gisteren
+    // een halfuur zoeken naar waarom een item niet aan de beurt kwam (#210).
+    expect(() => {
+      orkestreerBouw({ dry: true, issue: 149 });
+    }).toThrow(/escalatie/);
+    expect(() => {
+      orkestreerBouw({ dry: true, issue: 200 });
+    }).toThrow(/geen App-veld/);
+    // #164 is een epic zónder Status-waarde, dus `bordItems` laat hem weg en de reden
+    // komt uit de gerichte opzoeking. Dat is ook het eerlijke antwoord: hij heeft echt
+    // geen kolom. De grond `soort` wordt los getoetst op `redenBuitenDeRij`.
+    expect(() => {
+      orkestreerBouw({ dry: true, issue: 164 });
+    }).toThrow(/geen kolom op het board/);
+    expect(() => {
+      orkestreerBouw({ dry: true, issue: 87 });
+    }).toThrow(/staat op Bouwen/);
+
+    // Geen claude, en geen schrijvende gh-aanroep: een geweigerde vraag kost niets.
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+    expect(aanroepen.some((a) => a.argumenten.includes('item-edit'))).toBe(false);
+  });
+
+  it('vraagt de kolom op als het issue niet in de lezing zit', () => {
+    // `bordItems` laat gesloten items en items zonder Status-waarde weg, dus "hij zit
+    // niet in de lezing" is daar geen verklaring. Eén gerichte opzoeking maakt het
+    // verschil zichtbaar; hij draait alleen op dit foutpad.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      if (commando !== 'gh' || argumenten[0] !== 'api') return {};
+      const query = argumenten.find((arg) => arg.startsWith('query=')) ?? '';
+      if (query.includes('items(first:100')) return { stdout: bord() };
+      return {
+        stdout: JSON.stringify({ data: { user: { projectV2: { items: { nodes: [] } } } } }),
+      };
+    });
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      orkestreerBouw({ dry: true, issue: 78 });
+    }).toThrow(/geen kolom op het board/);
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+  });
+
+  it('filtert de rij en bouwt er geen tweede', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+    const rij = bouwWachtrij(bordItems() ?? []);
+
+    // Elk item dat --issue accepteert, staat ook gewoon in de rij. Wie dat later
+    // omzeilt — een aparte lezing voor het gevraagde issue — breekt deze test.
+    for (const issue of [177, 91, 126, 182]) {
+      expect(rij.map((item) => item.issue)).toContain(issue);
+    }
+  });
+});
+
+describe('redenBuitenDeRij', () => {
+  function item(velden: Partial<Parameters<typeof redenBuitenDeRij>[0]>) {
+    return {
+      issue: 1,
+      titel: 't',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+      ...velden,
+    };
+  }
+
+  it('geeft geen reden voor een item dat in de rij hoort', () => {
+    expect(redenBuitenDeRij(item({}))).toBeUndefined();
+  });
+
+  it('geeft per grond een zin die achter "staat niet in de rij:" past', () => {
+    // Eén functie voor het filter én voor de melding. Twee plekken die hetzelfde moeten
+    // weten drijven uit elkaar — dat is precies wat met het ouder-filter gebeurde (#232).
+    expect(redenBuitenDeRij(item({ kolom: 'Technisch refinen' }))).toEqual({
+      grond: 'kolom',
+      zin: 'het staat op Technisch refinen, niet op Klaar voor Bouwen',
+    });
+    expect(redenBuitenDeRij(item({ labels: ['type:epic'] }))?.grond).toBe('soort');
+    expect(redenBuitenDeRij(item({ labels: ['type:task', 'escalatie'] }))?.grond).toBe('escalatie');
+    // Zonder de sleutel, niet met `app: undefined`: exactOptionalPropertyTypes maakt
+    // dat onderscheid, en een item zonder App-veld heeft de sleutel simpelweg niet.
+    const zonderApp: Parameters<typeof redenBuitenDeRij>[0] = {
+      issue: 1,
+      titel: 't',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+    };
+    expect(redenBuitenDeRij(zonderApp)?.grond).toBe('geen-app');
   });
 });
 

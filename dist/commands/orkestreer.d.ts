@@ -24,6 +24,11 @@ export interface OrkestreerOpties {
     readonly paden?: OrkestratorPaden;
     /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
     readonly nu?: Date;
+    /**
+     * Richt de run op dit issue in plaats van op de kop van de rij (#210). Staat het niet
+     * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
+     */
+    readonly issue?: number;
 }
 /** Een item uit de wachtrij dat een werker aankan: het `App`-veld moet gezet zijn. */
 interface Opdrachtitem extends BacklogItem {
