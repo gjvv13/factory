@@ -32,6 +32,9 @@ architectuur indeelt).
 2. **Toets de premisse tegen de code.** Klopt wat er staat nog? Verwijst het naar
    bestanden of gedrag die er niet meer zijn? Herijk het doel mét bewijsplaatsen
    (`pad/bestand.ts:regel`) in plaats van door te bouwen op een achterhaalde aanname.
+   Schrijf ook nooit een verwijzing op naar code buiten je mappen ("een kopie van
+   `<app>`"): de bouwer ziet dezelfde twee mappen als jij en kan hem dus niet lezen.
+   Heb je die code echt nodig, dan is dat een escalatie.
 3. Werk de **technische helft** uit: architectuur per laag, datamodel, externe
    koppelingen, feature flag, slices met acceptatiecriteria en tests, risico's,
    besluiten. De functionele secties (_Gedrag_, _Natuurlijke taal_, _Regels en

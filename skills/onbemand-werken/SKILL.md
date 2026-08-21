@@ -32,6 +32,11 @@ niet of het "erg genoeg" is.
   waar iemand anders mee moet leven.
 - Een feature flag die in productie aan zou moeten.
 - Bestanden of lagen raken die de opdracht niet noemt.
+- **Code die de opdracht noemt en die je niet kunt lezen.** Je mappen staan bovenaan je
+  prompt; wat daarbuiten ligt bestaat voor jou niet. Zegt de opdracht "dit is een kopie
+  van `<app>`" of "neem dit over uit `<app>`", en heb je die map niet, dan escaleer je.
+  Je schrijft nooit uit je hoofd na wat ergens al staat: het lijkt op het origineel en
+  wijkt er net van af, en niemand ziet waar.
 - De dekkings-basislijn willen verlagen.
 - Wat dan ook aan productie.
 
@@ -42,7 +47,8 @@ staat, dan staat het erop.
 
 Niet elke onzekerheid is een escalatie. Ga door, en noem het in je samenvatting, als:
 
-- het antwoord in de code te vinden was en je het gevonden hebt (met bewijsplaats);
+- het antwoord in de code te vinden was en je het gevonden hebt (met bewijsplaats) —
+  níet gevonden is geen detail, dat is de regel hierboven;
 - de keuze omkeerbaar is en niemand er last van heeft als hij anders uitpakt;
 - het een detail is dat de opdracht bewust aan jou laat.
 

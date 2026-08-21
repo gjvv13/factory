@@ -30,6 +30,19 @@ describe('onbemand-werken-skill', () => {
     expect(tekst).toContain('twijfel telt als een treffer');
   });
 
+  it('escaleert op code die de werker niet kan lezen', () => {
+    const tekst = skill();
+
+    // #106 verwees naar `assistant`s logger.ts, en een werker ziet alleen zijn eigen
+    // worktree plus de factory-spiegel. Zonder deze regel leest hij de uitzonderingen
+    // onder "Doorgaan mag ook" als vrijbrief — "een detail dat de opdracht aan jou
+    // laat" — en schrijft hij zijn eigen versie, die net afwijkt van het origineel.
+    expect(tekst).toMatch(/niet kunt lezen/);
+    expect(tekst).toMatch(/nooit uit je hoofd na/);
+    // De uitzondering mag niet de andere kant op werken: niet-gevonden is geen detail.
+    expect(tekst).toMatch(/níet gevonden is geen detail/);
+  });
+
   it('zegt wat er zonder vragen mag, niet alleen wat niet mag', () => {
     // Een lijst die alles verbiedt wordt genegeerd: in het overduidelijke geval levert
     // hij onzin op, en dan geldt hij in het twijfelgeval ook niet meer (#189).
@@ -54,12 +67,24 @@ describe('onbemand-werken-skill', () => {
 });
 
 describe('de werker-prompt', () => {
-  it('verwijst naar de skill in plaats van de lijst te herhalen', () => {
+  function sjabloon(naam: string): string {
     const hier = path.dirname(fileURLToPath(import.meta.url));
-    const prompt = readFileSync(path.join(hier, '..', 'templates', 'werker-refine.md'), 'utf8');
+    return readFileSync(path.join(hier, '..', 'templates', naam), 'utf8');
+  }
+
+  it('verwijst naar de skill in plaats van de lijst te herhalen', () => {
+    const prompt = sjabloon('werker-refine.md');
 
     // Twee kopieën van dezelfde regels drijven uit elkaar, en dan geldt de verkeerde.
     expect(prompt).toContain('skills/onbemand-werken/SKILL.md');
     expect(prompt).toMatch(/vlak voordat je je verdict geeft/);
+  });
+
+  it('noemt onbereikbare code bij de premisse-toets, in beide sjablonen', () => {
+    // Eén regel in de skill is niet genoeg: de premisse-toets staat in de prompt zelf en
+    // wordt gedaan vóórdat een werker de skill nodig heeft. En de refiner moet zo'n
+    // verwijzing niet eens opschrijven — daar begint het (#241).
+    expect(sjabloon('werker-bouw.md')).toMatch(/buiten de mappen hierboven/);
+    expect(sjabloon('werker-refine.md')).toMatch(/buiten je mappen/);
   });
 });

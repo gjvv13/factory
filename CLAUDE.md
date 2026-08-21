@@ -335,10 +335,12 @@ factory orkestreer --soort bouw --dry   # wachtrij + bouwplan; schrijft niets
 ```
 
 De bouw-wachtrij is smaller dan de refinement-wachtrij: alleen `type:bug` en `type:task`,
-geen epic en geen slice onder een epic (die horen in de volgorde van hun epic), niets met
-een `escalatie`-label, en niets dat al op **Bouwen** staat — dat laatste is de claim
-waarmee twee werkers elkaar niet in de weg lopen. Labels en de ouder-relatie komen mee in
-dezelfde board-lezing, dus dit filter kost geen extra GraphQL-punten.
+geen epic, niets met een `escalatie`-label, en niets dat al op **Bouwen** staat — dat
+laatste is de claim waarmee twee werkers elkaar niet in de weg lopen. Een slice onder een
+epic hoort er wél in: de kolom is de bron van waarheid, en een item staat alleen op _Klaar
+voor Bouwen_ omdat iemand het daar heeft neergezet (#232). Labels en de ouder-relatie komen
+mee in dezelfde board-lezing, dus dit filter kost geen extra GraphQL-punten; de rij noemt
+het epic bij een slice, zodat je vóór het geld kost ziet dat een item ergens bij hoort.
 
 Met `--eenmalig` bouwt hij echt: hij claimt het item op **Bouwen**, ververst zijn spiegel,
 maakt via `factory werkplek` een worktree op `slice/<issue>-1`, en draait één `claude`-run
