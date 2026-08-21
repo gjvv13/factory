@@ -69,6 +69,7 @@ Elke applicatie krijgt de `factory`-CLI mee als devDependency:
 | `factory flag <omgeving> [naam] [on\|off]`        | Feature flags omzetten zonder deploy                                     |
 | `factory nieuw <naam>`                            | Nieuwe applicatie uit het skelet, met een vrij poortblok                 |
 | `factory sync`                                    | Slash commands, git hook en CI-workflow gelijkzetten aan deze repo       |
+| `factory opruimen [--dry]`                        | Gemergede branches opruimen: lokaal en op de remote                      |
 
 De volledige `factory verify` meet ook testdekking. Zet een app een
 `dekkingsMinimum` in zijn `factory.json`, dan is dat een **release-poort**: de
