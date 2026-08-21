@@ -204,16 +204,23 @@ Alles loopt via de `gh` CLI (ingelogd als `gjvv13`). Issues worden met
 
 De pijplijn schrijft zelf op het board (#128, #185). Lokaal gebruikt hij jouw eigen
 `gh`-auth; in een workflow kan dat niet — het ingebouwde `GITHUB_TOKEN` is repo-gebonden
-en het board hangt onder een persoonlijk account. Daarvoor staan deze drie op
+en het board hangt onder een persoonlijk account. Daarvoor staan deze op
 `gjvv13/factory` (en `PROJECT_TOKEN` ook op elke app-repo):
 
-| Naam                  | Soort     | Waarvoor                                                      |
-| --------------------- | --------- | ------------------------------------------------------------- |
-| `PROJECT_TOKEN`       | secret    | het board schrijven: classic PAT met scope `project` + `repo` |
-| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt     |
-| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                |
+| Naam                  | Soort     | Waarvoor                                                                                                                                                             |
+| --------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROJECT_TOKEN`       | secret    | het board schrijven: classic PAT met scope `project` + `repo`, plus `read:org` en `read:discussion` — die eisen de `gh project`-subcommando's er bovenop             |
+| `RELEASE_PAT`         | secret    | de release-PR openen én de vijf apps van een nieuwe tag op de hoogte brengen (`gh workflow run` op een ánder repo; daar komt het ingebouwde `GITHUB_TOKEN` niet bij) |
+| `DEPLOY_NOTIFY_URL`   | variabele | het assistent-endpoint dat naar de Matrix-ops-room relayt                                                                                                            |
+| `DEPLOY_NOTIFY_TOKEN` | secret    | bearer-token voor dat endpoint                                                                                                                                       |
 
 Ontbreekt `PROJECT_TOKEN`, dan slaat de bordstap zacht over en blijven items op
 **Uitrollen** staan — een release wordt daar nooit rood van. Dat liep één keer stil vol
 (#195); daarom meldt de release het nu in de ops-room. Verloopt de PAT, dan is dat de
 melding die je krijgt.
+
+Hetzelfde geldt voor het op de hoogte brengen van de apps (#236): mag `RELEASE_PAT` niet
+dispatchen, dan blijft de release groen, komt er een waarschuwing per app plus één melding
+in de ops-room, en pikt de dagelijkse cron in de app het alsnog op. Die cron stond op elke
+30 minuten — 165 runs per dag over vijf apps, met zeven faalmails, allemaal in `Set up job`
+waar geen retry mogelijk is — en is nu het vangnet in plaats van de gewone weg.
