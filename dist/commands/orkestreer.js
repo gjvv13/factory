@@ -5,6 +5,7 @@ import path from 'node:path';
 import { bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
+import { draaiReeks, meldReeks } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -145,19 +146,54 @@ export function orkestreer(opties = {}) {
         verwijderAgent(paden);
         return;
     }
-    const modi = [opties.dry, opties.eenmalig, opties.nacht].filter((modus) => modus === true);
+    const modi = [opties.dry, opties.eenmalig, opties.nacht, opties.reeks !== undefined].filter((modus) => modus === true);
     if (modi.length > 1) {
         // Stil één van de modi kiezen laat iemand denken dat de run gestart is.
-        throw new GebruikersFout('--dry, --eenmalig en --nacht sluiten elkaar uit; kies er één.');
+        throw new GebruikersFout('--dry, --eenmalig, --reeks en --nacht sluiten elkaar uit; kies er één.');
     }
     if (modi.length === 0) {
         // Een kaal commando dat tóch een werker start is precies het soort verrassing dat
         // je bij onbemand werk niet wilt — ook nu er een LaunchAgent bestaat die het wél
         // vanzelf doet. Die staat in de plist als `--nacht`, expliciet en na te lezen.
-        throw new GebruikersFout('Gebruik: factory orkestreer --dry (tonen), --eenmalig (één item) of --nacht (tot het dagmaximum).');
+        throw new GebruikersFout('Gebruik: factory orkestreer --dry (tonen), --eenmalig (één item), --reeks <n> (een reeks) of --nacht (tot het dagmaximum).');
     }
     const cwd = process.cwd();
     const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
+    if (opties.reeks !== undefined) {
+        if (opties.issue !== undefined) {
+            // Een reeks van één is `--eenmalig`; een reeks op één item gericht bestaat niet.
+            throw new GebruikersFout('--issue en --reeks gaan niet samen; gebruik --eenmalig.');
+        }
+        if (!neemLock()) {
+            throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+        }
+        const instellingen = leesInstellingen(paden);
+        try {
+            kop(`Reeks van ${String(opties.reeks)}`);
+            meldReeks(draaiReeks({
+                paden,
+                nu: opties.nu ?? new Date(Date.now()),
+                soort: 'refine',
+                // Jij startte deze reeks, dus hij komt niet uit de pot van de nacht (#264).
+                pot: 'interactief',
+                noemer: 'deze reeks',
+                aantal: opties.reeks,
+                leesRij: () => bouwWachtrij(cwd),
+                werkAf: (item) => werkAf(item, cwd, wortel, {
+                    budgetUsd: instellingen.budgetPerRun,
+                    // Dezelfde tijdslimiet als de nacht: een hangende werker in een reeks van
+                    // vier is even duur als een hangende werker om 04:00 (#206).
+                    timeoutMs: instellingen.runTimeoutMs,
+                }),
+                beschrijf: beschrijfRun,
+                gelukt: (u) => u.afloop === 'klaar',
+            }));
+        }
+        finally {
+            geefLockVrij();
+        }
+        return;
+    }
     if (opties.nacht === true) {
         if (opties.issue !== undefined) {
             // Een nachtrun draait tot het dagmaximum. Op één item gericht zou hij dat item één
@@ -251,7 +287,7 @@ function draaiNacht(cwd, wortel, paden, nu) {
     const versie = eigenVersie();
     kop(`Nacht van ${kalenderdag(nu)}`);
     schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} nacht gestart (factory ${versie})`);
-    let gestart = leesStaat(paden, nu).gestart;
+    const gestart = leesStaat(paden, nu).gestart;
     if (gestart >= instellingen.dagmaximum) {
         // Meerdere runs op één kalenderdag delen hetzelfde maximum; anders is een handmatige
         // extra run 's avonds een gratis verdubbeling van wat ik moet beoordelen.
@@ -261,37 +297,31 @@ function draaiNacht(cwd, wortel, paden, nu) {
     if (!neemLock()) {
         throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
     }
-    const gedaan = new Set();
-    const gemeld = new Set();
+    const alGestart = gestart;
     try {
-        while (gestart < instellingen.dagmaximum) {
-            // Het board één keer per ronde lezen (#153): elke extra uitvraag kost GraphQL-punten
-            // per item, en die pot is de schaarse.
-            const rij = bouwWachtrij(cwd);
-            if (rij.length === 0) {
-                ok('wachtrij leeg; klaar voor vannacht.');
-                break;
-            }
-            // Vangnet tegen een lus, zoals `integreer` dat ook heeft: hetzelfde item mag binnen
-            // één nacht nooit twee keer draaien — dat is twee keer betalen voor één uitwerking.
-            // Maar het is een *filter*, geen noodstop. Een item blijft ook in de rij staan bij
-            // een normale escalatie (GitHub's labelfilter loopt seconden achter) of bij een zacht
-            // gefaalde `zetKolom`; stoppen kostte dan de hele nacht in plaats van dat ene item.
-            for (const item of rij) {
-                if (gedaan.has(item.issue) && !gemeld.has(item.issue)) {
-                    gemeld.add(item.issue);
-                    waarschuwing(`#${String(item.issue)} staat na zijn run nog in de wachtrij — overgeslagen voor vannacht.`);
-                }
-            }
-            const eerste = rij.find((item) => !gedaan.has(item.issue));
-            if (eerste === undefined) {
-                ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
-                break;
-            }
-            gedaan.add(eerste.issue);
-            // Boeken en loggen zitten in `metBoekhouding`, zodat elk startpad het deelt (#264).
-            gestart = metBoekhouding({ paden, nu, soort: 'refine', pot: 'nacht', item: eerste }, () => werkAf(eerste, cwd, wortel, draaiOpties), beschrijfRun).gestart;
-            ok(`${String(gestart)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
+        // Dezelfde lus als `--reeks` (#265): het dagmaximum bepaalt hier alleen hoeveel
+        // items er nog in passen. Zo blijven de vangnetten van de nacht en van een reeks
+        // die jij start per definitie gelijk.
+        const uitkomst = draaiReeks({
+            paden,
+            nu,
+            soort: 'refine',
+            pot: 'nacht',
+            noemer: 'vannacht',
+            aantal: instellingen.dagmaximum - alGestart,
+            leesRij: () => bouwWachtrij(cwd),
+            werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties),
+            beschrijf: beschrijfRun,
+            gelukt: (u) => u.afloop === 'klaar',
+            naElkeRun: (aantal) => {
+                ok(`${String(alGestart + aantal)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
+            },
+        });
+        if (uitkomst.einde === 'rij-leeg') {
+            ok('wachtrij leeg; klaar voor vannacht.');
+        }
+        else if (uitkomst.einde === 'niets-nieuws') {
+            ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
         }
     }
     finally {

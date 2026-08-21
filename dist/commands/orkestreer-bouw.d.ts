@@ -67,6 +67,8 @@ export interface BouwOpties {
     readonly dry?: boolean;
     /** Bouwt één item en stopt. */
     readonly eenmalig?: boolean;
+    /** Bouwt dit aantal items af, met dezelfde vangnetten als de nacht (#265). */
+    readonly reeks?: number;
     /**
      * Richt de run op dit issue in plaats van op de kop van de rij (#210). Staat het niet
      * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
@@ -89,6 +91,13 @@ export declare function orkestreerBouw(opties?: BouwOpties): void;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/**
+ * Leest `--reeks`: hoeveel items deze reeks maximaal afwerkt.
+ *
+ * Een bovengrens van 20 en geen willekeurig groot getal: dit start werkers die geld
+ * kosten, en een typefout van één nul is dan duur. Wie meer wil doet het twee keer.
+ */
+export declare function leesReeks(waarde: string | undefined): number | undefined;
 /**
  * Leest `--issue`: een positief geheel getal, of niets.
  *

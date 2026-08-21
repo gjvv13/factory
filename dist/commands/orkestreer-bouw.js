@@ -4,6 +4,7 @@ import path from 'node:path';
 import { bordItems, ESCALATIE_LABEL, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { leesInstellingen, metBoekhouding, standaardPaden, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
+import { draaiReeks, meldReeks } from '../reeks.js';
 import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
 import { draaiBouwer } from '../werker.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
@@ -173,10 +174,13 @@ export function orkestreerBouw(opties = {}) {
     if (opties.dry === true && opties.eenmalig === true) {
         throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
     }
-    if (opties.dry !== true && opties.eenmalig !== true) {
+    if (opties.dry !== true && opties.eenmalig !== true && opties.reeks === undefined) {
         // Geen stille default naar bouwen: een commando dat zonder vlag een werker met
         // schrijfrechten start is precies de verrassing die deze epic wil vermijden.
-        throw new GebruikersFout('Gebruik: factory orkestreer --soort bouw --dry (tonen) of --eenmalig (één item bouwen).');
+        throw new GebruikersFout('Gebruik: factory orkestreer --soort bouw --dry (tonen), --eenmalig (één item bouwen) of --reeks <n> (een reeks).');
+    }
+    if (opties.reeks !== undefined && (opties.dry === true || opties.eenmalig === true)) {
+        throw new GebruikersFout('--dry, --eenmalig en --reeks sluiten elkaar uit; kies er één.');
     }
     const cwd = process.cwd();
     const items = bordItems(cwd);
@@ -229,6 +233,24 @@ export function orkestreerBouw(opties = {}) {
             `  budget:   $${String(instellingen.bouwBudgetPerRun)} voor deze run\n` +
             (bronRegels === '' ? '' : `${bronRegels}\n`) +
             `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`);
+        return;
+    }
+    if (opties.reeks !== undefined) {
+        kop(`Reeks van ${String(opties.reeks)}`);
+        meldReeks(draaiReeks({
+            paden,
+            nu: new Date(Date.now()),
+            soort: 'bouw',
+            pot: 'interactief',
+            noemer: 'deze reeks',
+            aantal: opties.reeks,
+            // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
+            // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
+            leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
+            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren),
+            beschrijf: beschrijfBouw,
+            gelukt: (u) => u.afloop === 'klaar',
+        }));
         return;
     }
     // Een bouw-run stond tot #264 nergens: `logRun` werd alleen uit de nacht-lus
@@ -386,6 +408,21 @@ function blokkeer(item, cwd) {
     zetLabel(item.issue, ESCALATIE_LABEL, cwd);
 }
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/**
+ * Leest `--reeks`: hoeveel items deze reeks maximaal afwerkt.
+ *
+ * Een bovengrens van 20 en geen willekeurig groot getal: dit start werkers die geld
+ * kosten, en een typefout van één nul is dan duur. Wie meer wil doet het twee keer.
+ */
+export function leesReeks(waarde) {
+    if (waarde === undefined)
+        return undefined;
+    const aantal = Number(waarde);
+    if (!Number.isInteger(aantal) || aantal < 1 || aantal > 20) {
+        throw new GebruikersFout(`--reeks wil een geheel getal van 1 tot 20, niet "${waarde}".`);
+    }
+    return aantal;
+}
 /**
  * Leest `--issue`: een positief geheel getal, of niets.
  *

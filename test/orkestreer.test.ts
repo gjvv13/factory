@@ -1058,6 +1058,74 @@ describe('orkestreer --nacht', () => {
     return aanroepen.filter((a) => a.commando === 'claude');
   }
 
+  it('--reeks doet het gevraagde aantal, buiten het dagmaximum om (#265)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(uitvoerder);
+
+    // Dagmaximum 2 in het instellingenbestand, en toch drie runs: op wat jij zelf start
+    // staat geen maximum, want dat aantal geef je hier mee. De nachtpot blijft leeg.
+    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+
+    expect(claudeAanroepen(aanroepen)).toHaveLength(3);
+    const staat = leesStaat(paden, NU);
+    expect(staat.interactief).toBe(3);
+    expect(staat.gestart).toBe(0);
+  });
+
+  it('--reeks geeft elke run dezelfde tijdslimiet als de nacht', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ reeks: 2, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Een hangende werker in een reeks van vier is even duur als een hangende werker om
+    // 04:00 (#206); zonder deze grens loopt hij door tot iemand hem stopt.
+    for (const aanroep of claudeAanroepen(aanroepen)) {
+      expect(aanroep.timeoutMs).toBe(30 * 60 * 1000);
+    }
+  });
+
+  it('--reeks gaat door na één mislukte run', () => {
+    const bord = nachtBord(WACHTRIJ);
+    let claudes = 0;
+    const eersteMislukt: UitkomstBepaler = (aanroep, index) => {
+      if (aanroep.commando === 'claude') {
+        claudes += 1;
+        if (claudes === 1) return { stdout: werkerMislukt() };
+      }
+      return bord(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(eersteMislukt);
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Eén escalatie is gewoon werk en kost alleen dat item — de les van #202.
+    expect(claudeAanroepen(aanroepen)).toHaveLength(3);
+  });
+
+  it('--reeks stopt na twee mislukte runs op rij, met de reden', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      nachtBord(WACHTRIJ, { werker: werkerMislukt() }),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    orkestreer({ reeks: 3, werkplaatsWortel: wortel, paden, nu: NU });
+
+    // Twee achter elkaar betekent dat de machine zelf stuk is; doorgaan is dan geld
+    // weggooien. Wel luid, want dit is een andere uitkomst dan "de rij is leeg".
+    expect(claudeAanroepen(aanroepen)).toHaveLength(2);
+    expect(uitvoer.join('')).toMatch(/twee runs op rij mislukt/);
+  });
+
+  it('--reeks sluit af met wat er gedaan is en wat het kostte', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+
+    orkestreer({ reeks: 2, werkplaatsWortel: wortel, paden, nu: NU });
+
+    expect(uitvoer.join('')).toMatch(/reeks klaar: 2 gedaan, 2 geslaagd, \$\d+\.\d\d/);
+  });
+
   it('stopt bij het dagmaximum, ook al staan er meer items in de rij', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
     stelUitvoerderIn(uitvoerder);

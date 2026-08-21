@@ -9,7 +9,7 @@ import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
-import { leesIssue, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
+import { leesIssue, leesReeks, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -37,9 +37,9 @@ const HULP = `factory — pipeline van idee tot productie
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
-  factory orkestreer <--dry|--eenmalig|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
+  factory orkestreer <--dry|--eenmalig|--reeks <n>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
-  factory orkestreer --soort bouw <--dry|--eenmalig>  bouw-werker: wachtrij tonen, of één item bouwen
+  factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n>>  bouw-werker: wachtrij tonen, één item, of een reeks
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
@@ -139,14 +139,16 @@ async function main(argumenten) {
         case 'orkestreer': {
             const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
                 schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
-                waarden: ['--soort', '--issue'],
+                waarden: ['--soort', '--issue', '--reeks'],
             });
             const issue = leesIssue(waarden.get('--issue'));
+            const reeks = leesReeks(waarden.get('--reeks'));
             if (leesSoort(waarden.get('--soort')) === 'bouw') {
                 orkestreerBouw({
                     dry: schakelaars.has('--dry'),
                     eenmalig: schakelaars.has('--eenmalig'),
                     ...(issue === undefined ? {} : { issue }),
+                    ...(reeks === undefined ? {} : { reeks }),
                 });
                 return;
             }
@@ -170,6 +172,7 @@ async function main(argumenten) {
                 installeer: schakelaars.has('--installeer'),
                 verwijder: schakelaars.has('--verwijder'),
                 ...(issue === undefined ? {} : { issue }),
+                ...(reeks === undefined ? {} : { reeks }),
             });
             return;
         }

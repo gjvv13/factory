@@ -479,6 +479,86 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     return { aanroepen, geleverd };
   }
 
+  /**
+   * Een machine die per issue bijhoudt waar het staat, zodat een reeks van meer runs
+   * telkens een volgend item pakt in plaats van hetzelfde.
+   */
+  function reeksMachine(werker: string): UitkomstBepaler {
+    const geclaimd = new Set<number>();
+    return ({ commando, argumenten }) => {
+      if (commando === 'claude') {
+        const gevraagd = /- Issue: \*\*#(\d+)\*\*/.exec(argumenten.join('\n'))?.[1];
+        if (gevraagd !== undefined) geclaimd.add(Number.parseInt(gevraagd, 10));
+        return { stdout: werker };
+      }
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        const query = argumenten.find((a) => a.startsWith('query=')) ?? '';
+        if (query.includes('items(first:100')) {
+          // De gedraaide items uit de rij halen, zoals het echte board na `zetKolom`.
+          const gelezen: unknown = JSON.parse(bord());
+          const data = gelezen as {
+            data: { user: { projectV2: { items: { nodes: unknown[] } } } };
+          };
+          const nodes = data.data.user.projectV2.items.nodes.filter((node) => {
+            const nummer = (node as { content?: { number?: number } }).content?.number;
+            return nummer === undefined || !geclaimd.has(nummer);
+          });
+          data.data.user.projectV2.items.nodes = nodes;
+          return { stdout: JSON.stringify(data) };
+        }
+        return {
+          stdout: JSON.stringify({
+            data: {
+              user: {
+                projectV2: {
+                  id: 'PVT_x',
+                  field: { id: 'PVTSSF_x', options: [{ id: 'optie-bouwen', name: 'Bouwen' }] },
+                },
+              },
+              repository: {
+                issue: {
+                  projectItems: {
+                    nodes: [
+                      {
+                        id: 'PVTI_x',
+                        project: { number: 2 },
+                        fieldValueByName: { name: 'Klaar voor Bouwen' },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        };
+      }
+      if (commando === 'git' && argumenten[0] === 'rev-parse') return { stdout: '/spiegel' };
+      return {};
+    };
+  }
+
+  it('--reeks bouwt meer items achter elkaar, elk met zijn eigen werkplek (#265)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      reeksMachine(envelop('claude-bouw-klaar')),
+    );
+    stelUitvoerderIn(uitvoerder);
+    const geleverd: unknown[] = [];
+
+    orkestreerBouw({
+      reeks: 2,
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: (opties) => geleverd.push(opties),
+    });
+
+    // Twee runs, twee verschillende items, twee keer ingeleverd — en beide geboekt in de
+    // interactieve pot, want een bouw-nacht bestaat nog niet.
+    const claudes = aanroepen.filter((a) => a.commando === 'claude');
+    expect(claudes).toHaveLength(2);
+    expect(geleverd).toHaveLength(2);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(2);
+  });
+
   it('boekt en logt de bouw-run, met de soort erbij (#264)', () => {
     draai(envelop('claude-bouw-klaar'));
 
