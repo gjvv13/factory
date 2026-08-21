@@ -1,0 +1,14 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "review-sessie-2",
+  "num_turns": 5,
+  "total_cost_usd": 0.87,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "bevindingen": [],
+    "oordeel": "Beide criteria zijn gedekt door tests die rood zouden worden als het gedrag verdwijnt. Geen bijzonderheden."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "review-sessie-1",
+  "num_turns": 8,
+  "total_cost_usd": 1.23,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "bevindingen": [
+      {
+        "bestand": "src/commands/promote.ts",
+        "regel": 42,
+        "ernst": "hoog",
+        "bevinding": "De test dekt het criterium, maar zou niet rood worden als de pnpm-aanroep terugvalt op interactieve modus."
+      },
+      {
+        "bestand": "test/promote.test.ts",
+        "ernst": "laag",
+        "bevinding": "De test 'rolt een tag uit zoals voorheen' mist een assertie op de exit-code."
+      }
+    ],
+    "oordeel": "Het werk is grotendeels goed afgeleverd. Het belangrijkste criterium is gedekt, maar de dekking is kwetsbaar."
+  }
+}
