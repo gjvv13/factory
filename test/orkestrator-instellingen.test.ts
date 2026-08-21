@@ -168,8 +168,8 @@ describe('orkestrator-instellingen', () => {
     it('telt runs op dezelfde kalenderdag bij elkaar op', () => {
       const nu = new Date('2026-08-19T22:10:00');
 
-      expect(boekRun(paden, nu)).toBe(1);
-      expect(boekRun(paden, nu)).toBe(2);
+      expect(boekRun(paden, nu, 'nacht')).toBe(1);
+      expect(boekRun(paden, nu, 'nacht')).toBe(2);
       expect(leesStaat(paden, nu).gestart).toBe(2);
     });
 
@@ -180,7 +180,33 @@ describe('orkestrator-instellingen', () => {
       // Dezelfde dag als in de fixture: de drie runs van vannacht tellen mee, dus een
       // vierde run is de laatste bij dagmaximum 4.
       expect(leesStaat(paden, new Date('2026-08-19T23:00:00')).gestart).toBe(3);
-      expect(boekRun(paden, new Date('2026-08-19T23:00:00'))).toBe(4);
+      expect(boekRun(paden, new Date('2026-08-19T23:00:00'), 'nacht')).toBe(4);
+    });
+
+    it('houdt de nachtpot en wat je zelf start apart (#264)', () => {
+      const nu = new Date('2026-08-21T15:00:00');
+
+      // Een middag experimenteren mag de nacht niet leegtrekken: de nacht stopt op zijn
+      // eigen teller, en wat jij start heeft geen maximum — dat aantal geef je mee bij
+      // het starten.
+      expect(boekRun(paden, nu, 'interactief')).toBe(1);
+      expect(boekRun(paden, nu, 'interactief')).toBe(2);
+      expect(boekRun(paden, nu, 'nacht')).toBe(1);
+
+      const staat = leesStaat(paden, nu);
+      expect(staat.gestart).toBe(1);
+      expect(staat.interactief).toBe(2);
+    });
+
+    it('leest een staatbestand van vóór de splitsing zonder klagen', () => {
+      mkdirSync(path.dirname(paden.staatPad), { recursive: true });
+      copyFileSync(fixture('orkestrator-status.json'), paden.staatPad);
+
+      // De fixture is van vóór #264 en heeft geen `interactief`; dat mag geen
+      // waarschuwing en geen reset van de nachtteller opleveren.
+      const staat = leesStaat(paden, new Date('2026-08-19T23:00:00'));
+      expect(staat.gestart).toBe(3);
+      expect(staat.interactief).toBe(0);
     });
 
     it('begint bij een nieuwe kalenderdag opnieuw', () => {

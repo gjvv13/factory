@@ -72,8 +72,11 @@ export declare function zorgVoorEnvBestand(paden: OrkestratorPaden): void;
 declare const staatSchema: z.ZodObject<{
     dag: z.ZodString;
     gestart: z.ZodNumber;
+    interactief: z.ZodDefault<z.ZodNumber>;
     laatsteRun: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+/** Uit welke pot een run geboekt wordt. */
+export type RunPot = 'nacht' | 'interactief';
 export type OrkestratorStaat = z.infer<typeof staatSchema>;
 /**
  * De kalenderdag in lokale tijd, als `YYYY-MM-DD`.
@@ -98,7 +101,7 @@ export declare function leesStaat(paden: OrkestratorPaden, nu: Date): Orkestrato
  * gekost, en een teller die alleen geslaagde runs telt is geen rem maar een
  * aanmoediging om te blijven proberen.
  */
-export declare function boekRun(paden: OrkestratorPaden, nu: Date): number;
+export declare function boekRun(paden: OrkestratorPaden, nu: Date, pot: RunPot): number;
 /**
  * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
  *
@@ -138,9 +141,16 @@ export interface RunRegel {
  * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
  * de stilte die je 's ochtends niet kunt lezen.
  */
-export declare function metBoekhouding<T>(paden: OrkestratorPaden, nu: Date, soort: WerkerSoort, item: {
-    readonly issue: number;
-    readonly app: string;
+export declare function metBoekhouding<T>(opzet: {
+    readonly paden: OrkestratorPaden;
+    readonly nu: Date;
+    readonly soort: WerkerSoort;
+    /** Nacht of interactief; bepaalt welke teller omhoog gaat. */
+    readonly pot: RunPot;
+    readonly item: {
+        readonly issue: number;
+        readonly app: string;
+    };
 }, draai: () => T, beschrijf: (uitkomst: T) => RunRegel): {
     readonly uitkomst: T;
     readonly gestart: number;

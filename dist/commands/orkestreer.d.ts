@@ -70,7 +70,9 @@ export declare function leesEscalatie(comment: string): Escalatie | undefined;
  * Eén board-lezing voor alle drie de blokken; het escalatie-blok haalt zijn vraag en
  * advies uit de comment die de orkestrator zelf schreef.
  */
-export declare function orkestreerStatus(cwd: string): void;
+export declare function orkestreerStatus(cwd: string, opties?: {
+    readonly paden?: OrkestratorPaden;
+}): void;
 export interface AntwoordOpties {
     /** Begin een verse sessie in plaats van de bestaande te hervatten. */
     readonly opnieuw?: boolean;

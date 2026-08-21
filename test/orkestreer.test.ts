@@ -24,6 +24,7 @@ import {
   orkestreerStatus,
 } from '../src/commands/orkestreer.js';
 import {
+  boekRun,
   leesStaat,
   standaardPaden,
   TOKEN_SLEUTEL,
@@ -578,6 +579,8 @@ describe('escalatie in de wachtrij', () => {
 describe('orkestreer status', () => {
   let uitvoer: string[];
   let herstelOmgeving: () => void;
+  let statusHome: string;
+  let statusPaden: OrkestratorPaden;
 
   const ESCALATIE_COMMENT = escalatieComment(
     51,
@@ -621,19 +624,39 @@ describe('orkestreer status', () => {
       uitvoer.push(String(tekst));
       return true;
     });
+    // Eigen home: status leest sinds #264 de dagteller, en die van de gebruiker die de
+    // tests draait hoort er niet in mee te wegen.
+    statusHome = mkdtempSync(path.join(os.tmpdir(), 'factory-status-home-'));
+    statusPaden = standaardPaden(statusHome);
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
   });
 
   afterEach(() => {
+    rmSync(statusHome, { recursive: true, force: true });
     herstelOmgeving();
     herstelUitvoerder();
     vi.restoreAllMocks();
   });
 
+  it('toont de twee dagtellers van vandaag (#264)', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+    const nu = new Date(Date.now());
+    boekRun(statusPaden, nu, 'nacht');
+    boekRun(statusPaden, nu, 'interactief');
+    boekRun(statusPaden, nu, 'interactief');
+
+    orkestreerStatus('/repo', { paden: statusPaden });
+
+    // Zonder deze regels zie je de nachtpot pas leeg als de nacht meldt dat hij niets doet.
+    const tekst = uitvoer.join('');
+    expect(tekst).toMatch(/nacht:\s+1\/4/);
+    expect(tekst).toMatch(/zelf gestart:\s+2/);
+  });
+
   it('toont drie blokken en zet elk item in precies één', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
 
-    orkestreerStatus('/repo');
+    orkestreerStatus('/repo', { paden: statusPaden });
 
     const tekst = uitvoer.join('');
     // #51 is geëscaleerd: hij staat wel in de wachtrij-kolom, maar hoort in het
@@ -648,7 +671,7 @@ describe('orkestreer status', () => {
   it('toont bij een escalatie de vraag, het advies en hoe je antwoordt', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
 
-    orkestreerStatus('/repo');
+    orkestreerStatus('/repo', { paden: statusPaden });
 
     const tekst = uitvoer.join('');
     expect(tekst).toContain('WASM of native crypto-SDK?');
@@ -663,7 +686,7 @@ describe('orkestreer status', () => {
         : statusBepaler(aanroep, index);
     stelUitvoerderIn(maakUitvoerderOpnemer(zonder).uitvoerder);
 
-    orkestreerStatus('/repo');
+    orkestreerStatus('/repo', { paden: statusPaden });
 
     // Stil laten zou betekenen dat je een escalatie ziet die je niet kunt beantwoorden
     // zonder te weten waarom.
@@ -910,7 +933,7 @@ describe('orkestreer — boekhouding per run (#264)', () => {
     // zich met losse aanroepen verder af — de geldrem was te omzeilen zonder omzeilen.
     orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
 
-    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
     const regels = runRegels();
     expect(regels).toHaveLength(1);
     expect(regels[0]).toMatch(/#51 assistant refine klaar/);
@@ -938,7 +961,7 @@ describe('orkestreer — boekhouding per run (#264)', () => {
     }).toThrow(/claude/);
 
     // Een teller op 1 met een leeg log is precies de stilte die je niet kunt lezen.
-    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
     expect(runRegels()[0]).toMatch(/#51 assistant refine afgebroken/);
   });
 

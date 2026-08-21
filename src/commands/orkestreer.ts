@@ -312,10 +312,14 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
     // loggen gaan wél mee: een run met de hand kost hetzelfde geld als een run in de
     // nacht, en stond tot #264 nergens.
     metBoekhouding(
-      paden,
-      opties.nu ?? new Date(Date.now()),
-      'refine',
-      eerste,
+      {
+        paden,
+        nu: opties.nu ?? new Date(Date.now()),
+        soort: 'refine',
+        // Jij startte deze run, dus hij komt niet uit de pot van de nacht.
+        pot: 'interactief',
+        item: eerste,
+      },
       () => werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun }),
       beschrijfRun,
     );
@@ -412,10 +416,7 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
 
       // Boeken en loggen zitten in `metBoekhouding`, zodat elk startpad het deelt (#264).
       gestart = metBoekhouding(
-        paden,
-        nu,
-        'refine',
-        eerste,
+        { paden, nu, soort: 'refine', pot: 'nacht', item: eerste },
         () => werkAf(eerste, cwd, wortel, draaiOpties),
         beschrijfRun,
       ).gestart;
@@ -718,7 +719,10 @@ function voetnoot(uitkomst: WerkerUitkomst, werkmap: string): string {
  * Eén board-lezing voor alle drie de blokken; het escalatie-blok haalt zijn vraag en
  * advies uit de comment die de orkestrator zelf schreef.
  */
-export function orkestreerStatus(cwd: string): void {
+export function orkestreerStatus(
+  cwd: string,
+  opties: { readonly paden?: OrkestratorPaden } = {},
+): void {
   const items = bordItems(cwd);
   if (items === undefined) {
     throw new GebruikersFout('Kon het board niet lezen.');
@@ -734,6 +738,18 @@ export function orkestreerStatus(cwd: string): void {
   const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
   const wachtrij = items.filter(
     (item) => item.kolom === WACHTRIJ_KOLOM && !geblokkeerd.has(item.issue),
+  );
+
+  // De tellers eerst: dit is de enige plek waar je ziet wat er vandaag al gedraaid heeft,
+  // en sinds #264 zijn dat twee potten. Zonder deze regel zou je de nachtpot pas leeg
+  // zien als de nacht meldt dat hij niets doet.
+  const paden = opties.paden ?? standaardPaden();
+  const staat = leesStaat(paden, new Date(Date.now()));
+  const dagmaximum = leesInstellingen(paden).dagmaximum;
+  kop('Vandaag');
+  process.stdout.write(
+    `  nacht:       ${String(staat.gestart)}/${String(dagmaximum)}\n` +
+      `  zelf gestart: ${String(staat.interactief)} (geen maximum; het aantal geef je mee bij het starten)\n`,
   );
 
   kop(`Technisch uitgewerkt, wacht op jouw akkoord (${String(wachtOpAkkoord.length)})`);

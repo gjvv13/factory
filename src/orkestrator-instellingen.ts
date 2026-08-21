@@ -209,9 +209,21 @@ export function zorgVoorEnvBestand(paden: OrkestratorPaden): void {
 
 const staatSchema = z.object({
   dag: z.string().min(1),
+  /** Runs die de LaunchAgent vannacht gestart heeft; hierop staat het dagmaximum. */
   gestart: z.number().int().nonnegative(),
+  /**
+   * Runs die je zelf gestart hebt vandaag. Een eigen teller, zodat een middag
+   * experimenteren de nacht niet leegtrekt (#264). Hier staat geen maximum op: het
+   * aantal geef je mee bij het starten, en dat is de rem.
+   *
+   * `.default(0)` zodat een staatbestand van vóór deze splitsing gewoon leesbaar blijft.
+   */
+  interactief: z.number().int().nonnegative().default(0),
   laatsteRun: z.string().optional(),
 });
+
+/** Uit welke pot een run geboekt wordt. */
+export type RunPot = 'nacht' | 'interactief';
 
 export type OrkestratorStaat = z.infer<typeof staatSchema>;
 
@@ -238,23 +250,23 @@ export function kalenderdag(nu: Date): string {
 export function leesStaat(paden: OrkestratorPaden, nu: Date): OrkestratorStaat {
   const vandaag = kalenderdag(nu);
   if (!existsSync(paden.staatPad)) {
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   let gelezen: unknown;
   try {
     gelezen = JSON.parse(readFileSync(paden.staatPad, 'utf8'));
   } catch {
     waarschuwing(`${paden.staatPad} is niet te lezen; de dagteller begint vandaag opnieuw.`);
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   const staat = staatSchema.safeParse(gelezen);
   if (!staat.success) {
     waarschuwing(`${paden.staatPad} wijkt af; de dagteller begint vandaag opnieuw.`);
-    return { dag: vandaag, gestart: 0 };
+    return { dag: vandaag, gestart: 0, interactief: 0 };
   }
   // Een andere dag betekent een schone lei — daarom staat de dag in het bestand en
   // niet alleen een teller.
-  return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0 };
+  return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0, interactief: 0 };
 }
 
 /**
@@ -264,15 +276,16 @@ export function leesStaat(paden: OrkestratorPaden, nu: Date): OrkestratorStaat {
  * gekost, en een teller die alleen geslaagde runs telt is geen rem maar een
  * aanmoediging om te blijven proberen.
  */
-export function boekRun(paden: OrkestratorPaden, nu: Date): number {
+export function boekRun(paden: OrkestratorPaden, nu: Date, pot: RunPot): number {
   const staat = leesStaat(paden, nu);
-  const gestart = staat.gestart + 1;
+  const gestart = pot === 'nacht' ? staat.gestart + 1 : staat.gestart;
+  const interactief = pot === 'interactief' ? staat.interactief + 1 : staat.interactief;
   mkdirSync(path.dirname(paden.staatPad), { recursive: true });
   writeFileSync(
     paden.staatPad,
-    `${JSON.stringify({ dag: kalenderdag(nu), gestart, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`,
+    `${JSON.stringify({ dag: kalenderdag(nu), gestart, interactief, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`,
   );
-  return gestart;
+  return pot === 'nacht' ? gestart : interactief;
 }
 
 /**
@@ -328,14 +341,19 @@ export interface RunRegel {
  * de stilte die je 's ochtends niet kunt lezen.
  */
 export function metBoekhouding<T>(
-  paden: OrkestratorPaden,
-  nu: Date,
-  soort: WerkerSoort,
-  item: { readonly issue: number; readonly app: string },
+  opzet: {
+    readonly paden: OrkestratorPaden;
+    readonly nu: Date;
+    readonly soort: WerkerSoort;
+    /** Nacht of interactief; bepaalt welke teller omhoog gaat. */
+    readonly pot: RunPot;
+    readonly item: { readonly issue: number; readonly app: string };
+  },
   draai: () => T,
   beschrijf: (uitkomst: T) => RunRegel,
 ): { readonly uitkomst: T; readonly gestart: number } {
-  const gestart = boekRun(paden, nu);
+  const { paden, nu, soort, item } = opzet;
+  const gestart = boekRun(paden, nu, opzet.pot);
   let uitkomst: T;
   try {
     uitkomst = draai();

@@ -323,10 +323,14 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
   // Een bouw-run stond tot #264 nergens: `logRun` werd alleen uit de nacht-lus
   // aangeroepen, en die is refine-only. Juist de duurste soort was dus onzichtbaar.
   metBoekhouding(
-    paden,
-    new Date(Date.now()),
-    'bouw',
-    eerste,
+    {
+      paden,
+      nu: new Date(Date.now()),
+      soort: 'bouw',
+      // Er is nog geen onbemande bouw-nacht; wie dit start is een mens (#265).
+      pot: 'interactief',
+      item: eerste,
+    },
     () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren),
     beschrijfBouw,
   );

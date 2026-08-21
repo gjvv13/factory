@@ -485,7 +485,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     // Tot #264 werd `logRun` alleen uit de nacht-lus aangeroepen, en die is refine-only:
     // de duurste soort ($10 budget tegen $5) stond nergens. Op 2026-08-21 had het log
     // twaalf refine-runs en nul bouw-runs.
-    expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(1);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
     const regels = readFileSync(paden.logPad, 'utf8').trim().split('\n');
     expect(regels).toHaveLength(1);
     expect(regels[0]).toMatch(/#\d+ \w+ bouw klaar/);
