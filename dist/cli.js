@@ -8,6 +8,7 @@ import { flag } from './commands/flag.js';
 import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
+import { opruimen } from './commands/opruimen.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
 import { leesIssue, leesReeks, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
@@ -43,6 +44,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
+  factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
@@ -174,6 +176,13 @@ async function main(argumenten) {
                 ...(issue === undefined ? {} : { issue }),
                 ...(reeks === undefined ? {} : { reeks }),
             });
+            return;
+        }
+        case 'opruimen': {
+            const { schakelaars: opruimSchakelaars } = leesArgumenten(rest, {
+                schakelaars: ['--dry'],
+            });
+            opruimen({ dry: opruimSchakelaars.has('--dry') });
             return;
         }
         case 'sync': {
