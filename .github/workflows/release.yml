@@ -134,14 +134,19 @@ jobs:
           mislukt=""
           for app in assistant beheer boodschappen apple backlog; do
             if [ -z "$RELEASE_PAT" ]; then
+              echo "::warning::geen RELEASE_PAT in deze workflow — $app niet op de hoogte gebracht van $v; de dagelijkse cron pikt het op."
               mislukt="$mislukt $app"
               continue
             fi
-            if GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
-              --repo "gjvv13/$app" --ref main >/dev/null 2>&1; then
+            # gh's eigen uitleg vasthouden. Een waarschuwing zonder reden kostte een
+            # handmatige uitzoekronde toen het token de dispatch niet mocht (#244);
+            # stdout gaat weg, stderr houden we. Zelfde les als #195 in board.ts.
+            if fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
+              --repo "gjvv13/$app" --ref main 2>&1 >/dev/null); then
               echo "::notice::$app op de hoogte gebracht van $v"
             else
-              echo "::warning::kon $app niet op de hoogte brengen van $v; de dagelijkse cron pikt het op."
+              reden=$(printf '%s' "$fout" | tr -d '\r' | grep -v '^[[:space:]]*$' | head -1 | cut -c1-200)
+              echo "::warning::kon $app niet op de hoogte brengen van $v: ${reden:-gh zei niets}; de dagelijkse cron pikt het op."
               mislukt="$mislukt $app"
             fi
           done
