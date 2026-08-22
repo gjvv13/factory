@@ -1,7 +1,7 @@
 import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
 import { type ReeksKeuze } from './orkestreer-bouw.js';
-import { type WerkerUitkomst } from '../werker.js';
+import { type WerkerBasis } from '../werker.js';
 export interface OrkestreerOpties {
     /** Toont de wachtrij en wat er zou gebeuren, en schrijft niets. */
     readonly dry?: boolean;
@@ -45,12 +45,18 @@ interface Opdrachtitem extends BacklogItem {
 export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
+/** Het soort werker dat escaleerde — bepaalt welk pad `antwoord` neemt. */
+export type EscalatieSoort = 'refine' | 'bouw';
 /** Wat er uit een escalatie-comment terug te lezen valt. */
 export interface Escalatie {
     readonly vraag: string;
     readonly advies: string;
     readonly sessie: string;
     readonly werkmap: string;
+    /** Ontbreekt in oude comments; dat is altijd `'refine'`. */
+    readonly soort: EscalatieSoort;
+    /** De app waar het item bij hoort — nodig om het bouw-antwoordpad te hervatten. */
+    readonly app?: string;
 }
 /**
  * Bouwt de escalatie-comment: leesbaar voor jou, terugleesbaar voor `antwoord`.
@@ -59,7 +65,7 @@ export interface Escalatie {
  * die grenzen zou `status` de vraag uit opgemaakte tekst moeten vissen, en dan breekt
  * het zodra iemand de comment bijwerkt of de opmaak verandert.
  */
-export declare function escalatieComment(issue: number, vraag: string, advies: string, uitkomst: WerkerUitkomst, werkmap: string): string;
+export declare function escalatieComment(issue: number, vraag: string, advies: string, uitkomst: WerkerBasis, werkmap: string, soort?: EscalatieSoort, app?: string): string;
 /**
  * De laatste escalatie op een issue, of undefined.
  *
@@ -69,7 +75,13 @@ export declare function escalatieComment(issue: number, vraag: string, advies: s
  * zonder vraag, en dan zou de vraag een comment hoger onvindbaar worden.
  */
 export declare function laatsteEscalatie(issue: number, cwd: string): Escalatie | undefined;
-/** Leest een escalatie terug uit de comment die `escalatieComment` schreef. */
+/**
+ * Leest een escalatie terug uit de comment die `escalatieComment` schreef.
+ *
+ * Optionele velden `soort` en `app` staan vóór `sessie`; ontbreken ze (oude comments),
+ * dan is `soort` altijd `'refine'` — voor #306 bestond er geen bouw-escalatie die het
+ * antwoordpad kon bereiken.
+ */
 export declare function leesEscalatie(comment: string): Escalatie | undefined;
 /**
  * Toont in één blik waar iedereen op wacht: op jou, op een antwoord, of op een werker.
@@ -95,6 +107,8 @@ export interface AntwoordOpties {
  * cache. Het werk tot de escalatie blijft dus staan; de werker begint niet opnieuw.
  */
 export declare function orkestreerAntwoord(issueArgument: string | undefined, tekst: string | undefined, opties?: AntwoordOpties, cwd?: string): Promise<void>;
+/** De prompt waarmee de sessie hervat wordt: jouw antwoord, en verder niets nieuws. */
+export declare function vervolgPrompt(escalatie: Escalatie, tekst: string): string;
 export interface OrkestreerPlistOpzet {
     /** Absoluut pad naar de globaal geïnstalleerde factory-bin (buiten ~/Documents). */
     readonly bin: string;
