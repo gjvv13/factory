@@ -42,6 +42,13 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze
 repo (die geen e2e-tests heeft) en in een applicatie (die ze wel heeft).
 
+**De factory heeft zelf ook een contractlaag** (`test/contract/`). Die pint de
+interpretatie-plekken van `board.ts` vast tegen opgenomen API-responsen — de
+jq-expressies van `alleKinderenDicht` en `ouderVan`, de GraphQL-parse van
+`zoekDoelwit`, en de git-log-parse van `issuesUitBereik`. De fixtures staan in
+`test/fixtures/contract/` en worden herneembaar met `scripts/neem-fixtures-op.sh`
+(niet in de poort). `factory verify` draait de contractlaag mee via `test:contract`.
+
 **Gedeelde configuratie**, geïmporteerd uit het pakket:
 
 - `factory/tsconfig.base.json` — strikte TypeScript-instellingen

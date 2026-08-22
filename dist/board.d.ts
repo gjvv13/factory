@@ -24,6 +24,21 @@ export declare function issueUitBranch(branch: string): number | undefined;
  * mélden dat er niets gebeurde in plaats van het per item te herhalen (#195).
  */
 export declare function bordBereikbaar(): boolean;
+export interface Doelwit {
+    readonly itemId: string;
+    readonly projectId: string;
+    readonly veldId: string;
+    readonly optieId: string;
+    /** De kolom waar het item nu staat; undefined als er nog geen waarde staat. */
+    readonly huidig?: string;
+}
+/**
+ * Parset het ruwe JSON-antwoord van de opzoek-query tot een Doelwit, of undefined
+ * als de structuur afwijkt van wat de query oplevert. Geëxporteerd zodat de
+ * contract-tests de GraphQL-interpretatie kunnen vastpinnen tegen een opgenomen
+ * respons, los van de gh-aanroep.
+ */
+export declare function parseOpzoekAntwoord(ruw: string, kolom: Kolom): Doelwit | undefined;
 /**
  * Zet een issue in een kolom. Levert true als er iets veranderd is.
  *
@@ -74,7 +89,20 @@ export declare function plaatsComment(issue: number, tekst: string, cwd?: string
  * Branches zonder slice-vorm leveren niets op — dat is bedoeld: van de tien merges in
  * v1.15.1 waren er vijf een fix- of docs-branch.
  */
+/**
+ * Parset ruwe `git log --format=%s`-uitvoer naar ontdubbelde, gesorteerde
+ * issuenummers. Geëxporteerd zodat de contract-tests de git-log-interpretatie
+ * kunnen vastpinnen tegen een opgenomen uitvoer, los van het git-commando.
+ */
+export declare function parseIssuesUitLog(log: string): number[];
 export declare function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[];
+/** De jq-expressie waarmee `ouderVan` het oudernummer uit een issue leest. */
+export declare const JQ_OUDER = ".parent_issue_url";
+/**
+ * Parset de ruwe jq-uitvoer van `JQ_OUDER` tot een issuenummer. Geëxporteerd
+ * zodat de contract-tests de interpretatie kunnen vastpinnen.
+ */
+export declare function parseOuderAntwoord(ruw: string): number | undefined;
 /**
  * Het issuenummer van de ouder-epic, of undefined als dit issue er geen heeft.
  *
@@ -82,6 +110,17 @@ export declare function issuesUitBereik(vorigeTag: string, tag: string, cwd?: st
  * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
  */
 export declare function ouderVan(issue: number, cwd?: string): number | undefined;
+/**
+ * De jq-expressie waarmee `alleKinderenDicht` de voortgang van een epic leest.
+ * De interpolatie (`\(…)`) moet escapen naar `\\(…)` in de TypeScript-string zodat
+ * jq de werkelijke veldwaarde invult, niet de letterlijke tekst.
+ */
+export declare const JQ_KINDEREN = ".sub_issues_summary | \"\\(.completed)/\\(.total)\"";
+/**
+ * Parset de ruwe jq-uitvoer van `JQ_KINDEREN` tot een boolean. Geëxporteerd
+ * zodat de contract-tests de interpretatie kunnen vastpinnen.
+ */
+export declare function parseKinderenAntwoord(ruw: string): boolean;
 /**
  * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
  * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.

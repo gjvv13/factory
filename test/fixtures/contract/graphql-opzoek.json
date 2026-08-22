@@ -1,0 +1,40 @@
+{
+  "data": {
+    "user": {
+      "projectV2": {
+        "id": "PVT_kwHOAAGzL84A0abc",
+        "field": {
+          "id": "PVTSSF_lAHOAAGzL84A0abc_def",
+          "options": [
+            { "id": "opt-idee", "name": "Idee" },
+            { "id": "opt-func", "name": "Functioneel uitwerken" },
+            { "id": "opt-klaar-ref", "name": "Klaar voor technische refinement" },
+            { "id": "opt-refinen", "name": "Technisch refinen" },
+            { "id": "opt-klaar-bouw", "name": "Klaar voor Bouwen" },
+            { "id": "opt-bouwen", "name": "Bouwen" },
+            { "id": "opt-uitrollen", "name": "Uitrollen" },
+            { "id": "opt-done", "name": "Done" }
+          ]
+        }
+      }
+    },
+    "repository": {
+      "issue": {
+        "projectItems": {
+          "nodes": [
+            {
+              "id": "PVTI_ander_project",
+              "project": { "number": 9 },
+              "fieldValueByName": { "name": "Idee" }
+            },
+            {
+              "id": "PVTI_lAHOAAGzL84A0abc_186",
+              "project": { "number": 2 },
+              "fieldValueByName": { "name": "Bouwen" }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

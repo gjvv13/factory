@@ -4,6 +4,9 @@ logs/
 .tmp/
 .DS_Store
 
+# Volledige API-responsen van neem-fixtures-op.sh; bevatten tokens en tijdstempels.
+test/fixtures/contract/*-live.*
+
 # Het skeleton draagt zijn eigen ignore-regels als `skeleton/gitignore` — zonder punt,
 # want npm's pack-laag laat een `.gitignore` in een pakket niet overleven (#91). Daardoor
 # gelden die regels binnen déze repo niet meer, dus staan ze hier met een skeleton/-prefix.
