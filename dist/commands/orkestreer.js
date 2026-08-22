@@ -29,9 +29,57 @@ const MODEL = 'claude-opus-4-6';
 // --- Lock: één orkestrator-run tegelijk, zelfde patroon als `factory integreer` ---
 const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
 const LOCK_VERVALT_MS = 60 * 60 * 1000;
+/**
+ * Leest het pid uit het slotbestand. Geeft `undefined` als het bestand leeg is, geen
+ * getal bevat of niet gelezen kan worden — dat is het terugvalpad voor slotbestanden
+ * van een oudere versie die nog geen pid bevatten.
+ */
+function leesPid(pad) {
+    try {
+        const inhoud = readFileSync(pad, 'utf-8').trim();
+        if (inhoud === '')
+            return undefined;
+        const pid = Number(inhoud);
+        return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+/** Controleert of een proces met het gegeven pid nog draait. */
+function pidLeeft(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * Probeert het slot te nemen. Schrijft het eigen pid in het slotbestand.
+ *
+ * - Bestaat er een slot met een pid dat nog leeft, dan wordt het nooit opgeruimd — ook
+ *   niet als het ouder is dan `LOCK_VERVALT_MS`. Een levend pid weegt zwaarder dan de
+ *   leeftijd, want precies dat scenario (een lange run) was het probleem.
+ * - Bevat het slot geen pid (oudere versie) of is het pid dood, dan geldt de bestaande
+ *   leeftijdsgrens: ouder dan `LOCK_VERVALT_MS` = opruimen.
+ * - `lockInfo` geeft na een gefaalde poging de pad- en pid-informatie terug voor de
+ *   foutmelding.
+ */
 function neemLock() {
     try {
-        if (Date.now() - statSync(LOCK_PAD).mtimeMs > LOCK_VERVALT_MS) {
+        const stat = statSync(LOCK_PAD);
+        const pid = leesPid(LOCK_PAD);
+        if (pid !== undefined && pidLeeft(pid)) {
+            // De eigenaar leeft nog — niet opruimen, ongeacht leeftijd.
+            return false;
+        }
+        // Geen pid (oud formaat) of pid is dood: val terug op leeftijd.
+        if (Date.now() - stat.mtimeMs > LOCK_VERVALT_MS) {
+            if (pid !== undefined) {
+                process.stdout.write(`! oud slot van pid ${String(pid)} opgeruimd — dat proces bestaat niet meer.\n`);
+            }
             rmSync(LOCK_PAD);
         }
     }
@@ -41,11 +89,21 @@ function neemLock() {
     try {
         // `wx` is atomair: faalt als het bestand al bestaat, dus twee runs racen niet.
         closeSync(openSync(LOCK_PAD, 'wx'));
+        writeFileSync(LOCK_PAD, String(process.pid));
         return true;
     }
     catch {
         return false;
     }
+}
+/** Leest het pid uit het huidige slotbestand, voor de foutmelding. */
+function lockInfo() {
+    const pid = leesPid(LOCK_PAD);
+    if (pid !== undefined) {
+        const leeftTekst = pidLeeft(pid) ? 'leeft nog' : 'dood';
+        return `${LOCK_PAD}, pid ${String(pid)} ${leeftTekst}`;
+    }
+    return LOCK_PAD;
 }
 function geefLockVrij() {
     try {
@@ -166,7 +224,7 @@ export function orkestreer(opties = {}) {
             throw new GebruikersFout('--issue en --reeks gaan niet samen; gebruik --eenmalig.');
         }
         if (!neemLock()) {
-            throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+            throw new GebruikersFout(`Er draait al een orkestrator-run (${lockInfo()}).`);
         }
         const instellingen = leesInstellingen(paden);
         const keuze = opties.reeks;
@@ -234,7 +292,7 @@ export function orkestreer(opties = {}) {
         return;
     }
     if (!neemLock()) {
-        throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).\n` +
+        throw new GebruikersFout(`Er draait al een orkestrator-run (${lockInfo()}).\n` +
             '  Wacht tot die klaar is, of verwijder het slot als er zeker niets meer draait.');
     }
     try {
@@ -306,7 +364,7 @@ function draaiNacht(cwd, wortel, paden, nu) {
         return;
     }
     if (!neemLock()) {
-        throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+        throw new GebruikersFout(`Er draait al een orkestrator-run (${lockInfo()}).`);
     }
     const alGestart = gestart;
     try {
@@ -614,7 +672,7 @@ export function orkestreerAntwoord(issueArgument, tekst, opties = {}, cwd = proc
     if (!neemLock()) {
         // Twee antwoorden tegelijk hervatten dezelfde sessie en schrijven allebei een body
         // en een comment; de laatste wint en je houdt een dubbele comment over.
-        throw new GebruikersFout(`Er draait al een orkestrator-run (${LOCK_PAD}).`);
+        throw new GebruikersFout(`Er draait al een orkestrator-run (${lockInfo()}).`);
     }
     try {
         werkAntwoordAf(issue, tekst, escalatie, opties, cwd);
