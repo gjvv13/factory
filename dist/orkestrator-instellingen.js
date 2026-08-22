@@ -247,7 +247,8 @@ export function boekRun(paden, nu, pot) {
 export function logRun(paden, moment, regel) {
     const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
     const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
-    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`);
+    const uitsplitsing = regel.uitsplitsing === undefined ? '' : ` ${regel.uitsplitsing}`;
+    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}`);
 }
 /**
  * Boekt één run en logt hem, ook als hij omvalt.

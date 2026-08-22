@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  beschrijfBouw,
   bouwBranch,
   bouwPrompt,
   bouwWachtrij,
@@ -15,6 +16,7 @@ import {
   orkestreerBouw,
   redenBuitenDeRij,
   reviewPrompt,
+  type BouwAfResultaat,
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
 import { bordItems } from '../src/board.js';
@@ -1174,5 +1176,81 @@ describe('bouwPrompt met bron-mappen', () => {
     expect(prompt).not.toContain('wegwerpkopie');
     // Het lege placeholder-restant mag er ook niet staan.
     expect(prompt).not.toContain('{{BRON_MAPPEN}}');
+  });
+});
+
+describe('beschrijfBouw (#298)', () => {
+  /** Een minimale bouw-uitkomst voor tests. */
+  function bouwUitkomst(velden: Partial<BouwAfResultaat['bouw']> = {}): BouwAfResultaat['bouw'] {
+    return {
+      afloop: 'klaar',
+      sessie: 'bouw-sessie-1',
+      weigeringen: 0,
+      ...velden,
+    };
+  }
+
+  it('somt bouw- en review-kosten op en levert een uitsplitsing', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31 }),
+      review: { afloop: 'klaar', sessie: 'review-1', weigeringen: 0, kosten: 1.12, beurten: 8 },
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.kosten).toBeCloseTo(3.21, 2);
+    expect(regel.beurten).toBe(39);
+    expect(regel.uitsplitsing).toBe('(bouw $2.09 · review $1.12)');
+    expect(regel.uitkomst).toBe('klaar');
+  });
+
+  it('levert alleen bouw-kosten en geen uitsplitsing als de review niet draaide', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31 }),
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.kosten).toBeCloseTo(2.09, 2);
+    expect(regel.beurten).toBe(31);
+    expect(regel.uitsplitsing).toBeUndefined();
+    expect(regel.uitkomst).toBe('klaar');
+  });
+
+  it('toont ? voor onbekende review-kosten en somt alleen de bekende kosten op', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31 }),
+      review: { afloop: 'mislukt', sessie: 'review-1', weigeringen: 0, beurten: 3 },
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    // Alleen de bekende bouw-kosten tellen mee in het totaal.
+    expect(regel.kosten).toBeCloseTo(2.09, 2);
+    expect(regel.beurten).toBe(34);
+    expect(regel.uitsplitsing).toBe('(bouw $2.09 · review ?)');
+  });
+
+  it('toont ? voor onbekende bouw-kosten in de uitsplitsing', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ beurten: 31 }),
+      review: { afloop: 'klaar', sessie: 'review-1', weigeringen: 0, kosten: 1.12, beurten: 8 },
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.kosten).toBeCloseTo(1.12, 2);
+    expect(regel.beurten).toBe(39);
+    expect(regel.uitsplitsing).toBe('(bouw ? · review $1.12)');
+  });
+
+  it('gebruikt "afgekapt" als de bouw werd afgekapt', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ afloop: 'mislukt', afgekaptNaMinuten: 30, kosten: 3.0, beurten: 50 }),
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.uitkomst).toBe('afgekapt (30 min)');
   });
 });

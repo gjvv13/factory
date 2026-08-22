@@ -125,12 +125,20 @@ export declare function logRun(paden: OrkestratorPaden, moment: Date, regel: {
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
+    /** Uitsplitsing per fase, bijv. `(bouw $2.09 · review $1.12)` (#298). */
+    readonly uitsplitsing?: string;
 }): void;
 /** Wat er van een afgeronde run in het log komt; per soort anders opgebouwd. */
 export interface RunRegel {
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
+    /**
+     * Optionele uitsplitsing achter de beurten, bijvoorbeeld `(bouw $2.09 · review $1.12)`.
+     * Verschijnt alleen als er meer dan één fase draaide; zonder dit veld is de logregel
+     * ongewijzigd (#298).
+     */
+    readonly uitsplitsing?: string;
 }
 /**
  * Boekt één run en logt hem, ook als hij omvalt.
