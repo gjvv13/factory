@@ -21,8 +21,8 @@ import {
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
-import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
-import { draaiBouwer, type BouwUitkomst } from '../werker.js';
+import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
+import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import {
   bronMappenVan,
   bronMomentopname,
@@ -319,7 +319,7 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
       `\nZou nu bouwen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
         `  werkplek: ${werkplekPad}\n` +
         `  branch:   ${bouwBranch(eerste.issue)}\n` +
-        `  budget:   $${String(instellingen.bouwBudgetPerRun)} voor deze run\n` +
+        `  budget:   $${String(instellingen.bouwBudgetPerRun)} bouw + $${String(instellingen.reviewBudgetPerRun)} review\n` +
         (bronRegels === '' ? '' : `${bronRegels}\n`) +
         `Er is niets geschreven — niet naar GitHub, niet naar de werkplaats en niet naar een worktree.\n`,
     );
@@ -362,7 +362,14 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
         // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
         leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
         werkAf: (item) =>
-          bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren),
+          bouwAf(
+            item,
+            cwd,
+            wortel,
+            instellingen.bouwBudgetPerRun,
+            instellingen.reviewBudgetPerRun,
+            opties.leverIn ?? inleveren,
+          ),
         beschrijf: beschrijfBouw,
         gelukt: (u) => u.afloop === 'klaar',
       }),
@@ -381,7 +388,15 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
       pot: 'interactief',
       item: eerste,
     },
-    () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, opties.leverIn ?? inleveren),
+    () =>
+      bouwAf(
+        eerste,
+        cwd,
+        wortel,
+        instellingen.bouwBudgetPerRun,
+        instellingen.reviewBudgetPerRun,
+        opties.leverIn ?? inleveren,
+      ),
     beschrijfBouw,
   );
 }
@@ -430,6 +445,22 @@ export function bouwPrompt(
   );
 }
 
+/** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
+export function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string {
+  const sjabloon = readFileSync(path.join(templatesDir, 'werker-review.md'), 'utf8');
+  const vervang: Record<string, string> = {
+    '{{ISSUE}}': String(item.issue),
+    '{{TITEL}}': item.titel,
+    '{{APP}}': item.app,
+    '{{WERKMAP}}': werkmap,
+    '{{FACTORY_MAP}}': factoryMap,
+  };
+  return Object.entries(vervang).reduce(
+    (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
+    sjabloon,
+  );
+}
+
 /**
  * Bouwt één item af: claimen, worktree maken, werker draaien, inleveren of escaleren.
  *
@@ -442,6 +473,7 @@ function bouwAf(
   cwd: string,
   wortel: string,
   budgetUsd: number,
+  reviewBudgetUsd: number,
   leverIn: (opties: InleverenOpties) => void,
 ): BouwUitkomst {
   kop(`#${String(item.issue)} — ${item.titel}`);
@@ -459,9 +491,12 @@ function bouwAf(
   const bronWortel = bronMappenVan(werkmap);
 
   let uitkomst: BouwUitkomst;
+  // `factoryMap` buiten de try: de review-stap na de try heeft hem nodig.
+  // Geen initialisatie: de catch gooit door, dus na de try is hij altijd gezet.
+  let factoryMap!: string;
   try {
     const spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
-    const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+    factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
 
     // Bron-momentopnames vóór de claude-run: faalt de clone, dan is het een harde fout
     // en kost hij niets. De map is naast de worktree, niet erin: verify in de worktree
@@ -495,7 +530,21 @@ function bouwAf(
   // volgende run in de weg kan zitten.
   ruimBronMapOp(bronWortel);
 
-  verwerkBouw(item, uitkomst, cwd, wortel, leverIn);
+  // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
+  // Na het inleveren is de worktree weg — de review móét ervoor draaien.
+  let reviewUitkomst: ReviewUitkomst | undefined;
+  if (uitkomst.afloop === 'klaar') {
+    reviewUitkomst = draaiReviewer({
+      prompt: reviewPrompt(item, werkmap, factoryMap),
+      werkmap,
+      sessie: randomUUID(),
+      extraMappen: [factoryMap],
+      budgetUsd: reviewBudgetUsd,
+      model: MODEL,
+    });
+  }
+
+  verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);
   return uitkomst;
 }
 
@@ -503,21 +552,12 @@ function bouwAf(
 function verwerkBouw(
   item: Bouwitem,
   uitkomst: BouwUitkomst,
+  reviewUitkomst: ReviewUitkomst | undefined,
   cwd: string,
   wortel: string,
   leverIn: (opties: InleverenOpties) => void,
 ): void {
-  const voetnoot =
-    `<sub>${[
-      uitkomst.kosten === undefined ? undefined : `$${uitkomst.kosten.toFixed(2)}`,
-      uitkomst.beurten === undefined ? undefined : `${String(uitkomst.beurten)} beurten`,
-      uitkomst.weigeringen > 0
-        ? `${String(uitkomst.weigeringen)}× geweigerd${uitkomst.geweigerd === undefined ? '' : ` (${uitkomst.geweigerd.join(', ')})`}`
-        : undefined,
-    ]
-      .filter((deel) => deel !== undefined)
-      .join(' · ')}</sub>\n` +
-    `<!-- orkestrator: sessie=${uitkomst.sessie} werkmap=${bouwWerkplek(item.app, item.issue, wortel)} -->`;
+  const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
   if (uitkomst.afloop === 'mislukt') {
     // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
@@ -563,13 +603,35 @@ function verwerkBouw(
       `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
     cwd,
   );
-  // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
-  // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
-  leverIn({
-    cwd: werkmap,
-    geenAutomerge: true,
-    titel: `#${String(item.issue)} — ${item.titel}`,
-  });
+
+  // Inleveren. Mislukt dat, dan gaan de bevindingen naar het issue (#184).
+  const reviewComment = maakReviewComment(reviewUitkomst);
+  try {
+    // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
+    // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
+    leverIn({
+      cwd: werkmap,
+      geenAutomerge: true,
+      titel: `#${String(item.issue)} — ${item.titel}`,
+    });
+  } catch (fout) {
+    // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
+    // niet. Gooi daarna alsnog door — de bouw-run hoort rood te worden.
+    if (reviewComment !== undefined) {
+      plaatsComment(item.issue, reviewComment, cwd);
+    }
+    throw fout;
+  }
+
+  // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
+  if (reviewComment !== undefined) {
+    if (!plaatsPrComment(item, reviewComment)) {
+      // Kon de PR niet vinden of de comment niet plaatsen; val terug op het issue.
+      waarschuwing(`Kon review-comment niet op de PR plaatsen; het staat op het issue.`);
+      plaatsComment(item.issue, reviewComment, cwd);
+    }
+  }
+
   ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
 }
 
@@ -577,6 +639,104 @@ function verwerkBouw(
 function blokkeer(item: Bouwitem, cwd: string): void {
   zetKolom(item.issue, BOUW_KOLOM, cwd);
   zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+}
+
+/**
+ * De voetnoot onder een bouw-comment: kosten en beurten van zowel de bouw als de review
+ * (#184), zodat de totaalkosten in één oogopslag te zien zijn.
+ */
+function maakVoetnoot(
+  item: Bouwitem,
+  uitkomst: BouwUitkomst,
+  reviewUitkomst: ReviewUitkomst | undefined,
+  wortel: string,
+): string {
+  const delen: (string | undefined)[] = [
+    uitkomst.kosten === undefined ? undefined : `$${uitkomst.kosten.toFixed(2)}`,
+    uitkomst.beurten === undefined ? undefined : `${String(uitkomst.beurten)} beurten`,
+    uitkomst.weigeringen > 0
+      ? `${String(uitkomst.weigeringen)}× geweigerd${uitkomst.geweigerd === undefined ? '' : ` (${uitkomst.geweigerd.join(', ')})`}`
+      : undefined,
+  ];
+  if (reviewUitkomst !== undefined) {
+    if (reviewUitkomst.kosten !== undefined) {
+      delen.push(`review $${reviewUitkomst.kosten.toFixed(2)}`);
+    }
+    if (reviewUitkomst.beurten !== undefined) {
+      delen.push(`${String(reviewUitkomst.beurten)} review-beurten`);
+    }
+  }
+  const sessies =
+    reviewUitkomst === undefined
+      ? `sessie=${uitkomst.sessie}`
+      : `sessie=${uitkomst.sessie} review-sessie=${reviewUitkomst.sessie}`;
+  return (
+    `<sub>${delen.filter((deel) => deel !== undefined).join(' · ')}</sub>\n` +
+    `<!-- orkestrator: ${sessies} werkmap=${bouwWerkplek(item.app, item.issue, wortel)} -->`
+  );
+}
+
+/**
+ * Het review-comment als markdown, of `undefined` als er geen review gedraaid heeft.
+ *
+ * Drie vormen: bevindingen (een tabel), nul bevindingen (een expliciete melding), of
+ * een gefaalde run (de reden). Stilte is geen uitkomst — ook nul bevindingen staat er.
+ */
+function maakReviewComment(reviewUitkomst: ReviewUitkomst | undefined): string | undefined {
+  if (reviewUitkomst === undefined) {
+    return undefined;
+  }
+  if (reviewUitkomst.afloop === 'mislukt') {
+    return `**Code-review niet gelukt.** ${reviewUitkomst.fout ?? 'onbekende fout'}`;
+  }
+  const verdict = reviewUitkomst.verdict;
+  if (verdict === undefined) {
+    return '**Code-review niet gelukt.** Geen bruikbaar verdict.';
+  }
+  if (verdict.bevindingen.length === 0) {
+    return `**Code-review door een onbemande reviewer.**\n\nGeen bevindingen.\n\n**Oordeel:** ${verdict.oordeel}`;
+  }
+  const tabel =
+    `| Bestand | Regel | Ernst | Bevinding |\n| --- | --- | --- | --- |\n` +
+    verdict.bevindingen
+      .map(
+        (b) =>
+          `| ${b.bestand} | ${b.regel === undefined ? '—' : String(b.regel)} | ${b.ernst} | ${b.bevinding} |`,
+      )
+      .join('\n');
+  return `**Code-review door een onbemande reviewer.**\n\n${tabel}\n\n**Oordeel:** ${verdict.oordeel}`;
+}
+
+/**
+ * Plaatst een comment op de PR die bij dit item hoort, via `gh api` (#184).
+ *
+ * Zoekt de PR op aan de hand van de branchnaam (`slice/<issue>-1`) in de app-repo.
+ * Geeft `true` terug als het lukt, `false` als de PR niet gevonden of het comment
+ * niet geplaatst kan worden — de aanroeper valt dan terug op het issue.
+ */
+function plaatsPrComment(item: Bouwitem, tekst: string): boolean {
+  const branch = bouwBranch(item.issue);
+  const repo = `${EIGENAAR}/${item.app}`;
+  const nummer = uitvoerVan('gh', [
+    'pr',
+    'view',
+    branch,
+    '--repo',
+    repo,
+    '--json',
+    'number',
+    '--jq',
+    '.number',
+  ]);
+  if (nummer === undefined || nummer === '') {
+    return false;
+  }
+  const uitkomst = run(
+    'gh',
+    ['api', `repos/${repo}/issues/${nummer}/comments`, '-f', `body=${tekst}`],
+    { capture: true, toleranter: true },
+  );
+  return uitkomst.code === 0;
 }
 
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */

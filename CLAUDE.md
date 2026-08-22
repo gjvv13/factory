@@ -376,6 +376,19 @@ erin, want een spiegel wordt vóór elke run hard teruggezet op `origin/main`. H
 apart instelbaar (`FACTORY_BOUW_BUDGET_USD`, default $10): bouwen is lezen, schrijven, de
 poort draaien en op rood opnieuw, en dat zijn simpelweg meer beurten dan een refinement.
 
+**`/code-review` als tweede poort (#184).** Na een geslaagde bouw draait er een tweede,
+onafhankelijke `claude`-run over het werk, vóór het inleveren. Deze reviewer is lees-alleen
+(dezelfde toestemmingslijst als de refine-werker) en toetst per acceptatiecriterium welke
+test het bewaakt en of die rood zou worden als het gedrag verdwijnt — plus de gewone
+bugjacht op de diff. De uitkomst is gestructureerde output: een lijst bevindingen met
+bestand, optioneel regelnummer, ernst en de bevinding zelf, plus een oordeel. Nul
+bevindingen is een geldige uitkomst. Na een geslaagd inleveren gaan de bevindingen als
+één comment op de PR via `gh api`; mislukt het inleveren, dan landen ze op het issue.
+Een gefaalde review-run blokkeert de bouw niet: de PR wordt gewoon geopend, met een apart
+comment dat de review niet gelukt is. Het reviewbudget is apart instelbaar
+(`FACTORY_REVIEW_BUDGET_USD`, default $3); kosten en beurten staan in dezelfde voetnoot
+als de bouw-run. Het reviewprompt staat in `templates/werker-review.md`.
+
 **Het contract staat in een skill.** `skills/onbemand-werken/SKILL.md` draagt de
 gesloten lijst van dingen waarbij een werker stopt, wat er wél zonder vragen mag, en
 het uitvoerformaat. `factory sync` zet hem in elke app, zodat een latere bouw-werker

@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "session_id": "review-sessie-3",
+  "num_turns": 2,
+  "total_cost_usd": 0.31,
+  "permission_denials": [],
+  "result": "Budget overschreden voordat de review voltooid was."
+}

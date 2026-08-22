@@ -182,6 +182,57 @@ const bouwVerdictSchema = z.discriminatedUnion('uitkomst', [
 
 export type BouwVerdict = z.infer<typeof bouwVerdictSchema>;
 
+/**
+ * Het verdict van een review-run (#184). Geen discriminated union: de review is
+ * altijd een oordeel met optionele bevindingen. Nul bevindingen is geldig — dat
+ * betekent dat het werk er goed uitziet.
+ */
+const reviewBevindingSchema = z.object({
+  bestand: z.string().min(1),
+  regel: z.number().int().positive().optional(),
+  ernst: z.enum(['laag', 'midden', 'hoog']),
+  bevinding: z.string().min(1),
+});
+
+const reviewVerdictSchema = z.object({
+  bevindingen: z.array(reviewBevindingSchema),
+  oordeel: z.string().min(1),
+});
+
+export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;
+
+/** Als `BOUW_JSON_SCHEMA`, maar voor een review: plat, met de hand, om dezelfde redenen. */
+export const REVIEW_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    bevindingen: {
+      type: 'array',
+      description: 'lijst van bevindingen; een lege lijst is een geldige uitkomst',
+      items: {
+        type: 'object',
+        properties: {
+          bestand: { type: 'string', description: 'het bestand waar de bevinding in zit' },
+          regel: { type: 'integer', description: 'optioneel: het regelnummer' },
+          ernst: {
+            type: 'string',
+            enum: ['laag', 'midden', 'hoog'],
+            description: 'ernst van de bevinding',
+          },
+          bevinding: { type: 'string', description: 'de bevinding zelf' },
+        },
+        required: ['bestand', 'ernst', 'bevinding'],
+        additionalProperties: false,
+      },
+    },
+    oordeel: {
+      type: 'string',
+      description: 'samenvatting: is het werk goed afgeleverd, en waarom wel of niet',
+    },
+  },
+  required: ['bevindingen', 'oordeel'],
+  additionalProperties: false,
+} as const;
+
 /** Als `VERDICT_JSON_SCHEMA`, maar voor een bouw-run: plat, met de hand, om dezelfde redenen. */
 export const BOUW_JSON_SCHEMA = {
   type: 'object',
@@ -487,6 +538,40 @@ export function draaiBouwer(opdracht: WerkerOpdracht): BouwUitkomst {
     };
   }
   return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
+}
+
+/** Wat een review-run oplevert: dezelfde envelop-informatie, een ander verdict. */
+export interface ReviewUitkomst extends WerkerBasis {
+  readonly verdict?: ReviewVerdict;
+}
+
+/**
+ * Draait één review-werker (#184) en vertaalt zijn uitvoer naar een uitkomst.
+ *
+ * De reviewer is lees-alleen: dezelfde toestemmingslijst als de refine-werker, niet
+ * die van de bouwer. Hij beoordeelt, hij repareert niet. Faalt de review-run, dan is
+ * dat geen reden om het inleveren te blokkeren — de review is een extra poort, geen
+ * voorwaarde.
+ */
+export function draaiReviewer(opdracht: WerkerOpdracht): ReviewUitkomst {
+  const gelezen = leesEnvelop({
+    ...opdracht,
+    toegestaan: opdracht.toegestaan ?? WERKER_TOEGESTAAN,
+    verboden: opdracht.verboden ?? WERKER_VERBODEN,
+    jsonSchema: opdracht.jsonSchema ?? REVIEW_JSON_SCHEMA,
+  });
+  if (gelezen.soort === 'mislukt') {
+    return gelezen.uitkomst;
+  }
+  const verdict = reviewVerdictSchema.safeParse(gelezen.structured);
+  if (!verdict.success) {
+    return {
+      ...gelezen.basis,
+      afloop: 'mislukt',
+      fout: `geen bruikbaar review-verdict: ${verdict.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
+    };
+  }
+  return { ...gelezen.basis, afloop: 'klaar', verdict: verdict.data };
 }
 
 export function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst {

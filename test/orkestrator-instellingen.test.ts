@@ -64,6 +64,7 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
+        reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
       });
     });
@@ -75,6 +76,7 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 2,
         budgetPerRun: 1.5,
         bouwBudgetPerRun: 10,
+        reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
       });
     });
@@ -113,6 +115,7 @@ describe('orkestrator-instellingen', () => {
         dagmaximum: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
+        reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
       });
     });
