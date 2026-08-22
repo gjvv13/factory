@@ -152,7 +152,7 @@ describe('toetsConfigSleutels', () => {
     const config = { configSleutels: 'waarschuw' as const, appDir } as never;
     toetsConfigSleutels(appDir, config, new Set(['config:sleutels']));
     expect(uitvoer).toContain('acc en prod bij');
-    expect(uitvoer).toContain('1 sleutels');
+    expect(uitvoer).toContain('(1 sleutel)');
   });
 
   it('meldt hoeveel geheime sleutels niet controleerbaar zijn als het secrets-bestand ontbreekt', () => {
@@ -180,6 +180,14 @@ describe('toetsConfigSleutels', () => {
   it('waarschuwt als het script ongeldige uitvoer levert', () => {
     stelUitvoerderIn((): ProcesUitkomst => ({ code: 0, stdout: 'niet json' }));
     toetsConfigSleutels('/tmp/dummy', undefined, new Set(['config:sleutels']));
+    expect(uitvoer).toContain('overgeslagen');
+  });
+
+  it('gooit niet en waarschuwt als een regel met `{` begint maar geen geldige JSON is', () => {
+    stelUitvoerderIn((): ProcesUitkomst => ({ code: 0, stdout: '{pid: 12345} server gestart' }));
+    expect(() => {
+      toetsConfigSleutels('/tmp/dummy', undefined, new Set(['config:sleutels']));
+    }).not.toThrow();
     expect(uitvoer).toContain('overgeslagen');
   });
 });

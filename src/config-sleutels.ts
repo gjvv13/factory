@@ -72,7 +72,15 @@ export function leesSleutelContract(repoDir: string): SleutelContract | undefine
   if (jsonRegel === undefined) {
     return undefined;
   }
-  const parsed = sleutelContractSchema.safeParse(JSON.parse(jsonRegel));
+  let rauw: unknown;
+  try {
+    rauw = JSON.parse(jsonRegel);
+  } catch {
+    // Regel begon met `{` maar is geen geldige JSON (bv. `{pid: 12345} ...`):
+    // dan is het script kapot, niet de config — net als de andere foutpaden.
+    return undefined;
+  }
+  const parsed = sleutelContractSchema.safeParse(rauw);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -128,14 +136,12 @@ export function toetsConfigSleutels(
 
   if (fouten.length === 0) {
     const totaal = contract.verwacht.length + contract.geheim.length;
-    ok(`acc en prod bij (${String(totaal)} sleutels)`);
+    ok(`acc en prod bij (${String(totaal)} sleutel${totaal === 1 ? '' : 's'})`);
     return;
   }
 
+  // Bij blokkeer: alle fouten tonen en daarna (na de lus) falen.
   for (const fout of fouten) {
-    if (stand === 'blokkeer') {
-      // Bij blokkeer: alle fouten tonen en daarna falen.
-    }
     waarschuwing(fout);
   }
 
