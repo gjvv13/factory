@@ -12,6 +12,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import {
+  appOpties,
   bordItems,
   escalaties,
   ESCALATIE_LABEL,
@@ -285,7 +286,12 @@ function bouwWachtrij(cwd: string): Opdrachtitem[] {
 }
 
 /** De prompt voor de werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string): string {
+export function bouwPrompt(
+  item: Opdrachtitem,
+  werkmap: string,
+  factoryMap: string,
+  apps: readonly string[] = [],
+): string {
   const sjabloon = readFileSync(path.join(templatesDir, 'werker-refine.md'), 'utf8');
   const vervang: Record<string, string> = {
     '{{ISSUE}}': String(item.issue),
@@ -294,6 +300,7 @@ export function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: stri
     '{{KOLOM}}': WERK_KOLOM,
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
+    '{{BEKENDE_APPS}}': apps.join(', '),
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -362,13 +369,19 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
           ...(lijst === undefined ? {} : { lijst }),
           leesRij: () => bouwWachtrij(cwd),
           werkAf: (item) =>
-            werkAf(item, cwd, wortel, {
-              budgetUsd: instellingen.budgetPerRun,
-              // Dezelfde tijdslimiet als de nacht: een hangende werker in een reeks van
-              // vier is even duur als een hangende werker om 04:00 (#206).
-              timeoutMs: instellingen.runTimeoutMs,
-              effort: instellingen.werkerEffort,
-            }),
+            werkAf(
+              item,
+              cwd,
+              wortel,
+              {
+                budgetUsd: instellingen.budgetPerRun,
+                // Dezelfde tijdslimiet als de nacht: een hangende werker in een reeks van
+                // vier is even duur als een hangende werker om 04:00 (#206).
+                timeoutMs: instellingen.runTimeoutMs,
+                effort: instellingen.werkerEffort,
+              },
+              appOpties() ?? [],
+            ),
           beschrijf: beschrijfRun,
           gelukt: (u) => u.afloop === 'klaar',
         }),
@@ -438,10 +451,16 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
         item: eerste,
       },
       () =>
-        werkAf(eerste, cwd, wortel, {
-          budgetUsd: leesInstellingen(paden).budgetPerRun,
-          effort: leesInstellingen(paden).werkerEffort,
-        }),
+        werkAf(
+          eerste,
+          cwd,
+          wortel,
+          {
+            budgetUsd: leesInstellingen(paden).budgetPerRun,
+            effort: leesInstellingen(paden).werkerEffort,
+          },
+          appOpties() ?? [],
+        ),
       beschrijfRun,
     );
   } finally {
@@ -523,7 +542,7 @@ async function draaiNacht(
       noemer: 'vannacht',
       aantal: instellingen.dagmaximum - alGestart,
       leesRij: () => bouwWachtrij(cwd),
-      werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties),
+      werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties, appOpties() ?? []),
       beschrijf: beschrijfRun,
       gelukt: (u) => u.afloop === 'klaar',
       naElkeRun: (aantal) => {
@@ -565,6 +584,7 @@ async function werkAf(
   cwd: string,
   wortel: string,
   draai: DraaiOpties,
+  apps: readonly string[] = [],
 ): Promise<RunUitkomst> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -595,7 +615,7 @@ async function werkAf(
   try {
     const sessie = randomUUID();
     const uitkomst = await draaiWerker({
-      prompt: bouwPrompt(item, werkmap, factoryMap),
+      prompt: bouwPrompt(item, werkmap, factoryMap, apps),
       werkmap,
       sessie,
       extraMappen: [factoryMap],

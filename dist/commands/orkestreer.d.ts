@@ -42,7 +42,7 @@ interface Opdrachtitem extends BacklogItem {
     readonly app: string;
 }
 /** De prompt voor de werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string): string;
+export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
 /** Wat er uit een escalatie-comment terug te lezen valt. */

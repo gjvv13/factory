@@ -1134,6 +1134,25 @@ describe('reviewPrompt', () => {
     // Mag niet schrijven, mag niet repareren.
     expect(prompt).toContain('schrijft niets');
   });
+
+  it('bevat de app-lijst in de gerenderde prompt', () => {
+    const prompt = reviewPrompt(
+      {
+        issue: 91,
+        titel: 'Test',
+        app: 'factory',
+        kolom: 'Klaar voor Bouwen',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/factory-wt/91',
+      '/w/factory',
+      ['assistant', 'beheer', 'factory'],
+    );
+
+    expect(prompt).toContain('assistant, beheer, factory');
+    expect(prompt).not.toContain('{{BEKENDE_APPS}}');
+  });
 });
 
 describe('bouwPrompt met bron-mappen', () => {
@@ -1174,5 +1193,25 @@ describe('bouwPrompt met bron-mappen', () => {
     expect(prompt).not.toContain('wegwerpkopie');
     // Het lege placeholder-restant mag er ook niet staan.
     expect(prompt).not.toContain('{{BRON_MAPPEN}}');
+  });
+
+  it('bevat de app-lijst in de gerenderde prompt', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 91,
+        titel: 'Test',
+        app: 'factory',
+        kolom: 'Klaar voor Bouwen',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/factory-wt/91',
+      '/w/factory',
+      [],
+      ['assistant', 'beheer', 'factory'],
+    );
+
+    expect(prompt).toContain('assistant, beheer, factory');
+    expect(prompt).not.toContain('{{BEKENDE_APPS}}');
   });
 });

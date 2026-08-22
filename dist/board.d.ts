@@ -183,6 +183,18 @@ export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] |
  * "er staat niets in", en de aanroeper hoort dat verschil te merken.
  */
 export declare function bordItems(cwd?: string): BacklogItem[] | undefined;
+/**
+ * De opties van het App-veld op het board, uit de meest recente `bordItems`-lezing.
+ *
+ * Dit is het register van bestaande applicaties: veldopties staan er altijd, ook als
+ * geen enkel item die app draagt. Levert `undefined` als het board niet gelezen kon
+ * worden (net als `bordItems` zelf), en een lege array als het veld geen opties heeft.
+ *
+ * Geen tweede API-aanroep: de opties zitten in dezelfde query als de items en worden
+ * bij de eerste pagina uitgelezen. Roep `bordItems` aan vóór `appOpties` — zonder een
+ * eerdere lezing is er niets om terug te geven.
+ */
+export declare function appOpties(): string[] | undefined;
 /** Het label waaraan een geëscaleerd item te herkennen is. */
 export declare const ESCALATIE_LABEL = "escalatie";
 /**
