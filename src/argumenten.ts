@@ -46,7 +46,7 @@ export function leesArgumenten(rest: readonly string[], spec: VlagSpec = {}): Ar
 
     if (waardeNamen.has(naam)) {
       const waarde = isPaar ? argument.slice(naam.length + 1) : rest[i + 1];
-      if (waarde === undefined || waarde === '' || waarde.startsWith('--')) {
+      if (waarde === undefined || waarde === '' || (!isPaar && waarde.startsWith('--'))) {
         throw new GebruikersFout(`De vlag ${naam} verwacht een waarde: ${naam}=<waarde>.`);
       }
       waarden.set(naam, waarde);

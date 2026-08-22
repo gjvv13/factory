@@ -24,7 +24,7 @@ export function leesArgumenten(rest, spec = {}) {
         const naam = isPaar ? argument.slice(0, argument.indexOf('=')) : argument;
         if (waardeNamen.has(naam)) {
             const waarde = isPaar ? argument.slice(naam.length + 1) : rest[i + 1];
-            if (waarde === undefined || waarde === '' || waarde.startsWith('--')) {
+            if (waarde === undefined || waarde === '' || (!isPaar && waarde.startsWith('--'))) {
                 throw new GebruikersFout(`De vlag ${naam} verwacht een waarde: ${naam}=<waarde>.`);
             }
             waarden.set(naam, waarde);
