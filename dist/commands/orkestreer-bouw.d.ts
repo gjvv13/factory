@@ -1,5 +1,6 @@
 import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type AntwoordOpties, type Escalatie } from './orkestreer.js';
 import { type InleverenOpties } from './inleveren.js';
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
@@ -92,7 +93,13 @@ export declare function orkestreerBouw(opties?: BouwOpties): Promise<void>;
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
 export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
-/** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+/**
+ * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
+ * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in
+ * `orkestreer.ts` omdat zij het schema, de permissions en de afronding deelt met
+ * `bouwAf` — `werkAntwoordAf` delegeert hier naartoe op `soort === 'bouw'`.
+ */
+export declare function werkBouwAntwoordAf(issue: number, tekst: string, escalatie: Escalatie, opties: AntwoordOpties, cwd: string): Promise<void>;
 /** Wat `--reeks` kan zijn: een aantal van de kop, of precies deze items. */
 export type ReeksKeuze = {
     readonly soort: 'aantal';
