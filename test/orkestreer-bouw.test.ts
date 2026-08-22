@@ -23,9 +23,10 @@ import {
   standaardPaden,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { herstelAsyncUitvoerder, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
+  zetBeideUitvoerdersOp,
   zetBoardOmgeving,
   type ProcesAanroep,
   type UitkomstBepaler,
@@ -68,6 +69,7 @@ describe('de bouw-wachtrij', () => {
   afterEach(() => {
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -147,13 +149,14 @@ describe('orkestreer --soort bouw --dry', () => {
   afterEach(() => {
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
-  it('toont de rij, de werkplek, de branch en het budget', () => {
+  it('toont de rij, de werkplek, de branch en het budget', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
-    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
     // De kop van de rij is #177: een slice onder epic #169, dat zonder Status-waarde
     // buiten de lezing valt. Sinds #232 is dat geen reden om hem over te slaan, dus
@@ -169,11 +172,11 @@ describe('orkestreer --soort bouw --dry', () => {
     expect(tekst).toContain('$3 review');
   });
 
-  it('schrijft niets', () => {
+  it('schrijft niets', async () => {
     const { uitvoerder, aanroepen } = metBord();
     stelUitvoerderIn(uitvoerder);
 
-    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
     // Geen claude, geen git (dus geen worktree), en geen enkele schrijvende gh-aanroep.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
@@ -189,45 +192,45 @@ describe('orkestreer --soort bouw --dry', () => {
     ).toBe(false);
   });
 
-  it('leest het board precies één keer', () => {
+  it('leest het board precies één keer', async () => {
     const { uitvoerder, aanroepen } = metBord();
     stelUitvoerderIn(uitvoerder);
 
-    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
     // De harness-regel van #153: het GraphQL-budget is gedeeld met elke sessie op dit
     // account, dus één lezing per run — ook met negen items op het board.
     expect(boardLezingen(aanroepen)).toBe(1);
   });
 
-  it('meldt hoeveel items geclaimd zijn', () => {
+  it('meldt hoeveel items geclaimd zijn', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
-    orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
     // Een geclaimd item is niet vergeten maar in behandeling; dat wil je zien zonder
     // het board te openen.
     expect(uitvoer.join('')).toMatch(/1 item\(s\) staan op Bouwen/);
   });
 
-  it('weigert te bouwen zonder --dry, want dat komt in #183', () => {
+  it('weigert te bouwen zonder --dry, want dat komt in #183', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
     // Een commando dat zonder vlag een werker met schrijfrechten start is precies de
     // verrassing die deze epic wil vermijden.
-    expect(() => {
-      orkestreerBouw({ werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
-    }).toThrow(/--dry/);
+    await expect(
+      orkestreerBouw({ werkplaatsWortel: '/Users/iemand/OrkestratorWerk' }),
+    ).rejects.toThrow(/--dry/);
   });
 
-  it('weigert een werkplek binnen ~/Documents', () => {
+  it('weigert een werkplek binnen ~/Documents', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
     // De hele opzet rust erop dat een onbemande werker daar niet komt: TCC houdt hem
     // buiten, en er lopen parallelle sessies in de werkkopieën.
-    expect(() => {
-      orkestreerBouw({ dry: true, werkplaatsWortel: `${process.env.HOME ?? ''}/Documents/Werk` });
-    }).toThrow(/binnen ~\/Documents/);
+    await expect(
+      orkestreerBouw({ dry: true, werkplaatsWortel: `${process.env.HOME ?? ''}/Documents/Werk` }),
+    ).rejects.toThrow(/binnen ~\/Documents/);
   });
 });
 
@@ -247,6 +250,7 @@ describe('--issue', () => {
   afterEach(() => {
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -260,10 +264,14 @@ describe('--issue', () => {
     expect(() => leesIssue('1.5')).toThrow(/issuenummer/);
   });
 
-  it('richt de run op het gevraagde item in plaats van op de kop', () => {
+  it('richt de run op het gevraagde item in plaats van op de kop', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
-    orkestreerBouw({ dry: true, issue: 126, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({
+      dry: true,
+      issue: 126,
+      werkplaatsWortel: '/Users/iemand/OrkestratorWerk',
+    });
 
     const tekst = uitvoer.join('');
     // De kop van de rij is #177; gevraagd is #126.
@@ -272,35 +280,29 @@ describe('--issue', () => {
     expect(tekst).not.toContain('Zou nu bouwen: #177');
   });
 
-  it('noemt de reden als het item niet in de rij staat, en raakt niets aan', () => {
+  it('noemt de reden als het item niet in de rij staat, en raakt niets aan', async () => {
     const { uitvoerder, aanroepen } = metBord();
     stelUitvoerderIn(uitvoerder);
 
     // #149 draagt escalatie, #200 heeft geen App, #164 is een epic, #87 staat al op
     // Bouwen. Vier gronden, vier meldingen — geen stilte, want stilte kostte gisteren
     // een halfuur zoeken naar waarom een item niet aan de beurt kwam (#210).
-    expect(() => {
-      orkestreerBouw({ dry: true, issue: 149 });
-    }).toThrow(/escalatie/);
-    expect(() => {
-      orkestreerBouw({ dry: true, issue: 200 });
-    }).toThrow(/geen App-veld/);
+    await expect(orkestreerBouw({ dry: true, issue: 149 })).rejects.toThrow(/escalatie/);
+    await expect(orkestreerBouw({ dry: true, issue: 200 })).rejects.toThrow(/geen App-veld/);
     // #164 is een epic zónder Status-waarde, dus `bordItems` laat hem weg en de reden
     // komt uit de gerichte opzoeking. Dat is ook het eerlijke antwoord: hij heeft echt
     // geen kolom. De grond `soort` wordt los getoetst op `redenBuitenDeRij`.
-    expect(() => {
-      orkestreerBouw({ dry: true, issue: 164 });
-    }).toThrow(/geen kolom op het board/);
-    expect(() => {
-      orkestreerBouw({ dry: true, issue: 87 });
-    }).toThrow(/staat op Bouwen/);
+    await expect(orkestreerBouw({ dry: true, issue: 164 })).rejects.toThrow(
+      /geen kolom op het board/,
+    );
+    await expect(orkestreerBouw({ dry: true, issue: 87 })).rejects.toThrow(/staat op Bouwen/);
 
     // Geen claude, en geen schrijvende gh-aanroep: een geweigerde vraag kost niets.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
     expect(aanroepen.some((a) => a.argumenten.includes('item-edit'))).toBe(false);
   });
 
-  it('vraagt de kolom op als het issue niet in de lezing zit', () => {
+  it('vraagt de kolom op als het issue niet in de lezing zit', async () => {
     // `bordItems` laat gesloten items en items zonder Status-waarde weg, dus "hij zit
     // niet in de lezing" is daar geen verklaring. Eén gerichte opzoeking maakt het
     // verschil zichtbaar; hij draait alleen op dit foutpad.
@@ -314,9 +316,9 @@ describe('--issue', () => {
     });
     stelUitvoerderIn(uitvoerder);
 
-    expect(() => {
-      orkestreerBouw({ dry: true, issue: 78 });
-    }).toThrow(/geen kolom op het board/);
+    await expect(orkestreerBouw({ dry: true, issue: 78 })).rejects.toThrow(
+      /geen kolom op het board/,
+    );
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
   });
 
@@ -414,6 +416,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     rmSync(home, { recursive: true, force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -489,14 +492,13 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     };
   }
 
-  function draai(
+  async function draai(
     werker: string,
     review?: string,
-  ): { aanroepen: ProcesAanroep[]; geleverd: unknown[] } {
+  ): Promise<{ aanroepen: ProcesAanroep[]; geleverd: unknown[] }> {
     const geleverd: unknown[] = [];
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine(werker, review));
-    stelUitvoerderIn(uitvoerder);
-    orkestreerBouw({
+    const { aanroepen } = zetBeideUitvoerdersOp(machine(werker, review));
+    await orkestreerBouw({
       eenmalig: true,
       werkplaatsWortel: wortel,
       paden,
@@ -580,14 +582,13 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     };
   }
 
-  it('--reeks bouwt meer items achter elkaar, elk met zijn eigen werkplek (#265)', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+  it('--reeks bouwt meer items achter elkaar, elk met zijn eigen werkplek (#265)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
       reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
-    stelUitvoerderIn(uitvoerder);
     const geleverd: unknown[] = [];
 
-    orkestreerBouw({
+    await orkestreerBouw({
       reeks: { soort: 'aantal', aantal: 2 },
       werkplaatsWortel: wortel,
       paden,
@@ -601,13 +602,12 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(2);
   });
 
-  it('--reeks met een lijst doet precies die items, in die volgorde (#265)', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+  it('--reeks met een lijst doet precies die items, in die volgorde (#265)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
       reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
-    stelUitvoerderIn(uitvoerder);
 
-    orkestreerBouw({
+    await orkestreerBouw({
       reeks: { soort: 'lijst', issues: [126, 91] },
       werkplaatsWortel: wortel,
       paden,
@@ -624,14 +624,13 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(gevraagd).toEqual(['126', '91']);
   });
 
-  it('--reeks slaat een nummer buiten de wachtrij over, met de reden, en gaat door', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+  it('--reeks slaat een nummer buiten de wachtrij over, met de reden, en gaat door', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
       reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
-    stelUitvoerderIn(uitvoerder);
 
     // #149 staat op het board maar draagt het escalatie-label; #126 is gewoon bouwbaar.
-    orkestreerBouw({
+    await orkestreerBouw({
       reeks: { soort: 'lijst', issues: [149, 126] },
       werkplaatsWortel: wortel,
       paden,
@@ -645,26 +644,25 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(uitvoer.join('')).toMatch(/#149 staat niet in de wachtrij.*escalatie/);
   });
 
-  it('--reeks weigert een nummer dat niet op het board staat, vóór de eerste run', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+  it('--reeks weigert een nummer dat niet op het board staat, vóór de eerste run', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
       reeksMachine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
     );
-    stelUitvoerderIn(uitvoerder);
 
     // Anders betaal je drie runs en hoor je pas daarna dat de vierde een typefout was.
-    expect(() => {
+    await expect(
       orkestreerBouw({
         reeks: { soort: 'lijst', issues: [126, 99999] },
         werkplaatsWortel: wortel,
         paden,
         leverIn: () => undefined,
-      });
-    }).toThrow(/#99999/);
+      }),
+    ).rejects.toThrow(/#99999/);
     expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(0);
   });
 
-  it('boekt en logt de bouw-run, met de soort erbij (#264)', () => {
-    draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+  it('boekt en logt de bouw-run, met de soort erbij (#264)', async () => {
+    await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     // Tot #264 werd `logRun` alleen uit de nacht-lus aangeroepen, en die is refine-only:
     // de duurste soort ($10 budget tegen $5) stond nergens. Op 2026-08-21 had het log
@@ -675,8 +673,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(regels[0]).toMatch(/#\d+ \w+ bouw klaar/);
   });
 
-  it('claimt het item vóór de run, en levert in zonder auto-merge', () => {
-    const { aanroepen, geleverd } = draai(
+  it('claimt het item vóór de run, en levert in zonder auto-merge', async () => {
+    const { aanroepen, geleverd } = await draai(
       envelop('claude-bouw-klaar'),
       envelop('claude-review-leeg'),
     );
@@ -704,16 +702,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     ).toBe(false);
   });
 
-  it('geeft het bouwbudget mee, niet het refinement-budget', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+  it('geeft het bouwbudget mee, niet het refinement-budget', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const werker = aanroepen.find((a) => a.commando === 'claude');
     // Default $10 voor bouwen tegen $5 voor een refinement: bouwen is meer beurten.
     expect(werker?.argumenten[werker.argumenten.indexOf('--max-budget-usd') + 1]).toBe('10');
   });
 
-  it('mag schrijven maar niet pushen', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+  it('mag schrijven maar niet pushen', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const args = (aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? []).join(' ');
     // Schrijven is de opdracht; de PR is de grens tussen voorstellen en landen.
@@ -723,8 +721,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(args).toContain('Bash(gh pr:*)');
   });
 
-  it('escaleert een criterium zonder bewijs in plaats van het af te vinken', () => {
-    const { aanroepen, geleverd } = draai(envelop('claude-bouw-geen-bewijs'));
+  it('escaleert een criterium zonder bewijs in plaats van het af te vinken', async () => {
+    const { aanroepen, geleverd } = await draai(envelop('claude-bouw-geen-bewijs'));
 
     // Het schema weigert een leeg `bewijs` als `klaar`. Dus: niets ingeleverd, label
     // erop, en het item terug in de bouw-wachtrij.
@@ -736,8 +734,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(terug.length).toBeGreaterThan(0);
   });
 
-  it('noemt in de comment wélke gereedschappen geweigerd zijn', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-fout'));
+  it('noemt in de comment wélke gereedschappen geweigerd zijn', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-fout'));
 
     // Alleen een aantal is niet bruikbaar: negen keer `git push` betekent dat de grens
     // werkt, negen keer iets wat hij nodig had dat de lijst te krap is.
@@ -747,8 +745,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(comment?.argumenten.join(' ')).toContain('1× geweigerd (Bash)');
   });
 
-  it('herkent is_error bij exitcode 0 als mislukt', () => {
-    const { aanroepen, geleverd } = draai(envelop('claude-bouw-fout'));
+  it('herkent is_error bij exitcode 0 als mislukt', async () => {
+    const { aanroepen, geleverd } = await draai(envelop('claude-bouw-fout'));
 
     // De val uit #153: exit 0 met is_error true. Geen PR, geen afvink-comment.
     expect(geleverd).toEqual([]);
@@ -758,8 +756,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(comment?.argumenten.join(' ')).toMatch(/Bouw-run mislukt/);
   });
 
-  it('zet de comment met bewijs per criterium op het issue', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+  it('zet de comment met bewijs per criterium op het issue', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const comment = aanroepen.find(
       (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
@@ -770,18 +768,18 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(tekst).toContain('zonder auto-merge');
   });
 
-  it('weigert --dry en --eenmalig samen', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(machine(envelop('claude-bouw-klaar'))).uitvoerder);
+  it('weigert --dry en --eenmalig samen', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar')));
 
-    expect(() => {
-      orkestreerBouw({ dry: true, eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(/sluiten elkaar uit/);
+    await expect(
+      orkestreerBouw({ dry: true, eenmalig: true, werkplaatsWortel: wortel }),
+    ).rejects.toThrow(/sluiten elkaar uit/);
   });
 
-  it('geeft bron-mappen mee als extraMappen aan de werker', () => {
+  it('geeft bron-mappen mee als extraMappen aan de werker', async () => {
     // #106 draagt bron:assistant. De momentopname moet als extraMap meegaan, zodat de
     // werker die map kan lezen. De factory-map staat er sowieso bij.
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     // De kop van de rij is #177 (geen bron-labels), dus dit test dat een item zonder
     // bron-labels gewoon draait — de extraMappen bevatten dan alleen de factory-map.
@@ -798,8 +796,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(addDirs.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('draait een review na een geslaagde bouw, met het reviewprompt en lees-alleen-rechten', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+  it('draait een review na een geslaagde bouw, met het reviewprompt en lees-alleen-rechten', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
 
     // Twee claude-aanroepen: eerst de bouw, dan de review.
     const claudes = aanroepen.filter((a) => a.commando === 'claude');
@@ -820,8 +818,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(reviewArgLijst[budgetIndex + 1]).toBe('3');
   });
 
-  it('plaatst de bevindingen als precies één PR-comment na het inleveren', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+  it('plaatst de bevindingen als precies één PR-comment na het inleveren', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
 
     // De review-bevindingen gaan als PR-comment via `gh api`.
     const prComment = aanroepen.filter(
@@ -838,8 +836,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('hoog');
   });
 
-  it('plaatst ook een comment bij nul bevindingen — stilte is geen uitkomst', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+  it('plaatst ook een comment bij nul bevindingen — stilte is geen uitkomst', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const prComment = aanroepen.filter(
       (a) =>
@@ -853,8 +851,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('Geen bevindingen');
   });
 
-  it('laat de PR staan als de review-run mislukt, met een aparte melding', () => {
-    const { aanroepen, geleverd } = draai(
+  it('laat de PR staan als de review-run mislukt, met een aparte melding', async () => {
+    const { aanroepen, geleverd } = await draai(
       envelop('claude-bouw-klaar'),
       envelop('claude-review-fout'),
     );
@@ -874,7 +872,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('Code-review niet gelukt');
   });
 
-  it('levert de bouw tóch in als de review niet kan starten (#289)', () => {
+  it('levert de bouw tóch in als de review niet kan starten (#289)', async () => {
     // Een startfout (commando niet gevonden, spawn ENOENT) gooit onvoorwaardelijk in
     // run() — de toleranter-vlag vangt alleen een niet-nul exitcode. bouwAf moet die
     // throw opvangen zodat de bouw niet alsnog rood wordt.
@@ -889,9 +887,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       }
       return machine(envelop('claude-bouw-klaar'))({ commando, argumenten }, 0);
     };
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
-    stelUitvoerderIn(uitvoerder);
-    orkestreerBouw({
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaal);
+    await orkestreerBouw({
       eenmalig: true,
       werkplaatsWortel: wortel,
       paden,
@@ -913,14 +910,13 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('Code-review niet gelukt');
   });
 
-  it('plaatst bevindingen op het issue als inleveren mislukt', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+  it('plaatst bevindingen op het issue als inleveren mislukt', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
       machine(envelop('claude-bouw-klaar'), envelop('claude-review-klaar')),
     );
-    stelUitvoerderIn(uitvoerder);
 
     // Een `leverIn` die gooit, zoals bij een rode poort of een conflict.
-    expect(() => {
+    await expect(
       orkestreerBouw({
         eenmalig: true,
         werkplaatsWortel: wortel,
@@ -928,8 +924,8 @@ describe('orkestreer --soort bouw --eenmalig', () => {
         leverIn: () => {
           throw new Error('poort rood');
         },
-      });
-    }).toThrow(/poort rood/);
+      }),
+    ).rejects.toThrow(/poort rood/);
 
     // De review-bevindingen staan op het issue, niet op een PR die niet bestaat.
     const issueComments = aanroepen.filter(
@@ -950,16 +946,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(prComment).toHaveLength(0);
   });
 
-  it('draait geen review als de bouw escaleert of mislukt', () => {
-    const { aanroepen: aanroepenEscalatie } = draai(envelop('claude-bouw-escalatie'));
+  it('draait geen review als de bouw escaleert of mislukt', async () => {
+    const { aanroepen: aanroepenEscalatie } = await draai(envelop('claude-bouw-escalatie'));
     expect(aanroepenEscalatie.filter((a) => a.commando === 'claude')).toHaveLength(1);
 
-    const { aanroepen: aanroepenFout } = draai(envelop('claude-bouw-fout'));
+    const { aanroepen: aanroepenFout } = await draai(envelop('claude-bouw-fout'));
     expect(aanroepenFout.filter((a) => a.commando === 'claude')).toHaveLength(1);
   });
 
-  it('neemt review-kosten op in de voetnoot', () => {
-    const { aanroepen } = draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
+  it('neemt review-kosten op in de voetnoot', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-klaar'));
 
     const issueComment = aanroepen.find(
       (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
@@ -970,12 +966,11 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(tekst).toContain('review-sessie=review-sessie-1');
   });
 
-  it('ruimt de bron-map op na de run, ook bij escalatie', () => {
-    const { uitvoerder } = maakUitvoerderOpnemer(machine(envelop('claude-bouw-escalatie')));
-    stelUitvoerderIn(uitvoerder);
+  it('ruimt de bron-map op na de run, ook bij escalatie', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-escalatie')));
     const geleverd: unknown[] = [];
 
-    orkestreerBouw({
+    await orkestreerBouw({
       eenmalig: true,
       issue: 106,
       werkplaatsWortel: wortel,
@@ -1076,15 +1071,20 @@ describe('--dry met bron-labels', () => {
   afterEach(() => {
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
-  it('toont per bron-app het pad en schrijft niets', () => {
+  it('toont per bron-app het pad en schrijft niets', async () => {
     const { uitvoerder, aanroepen } = metBord();
     stelUitvoerderIn(uitvoerder);
 
     // #106 draagt bron:assistant en staat in de rij.
-    orkestreerBouw({ dry: true, issue: 106, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({
+      dry: true,
+      issue: 106,
+      werkplaatsWortel: '/Users/iemand/OrkestratorWerk',
+    });
 
     const tekst = uitvoer.join('');
     expect(tekst).toContain('bron:');
@@ -1095,11 +1095,15 @@ describe('--dry met bron-labels', () => {
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
   });
 
-  it('toont geen bron-regel als er geen bron-labels zijn', () => {
+  it('toont geen bron-regel als er geen bron-labels zijn', async () => {
     stelUitvoerderIn(metBord().uitvoerder);
 
     // #91 heeft geen bron-labels.
-    orkestreerBouw({ dry: true, issue: 91, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
+    await orkestreerBouw({
+      dry: true,
+      issue: 91,
+      werkplaatsWortel: '/Users/iemand/OrkestratorWerk',
+    });
 
     const tekst = uitvoer.join('');
     expect(tekst).not.toContain('bron:');

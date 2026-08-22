@@ -262,12 +262,12 @@ export function logRun(paden, moment, regel) {
  * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
  * de stilte die je 's ochtends niet kunt lezen.
  */
-export function metBoekhouding(opzet, draai, beschrijf) {
+export async function metBoekhouding(opzet, draai, beschrijf) {
     const { paden, nu, soort, item } = opzet;
     const gestart = boekRun(paden, nu, opzet.pot);
     let uitkomst;
     try {
-        uitkomst = draai();
+        uitkomst = await draai();
     }
     catch (fout) {
         logRun(paden, new Date(Date.now()), {

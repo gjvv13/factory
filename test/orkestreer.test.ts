@@ -31,9 +31,9 @@ import {
   TOKEN_SLEUTEL,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { herstelAsyncUitvoerder, herstelUitvoerder } from '../src/shell.js';
 import {
-  maakUitvoerderOpnemer,
+  zetBeideUitvoerdersOp,
   zetBoardOmgeving,
   type ProcesAanroep,
   type UitkomstBepaler,
@@ -223,22 +223,23 @@ describe('orkestreer', () => {
     rmSync(LOCK_PAD, { force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
-  it('weigert --dry en --eenmalig samen', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('weigert --dry en --eenmalig samen', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
     // Stil één van de twee kiezen laat iemand denken dat de run gestart is.
-    expect(() => {
-      orkestreer({ dry: true, eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(/sluiten elkaar uit/);
+    await expect(
+      orkestreer({ dry: true, eenmalig: true, werkplaatsWortel: wortel }),
+    ).rejects.toThrow(/sluiten elkaar uit/);
   });
 
-  it('richt de run met --issue op dat item in plaats van op de kop', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('richt de run met --issue op dat item in plaats van op de kop', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ dry: true, issue: 131, werkplaatsWortel: wortel });
+    await orkestreer({ dry: true, issue: 131, werkplaatsWortel: wortel });
 
     // De kop is #51 (9 aug); gevraagd is #131.
     const tekst = uitvoer.join('');
@@ -246,37 +247,36 @@ describe('orkestreer', () => {
     expect(tekst).not.toContain('Zou nu draaien: #51');
   });
 
-  it('noemt de reden als het gevraagde item niet in de wachtrij staat', () => {
+  it('noemt de reden als het gevraagde item niet in de wachtrij staat', async () => {
     // `escalaties` draait `gh api … --jq '.[].number'`, dus de uitvoer is één nummer
     // per regel — niet de ruwe JSON.
     const escalatie = '119';
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ escalaties: escalatie }));
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ escalaties: escalatie }));
 
     // #119 draagt escalatie, #77 staat in een andere kolom. Zonder deze meldingen zou
     // een gerichte vraag hetzelfde stille antwoord geven als een lege rij (#210).
-    expect(() => {
-      orkestreer({ dry: true, issue: 119, werkplaatsWortel: wortel });
-    }).toThrow(/label escalatie/);
-    expect(() => {
-      orkestreer({ dry: true, issue: 77, werkplaatsWortel: wortel });
-    }).toThrow(/staat niet in de wachtrij/);
+    await expect(orkestreer({ dry: true, issue: 119, werkplaatsWortel: wortel })).rejects.toThrow(
+      /label escalatie/,
+    );
+    await expect(orkestreer({ dry: true, issue: 77, werkplaatsWortel: wortel })).rejects.toThrow(
+      /staat niet in de wachtrij/,
+    );
 
     // Een geweigerde vraag kost geen werker.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
   });
 
-  it('weigert --issue samen met --nacht', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('weigert --issue samen met --nacht', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
     // Een nachtrun draait tot het dagmaximum; op één item gericht zou hij na de eerste
     // ronde op de lus-vanger stuiten. Dan is de vlag een dure `--eenmalig`.
-    expect(() => {
-      orkestreer({ nacht: true, issue: 131, werkplaatsWortel: wortel });
-    }).toThrow(/gaan niet samen/);
+    await expect(orkestreer({ nacht: true, issue: 131, werkplaatsWortel: wortel })).rejects.toThrow(
+      /gaan niet samen/,
+    );
   });
 
-  it('stopt als de escalatielijst niet gelezen kan worden', () => {
+  it('stopt als de escalatielijst niet gelezen kan worden', async () => {
     const basis = bepaler();
     const stuk: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'gh' &&
@@ -284,16 +284,16 @@ describe('orkestreer', () => {
       aanroep.argumenten[1] !== 'graphql'
         ? { code: 1 }
         : basis(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+    zetBeideUitvoerdersOp(stuk);
 
     // Een lege lijst bij een mislukte aanroep zou betekenen dat een item dat gisteren
     // een vraag stelde vandaag opnieuw draait — met kosten en zonder nieuwe informatie.
-    expect(() => {
-      orkestreer({ dry: true, werkplaatsWortel: wortel });
-    }).toThrow(/escalaties niet lezen/);
+    await expect(orkestreer({ dry: true, werkplaatsWortel: wortel })).rejects.toThrow(
+      /escalaties niet lezen/,
+    );
   });
 
-  it('zet het item terug in de wachtrij als de run omvalt', () => {
+  it('zet het item terug in de wachtrij als de run omvalt', async () => {
     // `claude` is niet geïnstalleerd: `run` gooit op een startfout, ook met toleranter.
     // Dat is een probleem van de machine, niet van dit item — het hoort dus terug in
     // de wachtrij en niet met een escalatie geblokkeerd te worden.
@@ -304,12 +304,11 @@ describe('orkestreer', () => {
       aanroep.commando === 'claude'
         ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
         : basis(aanroep, index);
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(stuk);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(stuk);
 
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(/claude/);
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel })).rejects.toThrow(
+      /claude/,
+    );
 
     // Twee verplaatsingen: naar Technisch refinen bij aanvang, en terug bij de val.
     // Zonder die tweede staat het item in geen enkele wachtrij meer.
@@ -318,11 +317,10 @@ describe('orkestreer', () => {
     expect(ghArgs(aanroepen).some((a) => a.includes('--add-label'))).toBe(false);
   });
 
-  it('maakt het escalatielabel aan voordat het gebruikt wordt', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerMislukt() }));
-    stelUitvoerderIn(uitvoerder);
+  it('maakt het escalatielabel aan voordat het gebruikt wordt', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerMislukt() }));
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // `gh issue edit --add-label` faalt op een label dat niet bestaat, en labelen faalt
     // zacht: zonder dit zou een escalatie stil niet gemarkeerd worden.
@@ -332,20 +330,18 @@ describe('orkestreer', () => {
     expect(zetten).toBeGreaterThan(maken);
   });
 
-  it('doet niets zonder --dry of --eenmalig', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('doet niets zonder --dry of --eenmalig', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
     // Een kaal commando dat tóch een werker start is precies de verrassing die je bij
     // onbemand werk niet wilt.
-    expect(() => {
-      orkestreer({ werkplaatsWortel: wortel });
-    }).toThrow(/--dry .* --eenmalig/);
+    await expect(orkestreer({ werkplaatsWortel: wortel })).rejects.toThrow(/--dry .* --eenmalig/);
   });
 
-  it('toont de wachtrij oudste eerst, en laat alles buiten die kolom staan', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('toont de wachtrij oudste eerst, en laat alles buiten die kolom staan', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ dry: true, werkplaatsWortel: wortel });
+    await orkestreer({ dry: true, werkplaatsWortel: wortel });
 
     const tekst = uitvoer.join('');
     expect(tekst.indexOf('#51')).toBeLessThan(tekst.indexOf('#119'));
@@ -355,11 +351,10 @@ describe('orkestreer', () => {
     expect(tekst).not.toContain('#78');
   });
 
-  it('schrijft niets bij --dry', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('schrijft niets bij --dry', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ dry: true, werkplaatsWortel: wortel });
+    await orkestreer({ dry: true, werkplaatsWortel: wortel });
 
     // Geen werker, geen verplaatsing, geen comment, en geen werkplaats op schijf.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
@@ -368,23 +363,23 @@ describe('orkestreer', () => {
     expect(existsSync(path.join(wortel, 'assistant'))).toBe(false);
   });
 
-  it('slaat items zonder App-veld over, met een melding', () => {
+  it('slaat items zonder App-veld over, met een melding', async () => {
     const board = [
       boardItem(200, null, 'Klaar voor technische refinement', '2026-08-01T00:00:00Z'),
     ];
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler({ board })).uitvoerder);
+    zetBeideUitvoerdersOp(bepaler({ board }));
 
-    orkestreer({ dry: true, werkplaatsWortel: wortel });
+    await orkestreer({ dry: true, werkplaatsWortel: wortel });
 
     // Zonder App weet de werker niet wélke code hij moet lezen; stil overslaan zou
     // betekenen dat zo'n item nooit aan de beurt komt zonder dat iemand het merkt.
     expect(uitvoer.join('')).toMatch(/#200 heeft geen App-veld/);
   });
 
-  it('slaat geëscaleerde items over', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler({ escalaties: '51\n' })).uitvoerder);
+  it('slaat geëscaleerde items over', async () => {
+    zetBeideUitvoerdersOp(bepaler({ escalaties: '51\n' }));
 
-    orkestreer({ dry: true, werkplaatsWortel: wortel });
+    await orkestreer({ dry: true, werkplaatsWortel: wortel });
 
     // Een item met escalatie wacht op een antwoord; opnieuw draaien geeft dezelfde
     // vraag en kost alleen geld.
@@ -392,22 +387,20 @@ describe('orkestreer', () => {
     expect(uitvoer.join('')).toContain('#119');
   });
 
-  it('leest het board precies één keer, ongeacht hoeveel items er in de wachtrij staan', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('leest het board precies één keer, ongeacht hoeveel items er in de wachtrij staan', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // Drie items in de wachtrij. Zou elke werker het board zelf opzoeken, dan kost
     // dat een kwart van het uurbudget om iets te vinden dat de supervisor al weet.
     expect(boardLezingen(aanroepen)).toBe(1);
   });
 
-  it('werkt het oudste item af en laat het op Technisch refinen wachten', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('werkt het oudste item af en laat het op Technisch refinen wachten', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     const claude = aanroepen.find((a) => a.commando === 'claude');
     expect(claude?.argumenten[1]).toContain('#51');
@@ -420,11 +413,10 @@ describe('orkestreer', () => {
     expect(ghArgs(aanroepen).filter((a) => a[0] === 'issue' && a[1] === 'comment')).toHaveLength(1);
   });
 
-  it('promoveert nooit naar Klaar voor Bouwen', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('promoveert nooit naar Klaar voor Bouwen', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // Voor een refinement bestaat geen verify die hem kan afkeuren; de enige poort is
     // de gebruiker. Een werker die zijn eigen werk goedkeurt heeft geen poort meer.
@@ -435,11 +427,10 @@ describe('orkestreer', () => {
     expect(uitvoer.join('')).not.toContain('Klaar voor Bouwen\n');
   });
 
-  it('rekent een run met is_error als mislukt, ook bij exitcode 0', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerMislukt() }));
-    stelUitvoerderIn(uitvoerder);
+  it('rekent een run met is_error als mislukt, ook bij exitcode 0', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerMislukt() }));
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // Geen nieuwe body: er ís geen uitwerking. Wel een escalatie, zodat dezelfde fout
     // niet elke nacht opnieuw draait.
@@ -449,43 +440,40 @@ describe('orkestreer', () => {
     );
   });
 
-  it('stopt als er al een run bezig is', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(uitvoerder);
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+  it('stopt als er al een run bezig is', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
     // Het slot van de vorige run is vrijgegeven; zet er handmatig een neer alsof er
     // nog iets draait.
-    const tweede = maakUitvoerderOpnemer(bepaler());
-    stelUitvoerderIn(tweede.uitvoerder);
+    const tweede = zetBeideUitvoerdersOp(bepaler());
     closeSync(openSync(LOCK_PAD, 'wx'));
 
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(/draait al een orkestrator-run/);
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel })).rejects.toThrow(
+      /draait al een orkestrator-run/,
+    );
     expect(tweede.aanroepen.some((a) => a.commando === 'claude')).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(true);
   });
 
-  it('geeft het slot ook vrij als de run onderweg omvalt', () => {
+  it('geeft het slot ook vrij als de run onderweg omvalt', async () => {
     const basis = bepaler();
     const stuk: UitkomstBepaler = (aanroep, index) =>
       // De werkplaats klonen mislukt; dat gooit, halverwege werkAf.
       aanroep.commando === 'gh' && aanroep.argumenten[0] === 'repo'
         ? { code: 1 }
         : basis(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+    zetBeideUitvoerdersOp(stuk);
 
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow();
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel })).rejects.toThrow();
 
     // Blijft het slot liggen, dan staat de rij een uur stil op een run die al klaar is.
     expect(existsSync(LOCK_PAD)).toBe(false);
   });
 
-  it('schrijft het pid in het slotbestand', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+  it('schrijft het pid in het slotbestand', async () => {
+    zetBeideUitvoerdersOp(bepaler());
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // Na een geslaagde run is het slot weg; check dat een nieuw slot het pid bevat door
     // een tweede run te starten die het slot laat staan (via een crash vóór geefLockVrij).
@@ -493,7 +481,7 @@ describe('orkestreer', () => {
       aanroep.commando === 'gh' && aanroep.argumenten[0] === 'repo'
         ? { code: 1 }
         : bepaler()(aanroep, 0);
-    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+    zetBeideUitvoerdersOp(stuk);
 
     // Draai een run die halverwege omvalt — het slot wordt alsnog vrijgegeven (finally).
     // We moeten dus vóór geefLockVrij het bestand lezen. Doe dat via een succesvolle run
@@ -517,14 +505,14 @@ describe('orkestreer', () => {
 
     // neemLock zou het slot normaal opruimen (het is verlopen), maar het pid leeft — dus
     // het mag er niet aan komen.
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(/draait al een orkestrator-run/);
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel })).rejects.toThrow(
+      /draait al een orkestrator-run/,
+    );
     expect(existsSync(LOCK_PAD)).toBe(true);
     expect(readFileSync(LOCK_PAD, 'utf-8').trim()).toBe(String(process.pid));
   });
 
-  it('ruimt een verlopen slot op waarvan het pid dood is', () => {
+  it('ruimt een verlopen slot op waarvan het pid dood is', async () => {
     // Gebruik een pid dat zeker niet bestaat. pid 2_000_000 is ver boven het macOS/Linux-
     // maximum en kan geen lopend proces zijn.
     const doodPid = 2_000_000;
@@ -532,33 +520,33 @@ describe('orkestreer', () => {
     const oud = new Date(Date.now() - 2 * 60 * 60 * 1000);
     utimesSync(LOCK_PAD, oud, oud);
 
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    zetBeideUitvoerdersOp(bepaler());
     // neemLock ziet een verlopen slot met een dood pid → ruimt op → neemt het slot.
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
     const tekst = uitvoer.join('');
     expect(tekst).toContain(`oud slot van pid ${String(doodPid)} opgeruimd`);
   });
 
-  it('valt terug op leeftijd bij een leeg slotbestand (oude versie)', () => {
+  it('valt terug op leeftijd bij een leeg slotbestand (oude versie)', async () => {
     // Een slot zonder pid (van vóór deze wijziging) dat verlopen is.
     closeSync(openSync(LOCK_PAD, 'wx'));
     const oud = new Date(Date.now() - 2 * 60 * 60 * 1000);
     utimesSync(LOCK_PAD, oud, oud);
 
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    zetBeideUitvoerdersOp(bepaler());
     // Leeg bestand, verlopen → opruimen op leeftijd, zoals voorheen.
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
     // De run slaagt: het slot werd opgeruimd en opnieuw genomen.
     expect(uitvoer.join('')).not.toContain('draait al een orkestrator-run');
   });
 
-  it('meldt het pid in de foutmelding als het slot er is', () => {
+  it('meldt het pid in de foutmelding als het slot er is', async () => {
     writeFileSync(LOCK_PAD, String(process.pid));
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    zetBeideUitvoerdersOp(bepaler());
 
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
-    }).toThrow(new RegExp(`pid ${String(process.pid)} leeft nog`));
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel })).rejects.toThrow(
+      new RegExp(`pid ${String(process.pid)} leeft nog`),
+    );
   });
 });
 
@@ -618,14 +606,14 @@ describe('escalatie in de wachtrij', () => {
     rmSync(LOCK_PAD, { force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
-  it('zet een geëscaleerd item terug in de wachtrij-kolom, met het label', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerEscaleert() }));
-    stelUitvoerderIn(uitvoerder);
+  it('zet een geëscaleerd item terug in de wachtrij-kolom, met het label', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerEscaleert() }));
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     // Er wordt niet aan gewerkt, dus het hoort niet op "Technisch refinen" te blijven
     // staan; het label houdt hem uit de rij tot jij antwoordt.
@@ -640,11 +628,10 @@ describe('escalatie in de wachtrij', () => {
     expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(false);
   });
 
-  it('schrijft de vraag en het advies in de comment', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler({ werker: werkerEscaleert() }));
-    stelUitvoerderIn(uitvoerder);
+  it('schrijft de vraag en het advies in de comment', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerEscaleert() }));
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
     const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
     expect(leesEscalatie(comment)).toMatchObject({
@@ -714,11 +701,12 @@ describe('orkestreer status', () => {
     rmSync(statusHome, { recursive: true, force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
   it('toont de twee dagtellers van vandaag (#264)', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+    zetBeideUitvoerdersOp(statusBepaler);
     const nu = new Date(Date.now());
     boekRun(statusPaden, nu, 'nacht');
     boekRun(statusPaden, nu, 'interactief');
@@ -733,7 +721,7 @@ describe('orkestreer status', () => {
   });
 
   it('toont drie blokken en zet elk item in precies één', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+    zetBeideUitvoerdersOp(statusBepaler);
 
     orkestreerStatus('/repo', { paden: statusPaden });
 
@@ -748,7 +736,7 @@ describe('orkestreer status', () => {
   });
 
   it('toont bij een escalatie de vraag, het advies en hoe je antwoordt', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(statusBepaler).uitvoerder);
+    zetBeideUitvoerdersOp(statusBepaler);
 
     orkestreerStatus('/repo', { paden: statusPaden });
 
@@ -763,7 +751,7 @@ describe('orkestreer status', () => {
       aanroep.argumenten[1]?.includes('/comments') === true
         ? { stdout: commentsAntwoord(['alleen menselijke tekst']) }
         : statusBepaler(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(zonder).uitvoerder);
+    zetBeideUitvoerdersOp(zonder);
 
     orkestreerStatus('/repo', { paden: statusPaden });
 
@@ -816,14 +804,14 @@ describe('orkestreer antwoord', () => {
   afterEach(() => {
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
-  it('hervat de sessie in de werkmap uit de comment', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('hervat de sessie in de werkmap uit de comment', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(antwoordBepaler());
 
-    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    await orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
 
     const claude = aanroepen.find((a) => a.commando === 'claude');
     // Hervatten, niet opnieuw beginnen: gemeten $0,02 tegen $0,32, en het werk tot de
@@ -836,11 +824,10 @@ describe('orkestreer antwoord', () => {
     expect(claude?.argumenten.join(' ')).toContain('doe WASM');
   });
 
-  it('haalt het escalatie-label weg zodra er een uitwerking staat', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
-    stelUitvoerderIn(uitvoerder);
+  it('haalt het escalatie-label weg zodra er een uitwerking staat', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(antwoordBepaler());
 
-    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    await orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
 
     expect(ghArgs(aanroepen)).toContainEqual(
       expect.arrayContaining(['issue', 'edit', '51', '--body-file']),
@@ -850,7 +837,7 @@ describe('orkestreer antwoord', () => {
     );
   });
 
-  it('begint met --opnieuw een verse sessie mét de volledige opdracht', () => {
+  it('begint met --opnieuw een verse sessie mét de volledige opdracht', async () => {
     const wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-opnieuw-'));
     const metBoard: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'gh' &&
@@ -867,10 +854,14 @@ describe('orkestreer antwoord', () => {
             ]),
           }
         : antwoordBepaler()(aanroep, index);
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metBoard);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(metBoard);
 
-    orkestreerAntwoord('51', 'doe WASM', { opnieuw: true, werkplaatsWortel: wortel }, '/repo');
+    await orkestreerAntwoord(
+      '51',
+      'doe WASM',
+      { opnieuw: true, werkplaatsWortel: wortel },
+      '/repo',
+    );
     rmSync(wortel, { recursive: true, force: true });
 
     const claude = aanroepen.find((a) => a.commando === 'claude');
@@ -889,21 +880,19 @@ describe('orkestreer antwoord', () => {
     expect(prompt).toContain('WASM of native?');
   });
 
-  it('zegt het als de sessie niet meer te hervatten is, en biedt een verse run aan', () => {
+  it('zegt het als de sessie niet meer te hervatten is, en biedt een verse run aan', async () => {
     // Gemeten: een onbekende sessie geeft platte tekst met exit 1, geen JSON.
     const weg: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude'
         ? { code: 1, stdout: 'No conversation found with session ID: 5ad6e642-…' }
         : antwoordBepaler()(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(weg).uitvoerder);
+    zetBeideUitvoerdersOp(weg);
 
     // Niet stil falen: er staat letterlijk wat je nu moet doen.
-    expect(() => {
-      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
-    }).toThrow(/--opnieuw/);
+    await expect(orkestreerAntwoord('51', 'doe WASM', {}, '/repo')).rejects.toThrow(/--opnieuw/);
   });
 
-  it('vindt de escalatie ook als er daarna nog een comment kwam', () => {
+  it('vindt de escalatie ook als er daarna nog een comment kwam', async () => {
     const laterMislukt =
       '**Run mislukt.** iets\n\n<sub>$0.10</sub>\n<!-- orkestrator: sessie=x werkmap=/w -->';
     const naEscalatie: UitkomstBepaler = ({ commando, argumenten }) => {
@@ -916,10 +905,9 @@ describe('orkestreer antwoord', () => {
       }
       return {};
     };
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(naEscalatie);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(naEscalatie);
 
-    orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+    await orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
 
     // De mislukt-comment draagt ook de sessie-markering maar geen vraag; alleen naar
     // de laatste kijken zou de vraag een comment hoger onvindbaar maken.
@@ -927,38 +915,37 @@ describe('orkestreer antwoord', () => {
     expect(claude?.argumenten[1]).toBe('5ad6e642-9e2a-4b4b-8af0-ecf40f956335');
   });
 
-  it('weigert een issue zonder escalatie-comment', () => {
+  it('weigert een issue zonder escalatie-comment', async () => {
     const leeg: UitkomstBepaler = ({ commando, argumenten }) =>
       commando === 'gh' && argumenten[1]?.includes('/comments') === true
         ? { stdout: Buffer.from('[]', 'utf8').toString('base64') }
         : {};
-    stelUitvoerderIn(maakUitvoerderOpnemer(leeg).uitvoerder);
+    zetBeideUitvoerdersOp(leeg);
 
-    expect(() => {
-      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
-    }).toThrow(/Geen escalatie gevonden/);
+    await expect(orkestreerAntwoord('51', 'doe WASM', {}, '/repo')).rejects.toThrow(
+      /Geen escalatie gevonden/,
+    );
   });
 
-  it('stopt op het lock, net als een gewone run', () => {
+  it('stopt op het lock, net als een gewone run', async () => {
     closeSync(openSync(LOCK_PAD, 'wx'));
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(antwoordBepaler());
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(antwoordBepaler());
 
     // Twee antwoorden tegelijk hervatten dezelfde sessie en schrijven allebei een body
     // en een comment; de laatste wint en je houdt een dubbele comment over.
-    expect(() => {
-      orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
-    }).toThrow(/draait al een orkestrator-run/);
+    await expect(orkestreerAntwoord('51', 'doe WASM', {}, '/repo')).rejects.toThrow(
+      /draait al een orkestrator-run/,
+    );
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
     rmSync(LOCK_PAD, { force: true });
   });
 
-  it('weigert een aanroep zonder nummer of tekst', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer().uitvoerder);
+  it('weigert een aanroep zonder nummer of tekst', async () => {
+    zetBeideUitvoerdersOp();
 
-    expect(() => {
-      orkestreerAntwoord('51', '  ', {}, '/repo');
-    }).toThrow(/Gebruik: factory orkestreer antwoord/);
+    await expect(orkestreerAntwoord('51', '  ', {}, '/repo')).rejects.toThrow(
+      /Gebruik: factory orkestreer antwoord/,
+    );
   });
 });
 
@@ -992,6 +979,7 @@ describe('orkestreer — boekhouding per run (#264)', () => {
     rmSync(LOCK_PAD, { force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -1004,13 +992,13 @@ describe('orkestreer — boekhouding per run (#264)', () => {
       .filter((regel) => regel.includes('#'));
   }
 
-  it('boekt en logt een run die met de hand gestart is', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('boekt en logt een run die met de hand gestart is', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
     // Tot #264 zat boeken en loggen in de nacht-lus: een `--eenmalig`-run telde niet mee
     // in het dagmaximum en liet geen spoor na. Toen de teller vol zat werkte de wachtrij
     // zich met losse aanroepen verder af — de geldrem was te omzeilen zonder omzeilen.
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
 
     expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
     const regels = runRegels();
@@ -1018,36 +1006,36 @@ describe('orkestreer — boekhouding per run (#264)', () => {
     expect(regels[0]).toMatch(/#51 assistant refine klaar/);
   });
 
-  it('noemt de soort in de logregel', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('noemt de soort in de logregel', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
 
     // Een gemiddelde over refine en bouw door elkaar zegt niets: $5 budget tegen $10.
     expect(runRegels()[0]).toContain(' refine ');
   });
 
-  it('logt ook een run die omvalt, met de reden', () => {
+  it('logt ook een run die omvalt, met de reden', async () => {
     const basis = bepaler();
     const stuk: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude'
         ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
         : basis(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+    zetBeideUitvoerdersOp(stuk);
 
-    expect(() => {
-      orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden });
-    }).toThrow(/claude/);
+    await expect(orkestreer({ eenmalig: true, werkplaatsWortel: wortel, paden })).rejects.toThrow(
+      /claude/,
+    );
 
     // Een teller op 1 met een leeg log is precies de stilte die je niet kunt lezen.
     expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
     expect(runRegels()[0]).toMatch(/#51 assistant refine afgebroken/);
   });
 
-  it('boekt en logt niets bij --dry', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+  it('boekt en logt niets bij --dry', async () => {
+    zetBeideUitvoerdersOp(bepaler());
 
-    orkestreer({ dry: true, werkplaatsWortel: wortel, paden });
+    await orkestreer({ dry: true, werkplaatsWortel: wortel, paden });
 
     expect(leesStaat(paden, new Date(Date.now())).gestart).toBe(0);
     expect(runRegels()).toHaveLength(0);
@@ -1086,6 +1074,7 @@ describe('orkestreer --nacht', () => {
     rmSync(LOCK_PAD, { force: true });
     herstelOmgeving();
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -1137,13 +1126,17 @@ describe('orkestreer --nacht', () => {
     return aanroepen.filter((a) => a.commando === 'claude');
   }
 
-  it('--reeks doet het gevraagde aantal, buiten het dagmaximum om (#265)', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(uitvoerder);
+  it('--reeks doet het gevraagde aantal, buiten het dagmaximum om (#265)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
     // Dagmaximum 2 in het instellingenbestand, en toch drie runs: op wat jij zelf start
     // staat geen maximum, want dat aantal geef je hier mee. De nachtpot blijft leeg.
-    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 3 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+    });
 
     expect(claudeAanroepen(aanroepen)).toHaveLength(3);
     const staat = leesStaat(paden, NU);
@@ -1151,11 +1144,15 @@ describe('orkestreer --nacht', () => {
     expect(staat.gestart).toBe(0);
   });
 
-  it('--reeks geeft elke run dezelfde tijdslimiet als de nacht', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(uitvoerder);
+  it('--reeks geeft elke run dezelfde tijdslimiet als de nacht', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ reeks: { soort: 'aantal', aantal: 2 }, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 2 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+    });
 
     // Een hangende werker in een reeks van vier is even duur als een hangende werker om
     // 04:00 (#206); zonder deze grens loopt hij door tot iemand hem stopt.
@@ -1164,7 +1161,7 @@ describe('orkestreer --nacht', () => {
     }
   });
 
-  it('--reeks gaat door na één mislukte run', () => {
+  it('--reeks gaat door na één mislukte run', async () => {
     const bord = nachtBord(WACHTRIJ);
     let claudes = 0;
     const eersteMislukt: UitkomstBepaler = (aanroep, index) => {
@@ -1174,22 +1171,28 @@ describe('orkestreer --nacht', () => {
       }
       return bord(aanroep, index);
     };
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(eersteMislukt);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(eersteMislukt);
 
-    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 3 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+    });
 
     // Eén escalatie is gewoon werk en kost alleen dat item — de les van #202.
     expect(claudeAanroepen(aanroepen)).toHaveLength(3);
   });
 
-  it('--reeks stopt na twee mislukte runs op rij, met de reden', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
-      nachtBord(WACHTRIJ, { werker: werkerMislukt() }),
-    );
-    stelUitvoerderIn(uitvoerder);
+  it('--reeks stopt na twee mislukte runs op rij, met de reden', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ, { werker: werkerMislukt() }));
 
-    orkestreer({ reeks: { soort: 'aantal', aantal: 3 }, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 3 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+    });
 
     // Twee achter elkaar betekent dat de machine zelf stuk is; doorgaan is dan geld
     // weggooien. Wel luid, want dit is een andere uitkomst dan "de rij is leeg".
@@ -1197,29 +1200,32 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/twee runs op rij mislukt/);
   });
 
-  it('--reeks sluit af met wat er gedaan is en wat het kostte', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+  it('--reeks sluit af met wat er gedaan is en wat het kostte', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ reeks: { soort: 'aantal', aantal: 2 }, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 2 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+    });
 
     expect(uitvoer.join('')).toMatch(/reeks klaar: 2 gedaan, 2 geslaagd, \$\d+\.\d\d/);
   });
 
-  it('stopt bij het dagmaximum, ook al staan er meer items in de rij', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(uitvoerder);
+  it('stopt bij het dagmaximum, ook al staan er meer items in de rij', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Dagmaximum 2 uit het instellingenbestand; de wachtrij heeft er drie.
     expect(claudeAanroepen(aanroepen)).toHaveLength(2);
     expect(leesStaat(paden, NU).gestart).toBe(2);
   });
 
-  it('deelt dat maximum met een tweede run op dezelfde kalenderdag', () => {
-    const eerste = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(eerste.uitvoerder);
-    orkestreer({
+  it('deelt dat maximum met een tweede run op dezelfde kalenderdag', async () => {
+    const eerste = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+    await orkestreer({
       nacht: true,
       werkplaatsWortel: wortel,
       paden,
@@ -1227,10 +1233,9 @@ describe('orkestreer --nacht', () => {
     });
     expect(claudeAanroepen(eerste.aanroepen)).toHaveLength(2);
 
-    const tweede = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(tweede.uitvoerder);
+    const tweede = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
     rmSync(LOCK_PAD, { force: true });
-    orkestreer({
+    await orkestreer({
       nacht: true,
       werkplaatsWortel: wortel,
       paden,
@@ -1243,19 +1248,18 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/dagmaximum al bereikt \(2\/2\)/);
   });
 
-  it('begint na een dagovergang weer bij nul', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
-    orkestreer({
+  it('begint na een dagovergang weer bij nul', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+    await orkestreer({
       nacht: true,
       werkplaatsWortel: wortel,
       paden,
       nu: new Date('2026-08-19T04:00:00'),
     });
 
-    const morgen = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(morgen.uitvoerder);
+    const morgen = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
     rmSync(LOCK_PAD, { force: true });
-    orkestreer({
+    await orkestreer({
       nacht: true,
       werkplaatsWortel: wortel,
       paden,
@@ -1266,14 +1270,13 @@ describe('orkestreer --nacht', () => {
     expect(claudeAanroepen(morgen.aanroepen)).toHaveLength(2);
   });
 
-  it('stopt zodra de wachtrij leeg is, en leest die rij per ronde opnieuw', () => {
+  it('stopt zodra de wachtrij leeg is, en leest die rij per ronde opnieuw', async () => {
     const eenItem = [
       boardItem(131, 'factory', 'Klaar voor technische refinement', '2026-08-01T00:00:00Z'),
     ];
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(eenItem));
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(eenItem));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Eén item, dus één werker — en niet twee keer hetzelfde item omdat de lijst van
     // vóór de eerste run nog in het geheugen zat.
@@ -1282,11 +1285,10 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/wachtrij leeg/);
   });
 
-  it('geeft het budget uit de instellingen mee en de token buiten de plist om', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(uitvoerder);
+  it('geeft het budget uit de instellingen mee en de token buiten de plist om', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     const eerste = claudeAanroepen(aanroepen)[0];
     expect(eerste?.argumenten[eerste.argumenten.indexOf('--max-budget-usd') + 1]).toBe('3');
@@ -1296,10 +1298,10 @@ describe('orkestreer --nacht', () => {
     expect(eerste?.argumenten.join(' ')).not.toContain('sk-nacht');
   });
 
-  it('schrijft per run een regel met issue, uitkomst, kosten en beurten', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+  it('schrijft per run een regel met issue, uitkomst, kosten en beurten', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Zonder eigen logregels zou alleen de stdout van launchd iets vastleggen, en dan
     // legt een handmatige run niets vast.
@@ -1309,12 +1311,10 @@ describe('orkestreer --nacht', () => {
     expect(log.trim().split('\n')).toHaveLength(3);
   });
 
-  it('telt een run mee die niet oplevert wat hij moest opleveren', () => {
-    stelUitvoerderIn(
-      maakUitvoerderOpnemer(nachtBord(WACHTRIJ, { werker: werkerMislukt() })).uitvoerder,
-    );
+  it('telt een run mee die niet oplevert wat hij moest opleveren', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ, { werker: werkerMislukt() }));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Een teller die alleen geslaagde runs telt is geen rem: een kapot item zou de
     // hele nacht opnieuw mogen draaien. En een mislukking is een escalatie, dus het
@@ -1323,7 +1323,7 @@ describe('orkestreer --nacht', () => {
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine mislukt/);
   });
 
-  it('laat een run die zijn budget opmaakt als escalatie achter', () => {
+  it('laat een run die zijn budget opmaakt als escalatie achter', async () => {
     // De echte, opgenomen envelop van een budget-afkapping (`subtype:
     // error_max_budget_usd`, exit 1). Zonder deze weg zou een item dat elke nacht zijn
     // budget opmaakt elke nacht opnieuw geld kosten.
@@ -1332,17 +1332,16 @@ describe('orkestreer --nacht', () => {
       aanroep.commando === 'claude'
         ? { code: 1, stdout: opgenomen }
         : nachtBord(WACHTRIJ, { werker: opgenomen })(aanroep, index);
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(budgetOp);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(budgetOp);
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     const label = ghArgs(aanroepen).find((a) => a.includes('--add-label'));
     expect(label).toContain('escalatie');
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine mislukt \$0\.10/);
   });
 
-  it('slaat een item over dat na zijn run nog in de wachtrij staat, en gaat door met de rest', () => {
+  it('slaat een item over dat na zijn run nog in de wachtrij staat, en gaat door met de rest', async () => {
     // `zetKolom` faalt zacht — een board-hik of een leeg GraphQL-budget is genoeg — en dan
     // blijft het item staan. Hetzelfde issue twee keer refinen is twee keer betalen voor
     // één uitwerking, dus overslaan; maar de rest van de nacht hoort door te gaan (#202).
@@ -1351,10 +1350,9 @@ describe('orkestreer --nacht', () => {
       aanroep.commando === 'claude'
         ? { stdout: werkerKlaar() } // geen verzet: het item blijft in de wachtrij staan
         : basis(aanroep, index);
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bordBlijftStaan);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(bordBlijftStaan);
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Twee runs (het dagmaximum), op twee verschillende items: geen herhaling, geen stop.
     const gedraaid = claudeAanroepen(aanroepen).map(
@@ -1366,7 +1364,7 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).not.toMatch(/gestopt om een lus te voorkomen/);
   });
 
-  it('gaat door met de rij als het eerste item escaleert en de escalatielijst achterloopt', () => {
+  it('gaat door met de rij als het eerste item escaleert en de escalatielijst achterloopt', async () => {
     // Precies de storing van 2026-08-20: #131 escaleerde, GitHub's labelfilter liep een
     // paar seconden achter, dus het item stond nog vooraan — en de nacht stopte met
     // "2/4 gedaan" terwijl er werk lag.
@@ -1385,10 +1383,9 @@ describe('orkestreer --nacht', () => {
       if (aanroep.commando === 'claude') return { stdout: werkerEscaleert() };
       return basis(aanroep, index);
     };
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(achterlopend);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(achterlopend);
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Het geëscaleerde item wordt overgeslagen, niet herhaald, en de nacht gaat door.
     const gedraaid = claudeAanroepen(aanroepen).map(
@@ -1399,20 +1396,20 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/overgeslagen voor vannacht/);
   });
 
-  it('laat een overgeslagen item de dagteller niet verhogen', () => {
+  it('laat een overgeslagen item de dagteller niet verhogen', async () => {
     const basis = nachtBord(WACHTRIJ);
     const bordBlijftStaan: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude' ? { stdout: werkerKlaar() } : basis(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(bordBlijftStaan).uitvoerder);
+    zetBeideUitvoerdersOp(bordBlijftStaan);
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Twee runs, dus de teller staat op 2 — niet op 3 doordat de overslag ook meetelde.
     expect(uitvoer.join('')).toMatch(/2\/2 van vannacht gedaan/);
     expect(uitvoer.join('')).not.toMatch(/3\/2/);
   });
 
-  it('gaat na een afgekapte run door met het volgende item', () => {
+  it('gaat na een afgekapte run door met het volgende item', async () => {
     // De hangende werker (#206): afkappen mag één item kosten, niet de nacht. Het item
     // gaat langs het bestaande escalatiepad van #154 en de rij schuift door.
     const basis = nachtBord(WACHTRIJ);
@@ -1424,10 +1421,9 @@ describe('orkestreer --nacht', () => {
       }
       return basis(aanroep, index);
     };
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(kaptEersteAf);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(kaptEersteAf);
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Twee runs: de afgekapte en de volgende. Zonder deze slice stopte de nacht hier.
     expect(claudeAanroepen(aanroepen)).toHaveLength(2);
@@ -1439,7 +1435,7 @@ describe('orkestreer --nacht', () => {
     expect(label).toContain('escalatie');
   });
 
-  it('boekt en logt een run die de CLI omvertrekt, en stopt na twee zulke op rij', () => {
+  it('boekt en logt een run die de CLI omvertrekt, en stopt na twee zulke op rij', async () => {
     // `claude` is niet te starten: `run` gooit een GebruikersFout. Sinds #282 laat de
     // reeks één zulke run niet de hele nacht kosten — hij boekt en logt hem (de stilte
     // die je 's ochtends niet kunt lezen is precies wat we vermijden) en gaat door. Twee
@@ -1449,10 +1445,10 @@ describe('orkestreer --nacht', () => {
       aanroep.commando === 'claude'
         ? { code: 1, stdout: '', startfout: 'spawn claude ENOENT' }
         : basis(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(geenClaude).uitvoerder);
+    zetBeideUitvoerdersOp(geenClaude);
 
     // Geen throw meer: de noodstop vangt het, netjes.
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#\d+ \w+ refine afgebroken/);
     // Twee geboekte runs (de twee mislukte starts), daarna de noodstop.
@@ -1460,10 +1456,10 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/twee runs op rij mislukt/);
   });
 
-  it('geeft elke runregel zijn eigen tijdstempel', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+  it('geeft elke runregel zijn eigen tijdstempel', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // Drie regels: de startregel en twee runs. De runregels hebben elk hun eigen
     // tijdstempel; twee gelijke stempels zeggen niets over hoe lang een run duurde.
@@ -1473,10 +1469,10 @@ describe('orkestreer --nacht', () => {
     expect(runStempels[0]).not.toBe(NU.toISOString());
   });
 
-  it('logt met welke versie de nacht draaide (#237)', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+  it('logt met welke versie de nacht draaide (#237)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
     // De eerste logregel vermeldt de factory-versie, zodat je 's ochtends ziet of het
     // bijwerken gewerkt heeft.
@@ -1484,25 +1480,24 @@ describe('orkestreer --nacht', () => {
     expect(log).toMatch(/nacht gestart \(factory \d+\.\d+\.\d+/);
   });
 
-  it('weigert onbemand te draaien zonder token, met het recept erbij', () => {
+  it('weigert onbemand te draaien zonder token, met het recept erbij', async () => {
     writeFileSync(paden.envPad, 'FACTORY_DAGMAXIMUM=2\n', { mode: 0o600 });
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(nachtBord(WACHTRIJ));
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    expect(() => {
-      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
-    }).toThrow(/claude setup-token/);
+    await expect(
+      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU }),
+    ).rejects.toThrow(/claude setup-token/);
 
     // En vóórdat er een item uit de wachtrij is gehaald: geen kolom verzet, geen werker.
     expect(aanroepen).toHaveLength(0);
   });
 
-  it('weigert --nacht samen met --dry', () => {
-    stelUitvoerderIn(maakUitvoerderOpnemer(nachtBord(WACHTRIJ)).uitvoerder);
+  it('weigert --nacht samen met --dry', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
-    expect(() => {
-      orkestreer({ nacht: true, dry: true, werkplaatsWortel: wortel, paden, nu: NU });
-    }).toThrow(/sluiten elkaar uit/);
+    await expect(
+      orkestreer({ nacht: true, dry: true, werkplaatsWortel: wortel, paden, nu: NU }),
+    ).rejects.toThrow(/sluiten elkaar uit/);
   });
 });
 
@@ -1594,6 +1589,7 @@ describe('orkestreer --installeer en --verwijder', () => {
   afterEach(() => {
     rmSync(home, { recursive: true, force: true });
     herstelUitvoerder();
+    herstelAsyncUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -1625,12 +1621,11 @@ describe('orkestreer --installeer en --verwijder', () => {
     writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-nacht\n`, { mode: 0o600 });
   }
 
-  it('installeert de globale bin uit de nieuwste tag en laadt de agent', () => {
+  it('installeert de globale bin uit de nieuwste tag en laadt de agent', async () => {
     metToken();
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine());
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(machine());
 
-    orkestreer({ installeer: true, paden });
+    await orkestreer({ installeer: true, paden });
 
     // De tag is de bron van waarheid over de laatste release, niet main's package.json.
     const install = aanroepen.find((a) => a.commando === 'npm' && a.argumenten[0] === 'install');
@@ -1652,26 +1647,23 @@ describe('orkestreer --installeer en --verwijder', () => {
     expect(launchctl).toEqual(['unload', 'load']);
   });
 
-  it('is idempotent: twee keer installeren geeft dezelfde agent', () => {
+  it('is idempotent: twee keer installeren geeft dezelfde agent', async () => {
     metToken();
-    stelUitvoerderIn(maakUitvoerderOpnemer(machine()).uitvoerder);
+    zetBeideUitvoerdersOp(machine());
 
-    orkestreer({ installeer: true, paden });
+    await orkestreer({ installeer: true, paden });
     const eerste = readFileSync(paden.agentPad, 'utf8');
-    orkestreer({ installeer: true, paden });
+    await orkestreer({ installeer: true, paden });
 
     expect(readFileSync(paden.agentPad, 'utf8')).toBe(eerste);
   });
 
-  it('weigert te installeren zonder token, en laat dan niets achter', () => {
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(machine());
-    stelUitvoerderIn(uitvoerder);
+  it('weigert te installeren zonder token, en laat dan niets achter', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(machine());
 
     // Een geladen agent zonder token draait vannacht een ronde die op niets uitloopt,
     // en dat merk je dan pas morgen.
-    expect(() => {
-      orkestreer({ installeer: true, paden });
-    }).toThrow(/claude setup-token/);
+    await expect(orkestreer({ installeer: true, paden })).rejects.toThrow(/claude setup-token/);
 
     expect(existsSync(paden.agentPad)).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
@@ -1679,22 +1671,20 @@ describe('orkestreer --installeer en --verwijder', () => {
     expect(statSync(paden.envPad).mode & 0o777).toBe(0o600);
   });
 
-  it('weigert te installeren buiten de factory-repo', () => {
+  it('weigert te installeren buiten de factory-repo', async () => {
     metToken();
     const buiten: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'git' && aanroep.argumenten[0] === 'remote'
         ? { stdout: 'git@github.com:gjvv13/assistant.git\n' }
         : machine()(aanroep, index);
-    stelUitvoerderIn(maakUitvoerderOpnemer(buiten).uitvoerder);
+    zetBeideUitvoerdersOp(buiten);
 
     // De globale bin komt uit de tags van dit repo; buiten de factory zou hij uit een
     // ander repo komen, of uit niets.
-    expect(() => {
-      orkestreer({ installeer: true, paden });
-    }).toThrow(/factory-repo/);
+    await expect(orkestreer({ installeer: true, paden })).rejects.toThrow(/factory-repo/);
   });
 
-  it('slaat de install over als er al een even nieuwe globale factory staat', () => {
+  it('slaat de install over als er al een even nieuwe globale factory staat', async () => {
     metToken();
     mkdirSync(path.join(home, 'globaal', 'factory'), { recursive: true });
     const bepaal: UitkomstBepaler = (aanroep, index) =>
@@ -1705,10 +1695,9 @@ describe('orkestreer --installeer en --verwijder', () => {
       path.join(home, 'globaal', 'factory', 'package.json'),
       JSON.stringify({ version: '1.15.13' }),
     );
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaal);
 
-    orkestreer({ installeer: true, paden });
+    await orkestreer({ installeer: true, paden });
 
     // Zo downgradet een oudere pin de gedeelde bin nooit — dezelfde regel als bij
     // `integreer --installeer`.
@@ -1718,36 +1707,31 @@ describe('orkestreer --installeer en --verwijder', () => {
     expect(uitvoer.join('')).toMatch(/staat al globaal/);
   });
 
-  it('weigert een agent te plannen op een bin die --nacht niet kent', () => {
+  it('weigert een agent te plannen op een bin die --nacht niet kent', async () => {
     metToken();
     const oudeBin: UitkomstBepaler = (aanroep, index) =>
       aanroep.argumenten[0] === 'help'
         ? { stdout: 'factory orkestreer <--dry|--eenmalig>\n' }
         : machine()(aanroep, index);
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(oudeBin);
-    stelUitvoerderIn(uitvoerder);
+    const { aanroepen } = zetBeideUitvoerdersOp(oudeBin);
 
     // De globale bin komt uit de nieuwste tag, en die loopt achter op de branch waarin
     // --nacht net gebouwd is. Zo'n agent ketst om 04:00 stil af.
-    expect(() => {
-      orkestreer({ installeer: true, paden });
-    }).toThrow(/nog niet is/);
+    await expect(orkestreer({ installeer: true, paden })).rejects.toThrow(/nog niet is/);
 
     expect(existsSync(paden.agentPad)).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
   });
 
-  it('verwijdert de agent, ook als hij er niet staat', () => {
+  it('verwijdert de agent, ook als hij er niet staat', async () => {
     metToken();
-    stelUitvoerderIn(maakUitvoerderOpnemer(machine()).uitvoerder);
-    orkestreer({ installeer: true, paden });
+    zetBeideUitvoerdersOp(machine());
+    await orkestreer({ installeer: true, paden });
 
-    orkestreer({ verwijder: true, paden });
+    await orkestreer({ verwijder: true, paden });
     expect(existsSync(paden.agentPad)).toBe(false);
 
     // Idempotent: een tweede keer verwijderen is een no-op en geen fout.
-    expect(() => {
-      orkestreer({ verwijder: true, paden });
-    }).not.toThrow();
+    await expect(orkestreer({ verwijder: true, paden })).resolves.not.toThrow();
   });
 });

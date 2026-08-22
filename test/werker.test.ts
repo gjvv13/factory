@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import {
   draaiWerker,
   werkerArgumenten,
@@ -10,7 +10,7 @@ import {
   WERKER_VERBODEN,
   type WerkerOpdracht,
 } from '../src/werker.js';
-import { maakUitvoerderOpnemer } from './helpers.js';
+import { maakAsyncUitvoerderOpnemer } from './helpers.js';
 
 /**
  * Contract met de `claude` CLI — een dienst van derden, dus geen Pact maar een
@@ -34,14 +34,10 @@ const OPDRACHT: WerkerOpdracht = {
 
 /** Laat `claude` de opgegeven uitvoer teruggeven, met de opgegeven exitcode. */
 function metUitvoer(stdout: string, code = 0): void {
-  stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ code, stdout })).uitvoerder);
+  stelAsyncUitvoerderIn(maakAsyncUitvoerderOpnemer(() => ({ code, stdout })).uitvoerder);
 }
 
 describe('werkerArgumenten', () => {
-  afterEach(() => {
-    herstelUitvoerder();
-  });
-
   it('geeft de sessie zelf mee in plaats van hem achteraf op te vissen', () => {
     const args = werkerArgumenten(OPDRACHT);
 
@@ -97,13 +93,13 @@ describe('werkerArgumenten', () => {
 
 describe('draaiWerker', () => {
   afterEach(() => {
-    herstelUitvoerder();
+    herstelAsyncUitvoerder();
   });
 
-  it('leest een geslaagde run uit de envelop', () => {
+  it('leest een geslaagde run uit de envelop', async () => {
     metUitvoer(fixture('claude-run.json'));
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('klaar');
     expect(uitkomst.beurten).toBe(2);
@@ -115,44 +111,46 @@ describe('draaiWerker', () => {
     expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.body).toContain('# Proefrun');
   });
 
-  it('behandelt een afgekapte run als mislukt en noemt de grens in de reden', () => {
+  it('behandelt een afgekapte run als mislukt en noemt de grens in de reden', async () => {
     // Een hangende werker hield vroeger de hele nacht bezet (#206). Afkappen is
     // mislukken langs het bestaande pad — label, comment, logregel — en geen crash.
-    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((aanroep) =>
+    const { uitvoerder, aanroepen } = maakAsyncUitvoerderOpnemer((aanroep) =>
       aanroep.commando === 'claude'
         ? { code: 124, stdout: '', stderr: '', afgekapt: true as const }
         : {},
     );
-    stelUitvoerderIn(uitvoerder);
+    stelAsyncUitvoerderIn(uitvoerder);
 
-    const uitkomst = draaiWerker({ ...OPDRACHT, timeoutMs: 30 * 60_000 });
+    const uitkomst = await draaiWerker({ ...OPDRACHT, timeoutMs: 30 * 60_000 });
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toBe('afgekapt na 30 minuten zonder uitkomst');
-    // Deze slice ruimt bewust géén processen op (zie de comment in `werker.ts`): dat is
-    // een eigen item. Wat hier telt is dat er niets ongevraagd wordt afgeschoten.
+    // De async uitvoerder stuurt SIGTERM naar de procesgroep (#224); geen breed pkill.
     expect(aanroepen.some((a) => a.commando === 'pkill')).toBe(false);
   });
 
-  it('geeft de tijdsgrens door aan claude en laat hem weg als er geen is', () => {
-    const metGrens = maakUitvoerderOpnemer(() => ({ code: 124, afgekapt: true as const }));
-    stelUitvoerderIn(metGrens.uitvoerder);
-    draaiWerker({ ...OPDRACHT, timeoutMs: 12_000 });
+  it('geeft de tijdsgrens door aan claude en laat hem weg als er geen is', async () => {
+    const metGrens = maakAsyncUitvoerderOpnemer(() => ({
+      code: 124,
+      afgekapt: true as const,
+    }));
+    stelAsyncUitvoerderIn(metGrens.uitvoerder);
+    await draaiWerker({ ...OPDRACHT, timeoutMs: 12_000 });
     expect(metGrens.aanroepen[0]?.timeoutMs).toBe(12_000);
 
     // Zonder grens (met de hand gestart) blijft de aanroep onbeperkt.
-    const zonder = maakUitvoerderOpnemer(() => ({ code: 1, stdout: '' }));
-    stelUitvoerderIn(zonder.uitvoerder);
-    draaiWerker(OPDRACHT);
+    const zonder = maakAsyncUitvoerderOpnemer(() => ({ code: 1, stdout: '' }));
+    stelAsyncUitvoerderIn(zonder.uitvoerder);
+    await draaiWerker(OPDRACHT);
     expect(zonder.aanroepen[0]?.timeoutMs).toBeUndefined();
   });
 
-  it('herkent een mislukte run aan de JSON, niet aan de exitcode', () => {
+  it('herkent een mislukte run aan de JSON, niet aan de exitcode', async () => {
     // Deze fixture kwam mét exit 1, maar dat is niet waar we op sturen: de
     // geweigerde-rechten-run hieronder kwam mét exit 0 terwijl er niets gebeurde.
     metUitvoer(fixture('claude-run-fout.json'), 0);
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toContain('error_max_budget_usd');
@@ -160,25 +158,25 @@ describe('draaiWerker', () => {
     expect(uitkomst.kosten).toBeCloseTo(0.102583, 5);
   });
 
-  it('rekent een run zonder verdict niet als klaar, ook niet bij exit 0', () => {
+  it('rekent een run zonder verdict niet als klaar, ook niet bij exit 0', async () => {
     // De echte val: `is_error: false`, `subtype: "success"`, exit 0 — en toch is er
     // niets gebeurd, want elk schrijfrecht werd geweigerd.
     metUitvoer(fixture('claude-run-zonder-verdict.json'), 0);
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.weigeringen).toBeGreaterThan(0);
     expect(uitkomst.fout).toContain('geweigerd');
   });
 
-  it('houdt de werker buiten de werkmap — opgenomen met de echte rechtenlijst', () => {
+  it('houdt de werker buiten de werkmap — opgenomen met de echte rechtenlijst', async () => {
     // Deze fixture is een echte run mét `werkerArgumenten()`: de werker kreeg de
     // opdracht een bestand te maken en probeerde het op zes manieren (`>`, `tee`,
     // `cp /dev/stdin`, `python3`, `dd`). Alle zes geweigerd, map bleef leeg.
     metUitvoer(fixture('claude-run-geweigerd.json'), 0);
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.weigeringen).toBe(6);
     // Sinds #290 zegt `geweigerd` wélk commando raakte, niet kaal "Bash" — dat is de
@@ -196,25 +194,25 @@ describe('draaiWerker', () => {
     expect(uitkomst.afloop).toBe('escalatie');
   });
 
-  it('meldt het als de envelop niet meer klopt', () => {
+  it('meldt het als de envelop niet meer klopt', async () => {
     metUitvoer(JSON.stringify({ type: 'result', subtype: 'success', is_error: false }));
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toContain('envelop');
   });
 
-  it('meldt het als claude helemaal geen JSON teruggeeft', () => {
+  it('meldt het als claude helemaal geen JSON teruggeeft', async () => {
     metUitvoer('command not found: claude', 127);
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toContain('geen leesbare JSON');
   });
 
-  it('geeft een escalatie door als escalatie, niet als fout', () => {
+  it('geeft een escalatie door als escalatie, niet als fout', async () => {
     metUitvoer(
       JSON.stringify({
         type: 'result',
@@ -228,7 +226,7 @@ describe('draaiWerker', () => {
       }),
     );
 
-    const uitkomst = draaiWerker(OPDRACHT);
+    const uitkomst = await draaiWerker(OPDRACHT);
 
     // Escaleren is geen falen: het item krijgt een vraag, geen foutmelding.
     expect(uitkomst.afloop).toBe('escalatie');

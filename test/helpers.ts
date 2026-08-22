@@ -1,4 +1,5 @@
-import type { ProcesUitkomst, RunOptions, Uitvoerder } from '../src/shell.js';
+import type { AsyncUitvoerder, ProcesUitkomst, RunOptions, Uitvoerder } from '../src/shell.js';
+import { stelAsyncUitvoerderIn, stelUitvoerderIn } from '../src/shell.js';
 
 /** Eén opgenomen proces-aanroep: genoeg om te controleren wat een commando zou draaien. */
 export interface ProcesAanroep {
@@ -45,6 +46,37 @@ export function maakUitvoerderOpnemer(bepaal?: UitkomstBepaler): Opnemer {
   return { uitvoerder, aanroepen };
 }
 
+/** Async variant van `Opnemer`: de opnemer die bij `runAsync` / de werker-keten past. */
+export interface AsyncOpnemer {
+  readonly uitvoerder: AsyncUitvoerder;
+  readonly aanroepen: ProcesAanroep[];
+}
+
+/**
+ * Async variant van `maakUitvoerderOpnemer`: geeft een `AsyncUitvoerder` die elke
+ * aanroep onthoudt en dezelfde `bepaal`-callback ondersteunt. Hiermee worden de
+ * bestaande werker-tests async zonder hun logica te veranderen.
+ */
+export function maakAsyncUitvoerderOpnemer(bepaal?: UitkomstBepaler): AsyncOpnemer {
+  const aanroepen: ProcesAanroep[] = [];
+  const uitvoerder: AsyncUitvoerder = (commando, argumenten, options: RunOptions) => {
+    const aanroep: ProcesAanroep = {
+      commando,
+      argumenten,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    };
+    aanroepen.push(aanroep);
+    return Promise.resolve({
+      code: 0,
+      stdout: '',
+      ...(bepaal?.(aanroep, aanroepen.length - 1) ?? {}),
+    });
+  };
+  return { uitvoerder, aanroepen };
+}
+
 /**
  * Maakt de board-poort uit `src/board.ts` voorspelbaar, ongeacht wáár de test draait.
  *
@@ -80,4 +112,39 @@ export function zetBoardOmgeving(waarden: {
     zetActies(oud.acties);
     zetPat(oud.pat);
   };
+}
+
+/**
+ * Zet zowel de sync als de async uitvoerder op dezelfde `bepaal`-callback met een
+ * gedeelde `aanroepen`-lijst. De sync uitvoerder bedient `git`, `gh` en `pnpm` (die
+ * nog `run()` gebruiken); de async uitvoerder bedient `claude` (die na #224
+ * `runAsync()` gebruikt). Tests zien alle aanroepen in één array.
+ */
+export function zetBeideUitvoerdersOp(bepaal?: UitkomstBepaler): Opnemer {
+  const aanroepen: ProcesAanroep[] = [];
+  const maakAanroep = (
+    commando: string,
+    argumenten: string[],
+    options: RunOptions,
+  ): { aanroep: ProcesAanroep; uitkomst: ProcesUitkomst } => {
+    const aanroep: ProcesAanroep = {
+      commando,
+      argumenten,
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+    };
+    aanroepen.push(aanroep);
+    return {
+      aanroep,
+      uitkomst: { code: 0, stdout: '', ...(bepaal?.(aanroep, aanroepen.length - 1) ?? {}) },
+    };
+  };
+  const uitvoerder: Uitvoerder = (commando, argumenten, options) =>
+    maakAanroep(commando, argumenten, options).uitkomst;
+  const asyncUitvoerder: AsyncUitvoerder = (commando, argumenten, options) =>
+    Promise.resolve(maakAanroep(commando, argumenten, options).uitkomst);
+  stelUitvoerderIn(uitvoerder);
+  stelAsyncUitvoerderIn(asyncUitvoerder);
+  return { uitvoerder, aanroepen };
 }

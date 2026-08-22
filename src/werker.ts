@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { run } from './shell.js';
+import { runAsync, waarschuwing } from './shell.js';
 
 /**
  * De onbemande werker: één `claude -p`-aanroep, en de vertaling van zijn uitvoer naar
@@ -455,14 +455,15 @@ function weigeringLabel(denial: {
   return metSubcommando.includes(verb) && woorden[1] !== undefined ? `${verb} ${woorden[1]}` : verb;
 }
 
-function leesEnvelop(opdracht: WerkerOpdracht):
+async function leesEnvelop(opdracht: WerkerOpdracht): Promise<
   | { readonly soort: 'mislukt'; readonly uitkomst: WerkerBasis }
   | {
       readonly soort: 'gelezen';
       readonly basis: Omit<WerkerBasis, 'afloop'>;
       readonly structured: unknown;
-    } {
-  const uitkomst = run('claude', werkerArgumenten(opdracht), {
+    }
+> {
+  const uitkomst = await runAsync('claude', werkerArgumenten(opdracht), {
     cwd: opdracht.werkmap,
     capture: true,
     toleranter: true,
@@ -471,13 +472,12 @@ function leesEnvelop(opdracht: WerkerOpdracht):
   });
 
   if (uitkomst.afgekapt) {
-    // Alleen de grens, niet het opruimen. `spawnSync`'s time-out doodt het directe kind;
-    // gemeten op 2026-08-20 overleeft een kleinkind dat wél. Gericht opruimen op de
-    // sessie-id haalt alleen processen die die id in hun argv dragen, en een breed
-    // `pkill -f claude` zou de sessie van de gebruiker zelf kunnen omleggen. Het echte
-    // opruimen (procesgroep via een async spawn) is bewust een eigen item — deze slice
-    // zorgt dat de nacht doorloopt, niet dat de machine schoon is.
+    // De async uitvoerder stuurt SIGTERM naar de hele procesgroep (`-pid`), dus
+    // kleinkinderen die `spawnSync`'s timeout overleefden zijn nu ook dood (#224).
     const minuten = Math.round((opdracht.timeoutMs ?? 0) / 60_000);
+    waarschuwing(
+      `#${opdracht.prompt.match(/#(\d+)/)?.[0] ?? '?'} afgekapt na ${String(minuten)} minuten zonder uitkomst — procesgroep opgeruimd, de rij gaat door.`,
+    );
     return {
       soort: 'mislukt',
       uitkomst: {
@@ -548,8 +548,8 @@ export interface BouwUitkomst extends WerkerBasis {
  * exitcode, en geen verdict is een mislukking en geen "waarschijnlijk gelukt". Het
  * verschil is het schema — een criterium zonder bewijs komt er niet als `klaar` door.
  */
-export function draaiBouwer(opdracht: WerkerOpdracht): BouwUitkomst {
-  const gelezen = leesEnvelop({
+export async function draaiBouwer(opdracht: WerkerOpdracht): Promise<BouwUitkomst> {
+  const gelezen = await leesEnvelop({
     ...opdracht,
     toegestaan: opdracht.toegestaan ?? BOUWER_TOEGESTAAN,
     verboden: opdracht.verboden ?? BOUWER_VERBODEN,
@@ -585,8 +585,8 @@ export interface ReviewUitkomst extends WerkerBasis {
  * dat geen reden om het inleveren te blokkeren — de review is een extra poort, geen
  * voorwaarde.
  */
-export function draaiReviewer(opdracht: WerkerOpdracht): ReviewUitkomst {
-  const gelezen = leesEnvelop({
+export async function draaiReviewer(opdracht: WerkerOpdracht): Promise<ReviewUitkomst> {
+  const gelezen = await leesEnvelop({
     ...opdracht,
     toegestaan: opdracht.toegestaan ?? WERKER_TOEGESTAAN,
     verboden: opdracht.verboden ?? WERKER_VERBODEN,
@@ -606,8 +606,8 @@ export function draaiReviewer(opdracht: WerkerOpdracht): ReviewUitkomst {
   return { ...gelezen.basis, afloop: 'klaar', verdict: verdict.data };
 }
 
-export function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst {
-  const gelezen = leesEnvelop(opdracht);
+export async function draaiWerker(opdracht: WerkerOpdracht): Promise<WerkerUitkomst> {
+  const gelezen = await leesEnvelop(opdracht);
   if (gelezen.soort === 'mislukt') {
     return gelezen.uitkomst;
   }

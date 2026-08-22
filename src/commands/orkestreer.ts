@@ -302,7 +302,7 @@ export function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: stri
 }
 
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
-export function orkestreer(opties: OrkestreerOpties = {}): void {
+export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
   const paden = opties.paden ?? standaardPaden();
   if (opties.installeer === true) {
     installeerAgent(paden);
@@ -351,7 +351,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
           : `Reeks: ${keuze.issues.map((n) => `#${String(n)}`).join(', ')}`,
       );
       meldReeks(
-        draaiReeks({
+        await draaiReeks({
           paden,
           nu: opties.nu ?? new Date(Date.now()),
           soort: 'refine',
@@ -386,7 +386,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
       // test hem kan bereiken zonder de CLI te starten.
       throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
     }
-    draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
+    await draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
     return;
   }
 
@@ -428,7 +428,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
     // `claude` op de gewone keychain-auth van de terminal waarin je dit typt. Boeken en
     // loggen gaan wél mee: een run met de hand kost hetzelfde geld als een run in de
     // nacht, en stond tot #264 nergens.
-    metBoekhouding(
+    await metBoekhouding(
       {
         paden,
         nu: opties.nu ?? new Date(Date.now()),
@@ -475,7 +475,12 @@ function beschrijfRun(uitkomst: RunUitkomst): RunRegel {
  * kolom, of draagt een escalatie-label. Doorwerken op de oude lijst zou hetzelfde item
  * een tweede keer oppakken.
  */
-function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Date): void {
+async function draaiNacht(
+  cwd: string,
+  wortel: string,
+  paden: OrkestratorPaden,
+  nu: Date,
+): Promise<void> {
   const instellingen = leesInstellingen(paden);
   // De token eerst: een nacht die pas bij de eerste `claude`-aanroep struikelt heeft
   // dan al een item uit de wachtrij gehaald en een kolom verzet.
@@ -510,7 +515,7 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
     // Dezelfde lus als `--reeks` (#265): het dagmaximum bepaalt hier alleen hoeveel
     // items er nog in passen. Zo blijven de vangnetten van de nacht en van een reeks
     // die jij start per definitie gelijk.
-    const uitkomst = draaiReeks({
+    const uitkomst = await draaiReeks({
       paden,
       nu,
       soort: 'refine',
@@ -555,7 +560,12 @@ interface DraaiOpties {
 }
 
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
-function werkAf(item: Opdrachtitem, cwd: string, wortel: string, draai: DraaiOpties): RunUitkomst {
+async function werkAf(
+  item: Opdrachtitem,
+  cwd: string,
+  wortel: string,
+  draai: DraaiOpties,
+): Promise<RunUitkomst> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
   const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
@@ -584,7 +594,7 @@ function werkAf(item: Opdrachtitem, cwd: string, wortel: string, draai: DraaiOpt
 
   try {
     const sessie = randomUUID();
-    const uitkomst = draaiWerker({
+    const uitkomst = await draaiWerker({
       prompt: bouwPrompt(item, werkmap, factoryMap),
       werkmap,
       sessie,
@@ -919,12 +929,12 @@ export interface AntwoordOpties {
  * een hervatting $0,02 tegen $0,32 voor een verse run, want de context zit in de
  * cache. Het werk tot de escalatie blijft dus staan; de werker begint niet opnieuw.
  */
-export function orkestreerAntwoord(
+export async function orkestreerAntwoord(
   issueArgument: string | undefined,
   tekst: string | undefined,
   opties: AntwoordOpties = {},
   cwd: string = process.cwd(),
-): void {
+): Promise<void> {
   const issue = Number.parseInt(issueArgument ?? '', 10);
   if (!Number.isSafeInteger(issue) || issue <= 0 || tekst === undefined || tekst.trim() === '') {
     throw new GebruikersFout(
@@ -946,19 +956,19 @@ export function orkestreerAntwoord(
     throw new GebruikersFout(`Er draait al een orkestrator-run (${lockInfo()}).`);
   }
   try {
-    werkAntwoordAf(issue, tekst, escalatie, opties, cwd);
+    await werkAntwoordAf(issue, tekst, escalatie, opties, cwd);
   } finally {
     geefLockVrij();
   }
 }
 
-function werkAntwoordAf(
+async function werkAntwoordAf(
   issue: number,
   tekst: string,
   escalatie: Escalatie,
   opties: AntwoordOpties,
   cwd: string,
-): void {
+): Promise<void> {
   kop(`Antwoord op #${String(issue)}`);
   const opdracht =
     opties.opnieuw === true
@@ -970,7 +980,7 @@ function werkAntwoordAf(
           hervat: true,
         };
   const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
-  const uitkomst = draaiWerker({
+  const uitkomst = await draaiWerker({
     ...opdracht,
     budgetUsd: instellingen.budgetPerRun,
     model: MODEL,

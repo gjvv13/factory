@@ -87,7 +87,7 @@ export interface BouwOpties {
  * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
  * valt vóórdat er iets gebeurt.
  */
-export declare function orkestreerBouw(opties?: BouwOpties): void;
+export declare function orkestreerBouw(opties?: BouwOpties): Promise<void>;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */

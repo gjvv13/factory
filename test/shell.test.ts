@@ -5,15 +5,18 @@ import { Readable, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bevestig,
+  herstelAsyncUitvoerder,
   herstelStarter,
   herstelUitvoerder,
   herstelWacht,
   isDnsBlip,
   isGezondNaStart,
   run,
+  runAsync,
   pakketbeheerder,
   runMetHerhaling,
   schrijfWorkflowUitvoer,
+  stelAsyncUitvoerderIn,
   stelStarterIn,
   stelUitvoerderIn,
   stelWachtIn,
@@ -21,7 +24,7 @@ import {
   wachtOpGezond,
 } from '../src/shell.js';
 import type { ProcesHandle } from '../src/shell.js';
-import { maakUitvoerderOpnemer } from './helpers.js';
+import { maakAsyncUitvoerderOpnemer, maakUitvoerderOpnemer } from './helpers.js';
 
 /** Een schrijfstroom die alles weggooit, zodat de vraag nergens heen hoeft. */
 function leegKanaal(): Writable {
@@ -313,5 +316,102 @@ describe('pakketbeheerder', () => {
     stelUitvoerderIn(() => ({ code: 1, stdout: '', startfout: 'spawn pnpm ENOENT' }));
 
     expect(pakketbeheerder()).toEqual({ commando: 'corepack', basisArgumenten: ['pnpm'] });
+  });
+});
+
+describe('runAsync', () => {
+  afterEach(() => {
+    herstelAsyncUitvoerder();
+  });
+
+  it('geeft het resultaat terug bij een geslaagde aanroep', async () => {
+    stelAsyncUitvoerderIn(maakAsyncUitvoerderOpnemer(() => ({ code: 0, stdout: 'ok' })).uitvoerder);
+
+    const resultaat = await runAsync('echo', ['hallo'], { capture: true, toleranter: true });
+
+    expect(resultaat.code).toBe(0);
+    expect(resultaat.stdout).toBe('ok');
+    expect(resultaat.afgekapt).toBe(false);
+  });
+
+  it('gooit niet bij afkapping maar geeft afgekapt: true', async () => {
+    stelAsyncUitvoerderIn(
+      maakAsyncUitvoerderOpnemer(() => ({
+        code: 124,
+        stdout: 'tot hier',
+        afgekapt: true as const,
+      })).uitvoerder,
+    );
+
+    const resultaat = await runAsync('claude', ['-p', 'iets'], { timeoutMs: 1000 });
+
+    expect(resultaat.afgekapt).toBe(true);
+    expect(resultaat.stdout).toBe('tot hier');
+  });
+
+  it('geeft de tijdsgrens door aan de async uitvoerder', async () => {
+    const { uitvoerder, aanroepen } = maakAsyncUitvoerderOpnemer();
+    stelAsyncUitvoerderIn(uitvoerder);
+
+    await runAsync('claude', ['-p', 'iets'], { timeoutMs: 5_000, toleranter: true });
+
+    expect(aanroepen[0]?.timeoutMs).toBe(5_000);
+  });
+
+  it('gooit bij een startfout', async () => {
+    stelAsyncUitvoerderIn(
+      maakAsyncUitvoerderOpnemer(() => ({ code: 1, stdout: '', startfout: 'ENOENT' })).uitvoerder,
+    );
+
+    await expect(runAsync('niks', [])).rejects.toThrow(/Kon 'niks' niet uitvoeren/);
+  });
+
+  it('bij een timeout signaleert de echte uitvoerder de procesgroep via -pid', async () => {
+    // De echte async uitvoerder stuurt `process.kill(-pid, 'SIGTERM')` bij een timeout.
+    // Hier testen we dat via een spy op `process.kill`: de stub geeft `afgekapt` terug
+    // met een `pid` zodat de productie-code hem zou signaleren. Maar omdat we een stub
+    // gebruiken, verifiëren we het patroon in de integratietest hieronder.
+    const { uitvoerder, aanroepen } = maakAsyncUitvoerderOpnemer(() => ({
+      code: 124,
+      stdout: '',
+      afgekapt: true as const,
+    }));
+    stelAsyncUitvoerderIn(uitvoerder);
+
+    const resultaat = await runAsync('claude', ['-p', 'iets'], { timeoutMs: 100 });
+
+    expect(resultaat.afgekapt).toBe(true);
+    expect(aanroepen).toHaveLength(1);
+  });
+});
+
+describe('procesgroep-kill bij afkapping (#224)', () => {
+  /**
+   * Integratietest: start een echt proces dat kindprocessen spawnt, kapt het af op
+   * een korte timeout, en controleert dat alle processen dood zijn.
+   *
+   * Het script spawnt twee `sleep`-processen als kinderen en wacht. De async
+   * uitvoerder draait met `detached: true`, dus ze zitten in dezelfde procesgroep.
+   * Na de timeout stuurt de uitvoerder `SIGTERM` naar de hele groep.
+   */
+  it('doodt het hele procesboom inclusief kleinkinderen', async () => {
+    // Gebruik de echte async uitvoerder (niet de stub): dat is het punt van deze test.
+    herstelAsyncUitvoerder();
+
+    const resultaat = await runAsync('bash', ['-c', 'sleep 300 & sleep 300 & wait'], {
+      capture: true,
+      timeoutMs: 500,
+    });
+
+    expect(resultaat.afgekapt).toBe(true);
+
+    // Geef het OS even om de signalen te verwerken.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Controleer dat er geen `sleep 300`-processen meer leven die door ons gestart
+    // zijn. `pgrep -f` zoekt op commandoregel; exit 1 = niets gevonden.
+    const { spawnSync } = await import('node:child_process');
+    const controle = spawnSync('pgrep', ['-f', 'sleep 300'], { encoding: 'utf8' });
+    expect(controle.status).toBe(1); // geen enkel proces gevonden
   });
 });

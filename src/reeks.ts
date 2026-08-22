@@ -40,7 +40,7 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
    */
   readonly leesRij: () => readonly T[];
   /** Werkt één item af. Gooit alleen als de machine zelf stuk is. */
-  readonly werkAf: (item: T) => U;
+  readonly werkAf: (item: T) => Promise<U>;
   /** Wat er van deze uitkomst in het runlog komt. */
   readonly beschrijf: (uitkomst: U) => RunRegel;
   /** Of dit als geslaagd telt. Twee niet-geslaagde runs op rij stoppen de reeks. */
@@ -87,7 +87,9 @@ export interface ReeksUitkomst {
  * zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in plaats van
  * de hele reeks te kosten.
  */
-export function draaiReeks<T extends ReeksItem, U>(opzet: ReeksOpzet<T, U>): ReeksUitkomst {
+export async function draaiReeks<T extends ReeksItem, U>(
+  opzet: ReeksOpzet<T, U>,
+): Promise<ReeksUitkomst> {
   const gedaanIssues = new Set<number>();
   const gemeld = new Set<number>();
   let gedaan = 0;
@@ -129,7 +131,7 @@ export function draaiReeks<T extends ReeksItem, U>(opzet: ReeksOpzet<T, U>): Ree
     let geslaagdeRun = false;
     gedaan += 1;
     try {
-      const { uitkomst } = metBoekhouding(
+      const { uitkomst } = await metBoekhouding(
         {
           paden: opzet.paden,
           nu: opzet.nu,

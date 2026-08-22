@@ -45,7 +45,7 @@ describe('draaiReeks — een gestrande inlevering (#282)', () => {
         leesRij: () => vasteRij(),
         werkAf: (item: ReeksItem) => {
           gezien.push(item.issue);
-          return werkAf(item);
+          return Promise.resolve(werkAf(item));
         },
         beschrijf: (u: { afloop: string }) => ({ uitkomst: u.afloop, kosten: 1 }),
         gelukt: (u: { afloop: string }) => u.afloop === 'klaar',
@@ -53,12 +53,12 @@ describe('draaiReeks — een gestrande inlevering (#282)', () => {
     };
   }
 
-  it('behandelt een GebruikersFout als een mislukte run en gaat door', () => {
+  it('behandelt een GebruikersFout als een mislukte run en gaat door', async () => {
     const { gezien, opzet } = opzetVoor((item) => {
       if (item.issue === 1) throw new GebruikersFout('main is verder gelopen en botst');
       return { afloop: 'klaar' };
     });
-    const uitkomst = draaiReeks(opzet);
+    const uitkomst = await draaiReeks(opzet);
 
     // #1 strandde, maar #2 en #3 draaiden alsnog.
     expect(gezien).toEqual([1, 2, 3]);
@@ -69,21 +69,21 @@ describe('draaiReeks — een gestrande inlevering (#282)', () => {
     expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#1 factory bouw afgebroken.*botst/);
   });
 
-  it('stopt alsnog na twee gestrande runs op rij', () => {
+  it('stopt alsnog na twee gestrande runs op rij', async () => {
     const { gezien, opzet } = opzetVoor(() => {
       throw new GebruikersFout('kon niet landen');
     });
-    const uitkomst = draaiReeks(opzet);
+    const uitkomst = await draaiReeks(opzet);
 
     expect(gezien).toEqual([1, 2]);
     expect(uitkomst.einde).toBe('twee-mislukt');
   });
 
-  it('laat een echte machinefout wél door — dat is niet "dit item kon niet landen"', () => {
+  it('laat een echte machinefout wél door — dat is niet "dit item kon niet landen"', async () => {
     const { opzet } = opzetVoor((item) => {
       if (item.issue === 1) throw new Error('spawn claude ENOENT');
       return { afloop: 'klaar' };
     });
-    expect(() => draaiReeks(opzet)).toThrow(/ENOENT/);
+    await expect(draaiReeks(opzet)).rejects.toThrow(/ENOENT/);
   });
 });

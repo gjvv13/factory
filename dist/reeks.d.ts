@@ -31,7 +31,7 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
      */
     readonly leesRij: () => readonly T[];
     /** Werkt één item af. Gooit alleen als de machine zelf stuk is. */
-    readonly werkAf: (item: T) => U;
+    readonly werkAf: (item: T) => Promise<U>;
     /** Wat er van deze uitkomst in het runlog komt. */
     readonly beschrijf: (uitkomst: U) => RunRegel;
     /** Of dit als geslaagd telt. Twee niet-geslaagde runs op rij stoppen de reeks. */
@@ -75,6 +75,6 @@ export interface ReeksUitkomst {
  * zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in plaats van
  * de hele reeks te kosten.
  */
-export declare function draaiReeks<T extends ReeksItem, U>(opzet: ReeksOpzet<T, U>): ReeksUitkomst;
+export declare function draaiReeks<T extends ReeksItem, U>(opzet: ReeksOpzet<T, U>): Promise<ReeksUitkomst>;
 /** De slotregel van een reeks: wat er gedaan is en wat het kostte. */
 export declare function meldReeks(uitkomst: ReeksUitkomst): void;

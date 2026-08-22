@@ -51,13 +51,112 @@ const spawnUitvoerder = (commando, argumenten, options) => {
     return { code: resultaat.status ?? 1, stdout: resultaat.stdout, stderr: resultaat.stderr };
 };
 let huidigeUitvoerder = spawnUitvoerder;
-/** Vervangt de proces-uitvoerder. Alleen bedoeld voor tests. */
+/**
+ * Vervangt de proces-uitvoerder. Alleen bedoeld voor tests.
+ *
+ * Zet ook de async uitvoerder op een wrapper die dezelfde callback aanroept, zodat
+ * tests die alleen de sync uitvoerder instellen automatisch ook de async paden
+ * (de werker-keten via `runAsync`, #224) dekken zonder apart `stelAsyncUitvoerderIn`
+ * te hoeven aanroepen.
+ */
 export function stelUitvoerderIn(uitvoerder) {
     huidigeUitvoerder = uitvoerder;
+    huidigeAsyncUitvoerder = (c, a, o) => Promise.resolve(uitvoerder(c, a, o));
 }
 /** Herstelt de echte proces-uitvoerder na een test. */
 export function herstelUitvoerder() {
     huidigeUitvoerder = spawnUitvoerder;
+    huidigeAsyncUitvoerder = spawnAsyncUitvoerder;
+}
+/**
+ * De echte async uitvoerder: `spawn` met `detached: true` zodat het kindproces in een
+ * eigen procesgroep draait. Bij een timeout stuurt `process.kill(-pid, 'SIGTERM')` het
+ * signaal naar de hele groep — dus ook naar kleinkinderen die `spawnSync`'s timeout
+ * niet raakt (#224).
+ */
+const spawnAsyncUitvoerder = (commando, argumenten, options) => new Promise((resolve) => {
+    const stdio = options.capture
+        ? ['ignore', 'pipe', 'pipe']
+        : ['ignore', 'inherit', 'inherit'];
+    const kind = spawn(commando, argumenten, {
+        cwd: options.cwd,
+        env: options.env ?? process.env,
+        stdio,
+        detached: true,
+    });
+    let stdoutBuf = '';
+    let stderrBuf = '';
+    kind.stdout?.on('data', (chunk) => {
+        stdoutBuf += chunk.toString();
+    });
+    kind.stderr?.on('data', (chunk) => {
+        stderrBuf += chunk.toString();
+    });
+    let afgekapt = false;
+    let timer;
+    if (options.timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+            afgekapt = true;
+            // Dood de hele procesgroep: `-pid` is POSIX voor "alle processen in de groep
+            // met pgid === pid". ESRCH betekent dat het al weg is — prima.
+            if (kind.pid !== undefined) {
+                try {
+                    process.kill(-kind.pid, 'SIGTERM');
+                }
+                catch (e) {
+                    if (e.code !== 'ESRCH')
+                        throw e;
+                }
+            }
+        }, options.timeoutMs);
+    }
+    kind.on('error', (err) => {
+        if (timer !== undefined)
+            clearTimeout(timer);
+        resolve({ code: 1, stdout: '', startfout: err.message });
+    });
+    kind.on('close', (code) => {
+        if (timer !== undefined)
+            clearTimeout(timer);
+        if (afgekapt) {
+            resolve({
+                code: code ?? 124,
+                stdout: stdoutBuf,
+                stderr: stderrBuf,
+                afgekapt: true,
+            });
+            return;
+        }
+        resolve({ code: code ?? 1, stdout: stdoutBuf, stderr: stderrBuf });
+    });
+});
+let huidigeAsyncUitvoerder = spawnAsyncUitvoerder;
+/** Vervangt de async proces-uitvoerder. Alleen bedoeld voor tests. */
+export function stelAsyncUitvoerderIn(uitvoerder) {
+    huidigeAsyncUitvoerder = uitvoerder;
+}
+/** Herstelt de echte async proces-uitvoerder na een test. */
+export function herstelAsyncUitvoerder() {
+    huidigeAsyncUitvoerder = spawnAsyncUitvoerder;
+}
+/**
+ * Async variant van `run()`: zelfde interpretatie, maar via de async uitvoerder die
+ * een procesgroep beheert. Alleen de werker-keten gebruikt dit pad (#224).
+ */
+export async function runAsync(commando, argumenten, options = {}) {
+    const uitkomst = await huidigeAsyncUitvoerder(commando, argumenten, options);
+    if (uitkomst.startfout !== undefined) {
+        throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
+    }
+    if (uitkomst.code !== 0 && options.toleranter !== true && uitkomst.afgekapt !== true) {
+        throw new GebruikersFout(`'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`);
+    }
+    return {
+        code: uitkomst.code,
+        stdout: uitkomst.stdout,
+        stderr: uitkomst.stderr ?? '',
+        afgekapt: uitkomst.afgekapt === true,
+    };
 }
 /**
  * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet

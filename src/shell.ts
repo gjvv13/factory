@@ -80,6 +80,19 @@ export type Uitvoerder = (
   options: RunOptions,
 ) => ProcesUitkomst;
 
+/**
+ * Async variant van `Uitvoerder`, voor aanroepen die een procesgroep moeten beheren.
+ *
+ * De werker-keten (#224) gebruikt deze variant: `spawn` met `detached: true` zet het
+ * kindproces in een eigen procesgroep, en bij een timeout doodt `process.kill(-pid)`
+ * de hele groep — inclusief kleinkinderen die `spawnSync`'s timeout niet raakt.
+ */
+export type AsyncUitvoerder = (
+  commando: string,
+  argumenten: string[],
+  options: RunOptions,
+) => Promise<ProcesUitkomst>;
+
 const spawnUitvoerder: Uitvoerder = (commando, argumenten, options) => {
   const resultaat = spawnSync(commando, argumenten, {
     cwd: options.cwd,
@@ -112,14 +125,126 @@ const spawnUitvoerder: Uitvoerder = (commando, argumenten, options) => {
 
 let huidigeUitvoerder: Uitvoerder = spawnUitvoerder;
 
-/** Vervangt de proces-uitvoerder. Alleen bedoeld voor tests. */
+/**
+ * Vervangt de proces-uitvoerder. Alleen bedoeld voor tests.
+ *
+ * Zet ook de async uitvoerder op een wrapper die dezelfde callback aanroept, zodat
+ * tests die alleen de sync uitvoerder instellen automatisch ook de async paden
+ * (de werker-keten via `runAsync`, #224) dekken zonder apart `stelAsyncUitvoerderIn`
+ * te hoeven aanroepen.
+ */
 export function stelUitvoerderIn(uitvoerder: Uitvoerder): void {
   huidigeUitvoerder = uitvoerder;
+  huidigeAsyncUitvoerder = (c, a, o) => Promise.resolve(uitvoerder(c, a, o));
 }
 
 /** Herstelt de echte proces-uitvoerder na een test. */
 export function herstelUitvoerder(): void {
   huidigeUitvoerder = spawnUitvoerder;
+  huidigeAsyncUitvoerder = spawnAsyncUitvoerder;
+}
+
+/**
+ * De echte async uitvoerder: `spawn` met `detached: true` zodat het kindproces in een
+ * eigen procesgroep draait. Bij een timeout stuurt `process.kill(-pid, 'SIGTERM')` het
+ * signaal naar de hele groep — dus ook naar kleinkinderen die `spawnSync`'s timeout
+ * niet raakt (#224).
+ */
+const spawnAsyncUitvoerder: AsyncUitvoerder = (commando, argumenten, options) =>
+  new Promise((resolve) => {
+    const stdio: ['ignore', 'pipe', 'pipe'] | ['ignore', 'inherit', 'inherit'] = options.capture
+      ? ['ignore', 'pipe', 'pipe']
+      : ['ignore', 'inherit', 'inherit'];
+    const kind = spawn(commando, argumenten, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      stdio,
+      detached: true,
+    });
+
+    let stdoutBuf = '';
+    let stderrBuf = '';
+    kind.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBuf += chunk.toString();
+    });
+    kind.stderr?.on('data', (chunk: Buffer) => {
+      stderrBuf += chunk.toString();
+    });
+
+    let afgekapt = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    if (options.timeoutMs !== undefined) {
+      timer = setTimeout(() => {
+        afgekapt = true;
+        // Dood de hele procesgroep: `-pid` is POSIX voor "alle processen in de groep
+        // met pgid === pid". ESRCH betekent dat het al weg is — prima.
+        if (kind.pid !== undefined) {
+          try {
+            process.kill(-kind.pid, 'SIGTERM');
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== 'ESRCH') throw e;
+          }
+        }
+      }, options.timeoutMs);
+    }
+
+    kind.on('error', (err: Error) => {
+      if (timer !== undefined) clearTimeout(timer);
+      resolve({ code: 1, stdout: '', startfout: err.message });
+    });
+
+    kind.on('close', (code: number | null) => {
+      if (timer !== undefined) clearTimeout(timer);
+      if (afgekapt) {
+        resolve({
+          code: code ?? 124,
+          stdout: stdoutBuf,
+          stderr: stderrBuf,
+          afgekapt: true,
+        });
+        return;
+      }
+      resolve({ code: code ?? 1, stdout: stdoutBuf, stderr: stderrBuf });
+    });
+  });
+
+let huidigeAsyncUitvoerder: AsyncUitvoerder = spawnAsyncUitvoerder;
+
+/** Vervangt de async proces-uitvoerder. Alleen bedoeld voor tests. */
+export function stelAsyncUitvoerderIn(uitvoerder: AsyncUitvoerder): void {
+  huidigeAsyncUitvoerder = uitvoerder;
+}
+
+/** Herstelt de echte async proces-uitvoerder na een test. */
+export function herstelAsyncUitvoerder(): void {
+  huidigeAsyncUitvoerder = spawnAsyncUitvoerder;
+}
+
+/**
+ * Async variant van `run()`: zelfde interpretatie, maar via de async uitvoerder die
+ * een procesgroep beheert. Alleen de werker-keten gebruikt dit pad (#224).
+ */
+export async function runAsync(
+  commando: string,
+  argumenten: string[],
+  options: RunOptions = {},
+): Promise<RunResult> {
+  const uitkomst = await huidigeAsyncUitvoerder(commando, argumenten, options);
+  if (uitkomst.startfout !== undefined) {
+    throw new GebruikersFout(`Kon '${commando}' niet uitvoeren: ${uitkomst.startfout}`);
+  }
+  if (uitkomst.code !== 0 && options.toleranter !== true && uitkomst.afgekapt !== true) {
+    throw new GebruikersFout(
+      `'${commando} ${argumenten.join(' ')}' faalde met code ${String(uitkomst.code)}`,
+    );
+  }
+  return {
+    code: uitkomst.code,
+    stdout: uitkomst.stdout,
+    stderr: uitkomst.stderr ?? '',
+    afgekapt: uitkomst.afgekapt === true,
+  };
 }
 
 /**
