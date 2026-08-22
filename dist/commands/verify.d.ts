@@ -1,3 +1,17 @@
+interface Stap {
+    readonly script: string;
+    readonly titel: string;
+    readonly snel: boolean;
+    readonly preCommit: boolean;
+    /** Gezet bij teststappen die coverage kunnen meten; bepaalt de rapportmap. */
+    readonly coverageNaam?: string;
+}
+/**
+ * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
+ * wordt overgeslagen, zodat dezelfde poort werkt in de factory (die geen
+ * e2e-tests heeft) en in een applicatie (die ze wel heeft).
+ */
+export declare const STAPPEN: readonly Stap[];
 /**
  * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
  * gemergede cijfer (de echte gecombineerde dekking); ontbreekt dat, dan valt hij terug op
@@ -32,3 +46,4 @@ export interface VerifyOpties {
     readonly preCommit?: boolean;
 }
 export declare function verify(opties?: VerifyOpties): void;
+export {};

@@ -23,6 +23,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:contract": "vitest run --config vitest.contract.config.ts",
+    "test:pact-verify": "vitest run --config vitest.pact-verify.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "verify": "factory verify",
     "release": "factory release",

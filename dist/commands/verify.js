@@ -9,7 +9,7 @@ import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shel
  * wordt overgeslagen, zodat dezelfde poort werkt in de factory (die geen
  * e2e-tests heeft) en in een applicatie (die ze wel heeft).
  */
-const STAPPEN = [
+export const STAPPEN = [
     { script: 'format:check', titel: 'Opmaak (prettier)', snel: true, preCommit: true },
     { script: 'lint', titel: 'Statische analyse (eslint)', snel: true, preCommit: true },
     { script: 'typecheck', titel: 'Types (tsc)', snel: true, preCommit: true },
@@ -20,6 +20,12 @@ const STAPPEN = [
         snel: true,
         preCommit: false,
         coverageNaam: 'contract',
+    },
+    {
+        script: 'test:pact-verify',
+        titel: 'Pact provider-verificatie',
+        snel: false,
+        preCommit: false,
     },
     {
         script: 'test:integration',

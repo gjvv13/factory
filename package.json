@@ -23,6 +23,10 @@
       "types": "./configs/vitest-contract.d.ts",
       "default": "./configs/vitest-contract.js"
     },
+    "./vitest-pact-verify": {
+      "types": "./configs/vitest-pact-verify.d.ts",
+      "default": "./configs/vitest-pact-verify.js"
+    },
     "./vitest-e2e": {
       "types": "./configs/vitest-e2e.d.ts",
       "default": "./configs/vitest-e2e.js"
