@@ -265,7 +265,7 @@ export function orkestreerBouw(opties = {}) {
             // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
             // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
             leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, opties.leverIn ?? inleveren),
+            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren),
             beschrijf: beschrijfBouw,
             gelukt: (u) => u.afloop === 'klaar',
         }));
@@ -280,7 +280,7 @@ export function orkestreerBouw(opties = {}) {
         // Er is nog geen onbemande bouw-nacht; wie dit start is een mens (#265).
         pot: 'interactief',
         item: eerste,
-    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, opties.leverIn ?? inleveren), beschrijfBouw);
+    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren), beschrijfBouw);
 }
 /**
  * Wat er van een bouw-run in het log komt.
@@ -333,7 +333,7 @@ export function reviewPrompt(item, werkmap, factoryMap) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, leverIn) {
+function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -371,6 +371,7 @@ function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, leverIn) {
             extraMappen: [factoryMap, ...bronMappen],
             budgetUsd,
             model: MODEL,
+            effort,
         });
     }
     catch (fout) {
@@ -393,6 +394,7 @@ function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, leverIn) {
             extraMappen: [factoryMap],
             budgetUsd: reviewBudgetUsd,
             model: MODEL,
+            effort,
         });
     }
     verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);

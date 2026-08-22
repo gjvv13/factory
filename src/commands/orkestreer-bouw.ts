@@ -368,6 +368,7 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
             wortel,
             instellingen.bouwBudgetPerRun,
             instellingen.reviewBudgetPerRun,
+            instellingen.werkerEffort,
             opties.leverIn ?? inleveren,
           ),
         beschrijf: beschrijfBouw,
@@ -395,6 +396,7 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
         wortel,
         instellingen.bouwBudgetPerRun,
         instellingen.reviewBudgetPerRun,
+        instellingen.werkerEffort,
         opties.leverIn ?? inleveren,
       ),
     beschrijfBouw,
@@ -474,6 +476,7 @@ function bouwAf(
   wortel: string,
   budgetUsd: number,
   reviewBudgetUsd: number,
+  effort: string,
   leverIn: (opties: InleverenOpties) => void,
 ): BouwUitkomst {
   kop(`#${String(item.issue)} — ${item.titel}`);
@@ -519,6 +522,7 @@ function bouwAf(
       extraMappen: [factoryMap, ...bronMappen],
       budgetUsd,
       model: MODEL,
+      effort,
     });
   } catch (fout) {
     ruimBronMapOp(bronWortel);
@@ -541,6 +545,7 @@ function bouwAf(
       extraMappen: [factoryMap],
       budgetUsd: reviewBudgetUsd,
       model: MODEL,
+      effort,
     });
   }
 

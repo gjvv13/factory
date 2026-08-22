@@ -190,6 +190,7 @@ export function orkestreer(opties = {}) {
                     // Dezelfde tijdslimiet als de nacht: een hangende werker in een reeks van
                     // vier is even duur als een hangende werker om 04:00 (#206).
                     timeoutMs: instellingen.runTimeoutMs,
+                    effort: instellingen.werkerEffort,
                 }),
                 beschrijf: beschrijfRun,
                 gelukt: (u) => u.afloop === 'klaar',
@@ -248,7 +249,10 @@ export function orkestreer(opties = {}) {
             // Jij startte deze run, dus hij komt niet uit de pot van de nacht.
             pot: 'interactief',
             item: eerste,
-        }, () => werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun }), beschrijfRun);
+        }, () => werkAf(eerste, cwd, wortel, {
+            budgetUsd: leesInstellingen(paden).budgetPerRun,
+            effort: leesInstellingen(paden).werkerEffort,
+        }), beschrijfRun);
     }
     finally {
         geefLockVrij();
@@ -289,6 +293,7 @@ function draaiNacht(cwd, wortel, paden, nu) {
         // Alleen onbemand een grens: een nacht die vastloopt kost de hele rij, terwijl een
         // run die ik zelf start onder mijn ogen gebeurt en gewoon met ctrl-c stopt.
         timeoutMs: instellingen.runTimeoutMs,
+        effort: instellingen.werkerEffort,
     };
     const versie = eigenVersie();
     kop(`Nacht van ${kalenderdag(nu)}`);
@@ -369,6 +374,7 @@ function werkAf(item, cwd, wortel, draai) {
             budgetUsd: draai.budgetUsd,
             ...(draai.timeoutMs === undefined ? {} : { timeoutMs: draai.timeoutMs }),
             model: MODEL,
+            ...(draai.effort === undefined ? {} : { effort: draai.effort }),
             ...(draai.env === undefined ? {} : { env: draai.env }),
         });
         // De afloop komt uit `verwerk` en niet uit de werker: schrijft de body niet weg,
@@ -627,10 +633,12 @@ function werkAntwoordAf(issue, tekst, escalatie, opties, cwd) {
             sessie: escalatie.sessie,
             hervat: true,
         };
+    const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
     const uitkomst = draaiWerker({
         ...opdracht,
-        budgetUsd: leesInstellingen(opties.paden ?? standaardPaden()).budgetPerRun,
+        budgetUsd: instellingen.budgetPerRun,
         model: MODEL,
+        effort: instellingen.werkerEffort,
     });
     if (uitkomst.sessieWeg === true) {
         // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat

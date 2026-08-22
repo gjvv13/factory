@@ -47,6 +47,8 @@ export interface Instellingen {
     readonly reviewBudgetPerRun: number;
     /** Tijdsgrens per werker-run, in milliseconden (#206). */
     readonly runTimeoutMs: number;
+    /** Reasoning-effort van elke werker, als `--effort` (#290). */
+    readonly werkerEffort: 'low' | 'medium' | 'high';
     /** Undefined als er (nog) geen token in het bestand staat. */
     readonly token?: string;
 }

@@ -241,6 +241,8 @@ export interface WerkerOpdracht {
     readonly extraMappen?: readonly string[];
     readonly budgetUsd: number;
     readonly model: string;
+    /** Reasoning-effort, als `--effort` (#290); afwezig laat claude zijn eigen default kiezen. */
+    readonly effort?: string;
     /**
      * Kap de run af na zoveel milliseconden (#206). Zonder grens hing een werker de hele
      * nacht: het slot blijft staan, de rij komt niet vooruit, en 's ochtends staat er één

@@ -80,6 +80,14 @@ describe('werkerArgumenten', () => {
     }
   });
 
+  it('geeft --effort mee als de opdracht een effort heeft, en laat het weg zonder', () => {
+    const met = werkerArgumenten({ ...OPDRACHT, effort: 'medium' });
+    expect(met[met.indexOf('--effort') + 1]).toBe('medium');
+
+    // Zonder effort geen vlag: dan kiest claude zijn eigen default (#290).
+    expect(werkerArgumenten(OPDRACHT)).not.toContain('--effort');
+  });
+
   it('geeft de factory-spiegel mee als extra leesmap', () => {
     const args = werkerArgumenten(OPDRACHT);
 
@@ -173,6 +181,17 @@ describe('draaiWerker', () => {
     const uitkomst = draaiWerker(OPDRACHT);
 
     expect(uitkomst.weigeringen).toBe(6);
+    // Sinds #290 zegt `geweigerd` wélk commando raakte, niet kaal "Bash" — dat is de
+    // data waarmee je de rechtenlijst gericht kunt verbreden. De zes pogingen zijn
+    // printf, tee, cp, python3, dd (printf twee keer, dus vijf labels).
+    expect([...(uitkomst.geweigerd ?? [])].sort()).toEqual([
+      'cp',
+      'dd',
+      'printf',
+      'python3',
+      'tee',
+    ]);
+    expect(uitkomst.geweigerd).not.toContain('Bash');
     // En hij kwam er niet omheen, dus er is geen uitwerking — alleen een vraag.
     expect(uitkomst.afloop).toBe('escalatie');
   });
