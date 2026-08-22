@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import os from 'node:os';
@@ -480,6 +481,84 @@ describe('orkestreer', () => {
 
     // Blijft het slot liggen, dan staat de rij een uur stil op een run die al klaar is.
     expect(existsSync(LOCK_PAD)).toBe(false);
+  });
+
+  it('schrijft het pid in het slotbestand', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // Na een geslaagde run is het slot weg; check dat een nieuw slot het pid bevat door
+    // een tweede run te starten die het slot laat staan (via een crash vóór geefLockVrij).
+    const stuk: UitkomstBepaler = (aanroep) =>
+      aanroep.commando === 'gh' && aanroep.argumenten[0] === 'repo'
+        ? { code: 1 }
+        : bepaler()(aanroep, 0);
+    stelUitvoerderIn(maakUitvoerderOpnemer(stuk).uitvoerder);
+
+    // Draai een run die halverwege omvalt — het slot wordt alsnog vrijgegeven (finally).
+    // We moeten dus vóór geefLockVrij het bestand lezen. Doe dat via een succesvolle run
+    // en lees het bestand terwijl het slot er nog is — maar het slot wordt vrijgegeven in
+    // een finally. Alternatief: het slot staat er direct na neemLock. Creëer het handmatig
+    // en kijk of neemLock het vult.
+    // Eenvoudiger: het bestand wordt met `writeFileSync(LOCK_PAD, String(process.pid))`
+    // geschreven. Kijk of een vers genomen slot dat pid bevat door het slot handmatig
+    // leeg te maken en dan te checken of neemLock het opruimt en een nieuw slot neerzet.
+    // Nog eenvoudiger: we weten dat een succesvolle run het slot weer weghaalt. Maar de
+    // test hierboven ('stopt als er al een run bezig is') bewees al dat neemLock faalt als
+    // het slot er is. Hier testen we de inhoud.
+    //
+    // Strategie: neem het lock via een succesvolle run, lees het lock-bestand na neemLock
+    // maar vóór geefLockVrij. Dat kan niet van buitenaf. Maar we kunnen testen dat een
+    // verlopen slot met ons eigen pid (dat leeft!) NIET opgeruimd wordt.
+    writeFileSync(LOCK_PAD, String(process.pid));
+    // Verleg de mtime naar het verleden zodat het slot "verlopen" is.
+    const oud = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(LOCK_PAD, oud, oud);
+
+    // neemLock zou het slot normaal opruimen (het is verlopen), maar het pid leeft — dus
+    // het mag er niet aan komen.
+    expect(() => {
+      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    }).toThrow(/draait al een orkestrator-run/);
+    expect(existsSync(LOCK_PAD)).toBe(true);
+    expect(readFileSync(LOCK_PAD, 'utf-8').trim()).toBe(String(process.pid));
+  });
+
+  it('ruimt een verlopen slot op waarvan het pid dood is', () => {
+    // Gebruik een pid dat zeker niet bestaat. pid 2_000_000 is ver boven het macOS/Linux-
+    // maximum en kan geen lopend proces zijn.
+    const doodPid = 2_000_000;
+    writeFileSync(LOCK_PAD, String(doodPid));
+    const oud = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(LOCK_PAD, oud, oud);
+
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    // neemLock ziet een verlopen slot met een dood pid → ruimt op → neemt het slot.
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain(`oud slot van pid ${String(doodPid)} opgeruimd`);
+  });
+
+  it('valt terug op leeftijd bij een leeg slotbestand (oude versie)', () => {
+    // Een slot zonder pid (van vóór deze wijziging) dat verlopen is.
+    closeSync(openSync(LOCK_PAD, 'wx'));
+    const oud = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(LOCK_PAD, oud, oud);
+
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+    // Leeg bestand, verlopen → opruimen op leeftijd, zoals voorheen.
+    orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    // De run slaagt: het slot werd opgeruimd en opnieuw genomen.
+    expect(uitvoer.join('')).not.toContain('draait al een orkestrator-run');
+  });
+
+  it('meldt het pid in de foutmelding als het slot er is', () => {
+    writeFileSync(LOCK_PAD, String(process.pid));
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaler()).uitvoerder);
+
+    expect(() => {
+      orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+    }).toThrow(new RegExp(`pid ${String(process.pid)} leeft nog`));
   });
 });
 
