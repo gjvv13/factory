@@ -183,7 +183,12 @@ export function uitvoerVan(commando, argumenten, cwd) {
  * dus in een niet-interactieve shell staat hij niet altijd los in de PATH.
  */
 export function pakketbeheerder() {
-    const heeftPnpm = spawnSync('pnpm', ['--version'], { stdio: 'ignore' }).status === 0;
+    // Via de opneembare uitvoerder, niet via een kale `spawnSync` (#293): anders start
+    // élke test die een pijplijncommando met `pakketbeheerder` raakt (release, inleveren,
+    // promote) een echt `pnpm`-subproces. Onder machinebelasting liep dat in zijn timeout
+    // en werd de hele verify flaky rood. In productie is de uitvoerder de echte spawn, dus
+    // het gedrag verandert niet; in een test antwoordt de opnemer zonder subproces.
+    const heeftPnpm = huidigeUitvoerder('pnpm', ['--version'], { capture: true }).code === 0;
     return heeftPnpm
         ? { commando: 'pnpm', basisArgumenten: [] }
         : { commando: 'corepack', basisArgumenten: ['pnpm'] };

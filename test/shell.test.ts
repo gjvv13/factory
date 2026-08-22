@@ -11,6 +11,7 @@ import {
   isDnsBlip,
   isGezondNaStart,
   run,
+  pakketbeheerder,
   runMetHerhaling,
   schrijfWorkflowUitvoer,
   stelStarterIn,
@@ -285,5 +286,32 @@ describe('een afgekapte aanroep', () => {
     stelUitvoerderIn(() => ({ code: 1, stdout: '', stderr: 'stuk' }));
 
     expect(() => run('git', ['push'])).toThrow(/faalde met code 1/);
+  });
+});
+
+describe('pakketbeheerder', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('bepaalt pnpm via de opneembare uitvoerder, zonder een echt subproces (#293)', () => {
+    // De kern van #293: geen kale `spawnSync` meer. Een test die dit raakt (release,
+    // inleveren, promote) mag geen echt `pnpm --version` starten, anders wordt hij flaky
+    // onder machinebelasting.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(() => ({ code: 0 }));
+    stelUitvoerderIn(uitvoerder);
+
+    const resultaat = pakketbeheerder();
+
+    expect(aanroepen).toContainEqual(
+      expect.objectContaining({ commando: 'pnpm', argumenten: ['--version'] }),
+    );
+    expect(resultaat).toEqual({ commando: 'pnpm', basisArgumenten: [] });
+  });
+
+  it('valt terug op corepack als pnpm niet los te draaien is', () => {
+    stelUitvoerderIn(() => ({ code: 1, stdout: '', startfout: 'spawn pnpm ENOENT' }));
+
+    expect(pakketbeheerder()).toEqual({ commando: 'corepack', basisArgumenten: ['pnpm'] });
   });
 });
