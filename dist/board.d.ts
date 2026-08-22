@@ -81,18 +81,33 @@ export declare function zetKolom(issue: number, kolom: Kolom, cwd?: string): boo
  */
 export declare function plaatsComment(issue: number, tekst: string, cwd?: string): void;
 /**
- * De backlog-issues die tussen twee tags zijn gemerged, uit de merge-commits.
+ * De backlog-issues die tussen twee tags zijn gemerged, uit de merge-commits en
+ * trailers.
  *
  * GitHub schrijft de branchnaam in het onderwerp van een merge-commit
  * ("Merge pull request #140 from gjvv13/slice/128-1"), dus de koppeling issue↔release
  * ligt al vast in de git-historie en hoeft nergens apart bijgehouden te worden.
  * Branches zonder slice-vorm leveren niets op — dat is bedoeld: van de tien merges in
  * v1.15.1 waren er vijf een fix- of docs-branch.
+ *
+ * Sinds #222 leest `parseIssuesUitLog` ook `Refs/Closes/Fixes #N`-trailers aan het
+ * begin van een regel. Zo komen items die via een trailer in een commit staan (maar
+ * niet in de branchnaam) ook mee naar Done bij een release.
  */
 /**
- * Parset ruwe `git log --format=%s`-uitvoer naar ontdubbelde, gesorteerde
- * issuenummers. Geëxporteerd zodat de contract-tests de git-log-interpretatie
- * kunnen vastpinnen tegen een opgenomen uitvoer, los van het git-commando.
+ * Parset ruwe `git log --format=%B`-uitvoer naar ontdubbelde, gesorteerde
+ * issuenummers. Herkent twee bronnen:
+ *
+ * 1. Merge-onderwerpregels: `Merge pull request #N from …/slice/<issue>-<n>`
+ * 2. Trailers aan het begin van een regel: `Refs/Closes/Fixes[:]  #<issue>`
+ *    (case-insensitief, met en zonder dubbele punt).
+ *
+ * Een `#N` midden in een zin (geen regelbegin) wordt bewust genegeerd — alleen
+ * expliciete trailers tellen, zodat toevallige vermeldingen geen board-actie
+ * triggeren (#222).
+ *
+ * Geëxporteerd zodat de contract-tests de git-log-interpretatie kunnen
+ * vastpinnen tegen een opgenomen uitvoer, los van het git-commando.
  */
 export declare function parseIssuesUitLog(log: string): number[];
 export declare function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): number[];
