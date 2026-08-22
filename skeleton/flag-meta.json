@@ -1,0 +1,10 @@
+{
+  "ping": {
+    "permanent": true,
+    "beschrijving": "killswitch voor het ping-commando"
+  },
+  "whatsapp-channel": {
+    "verlooptOp": "2026-09-01",
+    "beschrijving": "WhatsApp-kanaal slice 1"
+  }
+}

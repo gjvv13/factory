@@ -21,6 +21,11 @@ declare const appConfigSchema: z.ZodObject<{
         "merge-queue": "merge-queue";
         lokaal: "lokaal";
     }>>;
+    flagVerloop: z.ZodDefault<z.ZodEnum<{
+        uit: "uit";
+        waarschuw: "waarschuw";
+        blokkeer: "blokkeer";
+    }>>;
     audit: z.ZodDefault<z.ZodEnum<{
         uit: "uit";
         waarschuw: "waarschuw";
