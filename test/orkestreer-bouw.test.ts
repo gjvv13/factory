@@ -874,6 +874,51 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('Code-review niet gelukt');
   });
 
+  it('levert de bouw in als de review-claude niet kan starten (#289)', () => {
+    // De review-run gooit een startfout (commando niet gevonden, spawn-fout e.d.).
+    // Dat mag het inleveren niet blokkeren: de bouw is geslaagd.
+    const bouwEnvelop = envelop('claude-bouw-klaar');
+    let claudeTeller = 0;
+    const boardBepaler = machine(bouwEnvelop);
+    const bepaler: UitkomstBepaler = (aanroep, index) => {
+      if (aanroep.commando === 'claude') {
+        claudeTeller++;
+        if (claudeTeller === 2) {
+          // Startfout: `run()` gooit onvoorwaardelijk, vóór de toleranter-check.
+          return { code: 1, stdout: '', startfout: 'spawn claude ENOENT' };
+        }
+        return { stdout: bouwEnvelop };
+      }
+      // Delegeer de rest naar dezelfde boardlogica als `machine()`.
+      return boardBepaler(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaler);
+    stelUitvoerderIn(uitvoerder);
+
+    const geleverd: unknown[] = [];
+    orkestreerBouw({
+      eenmalig: true,
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: (opties) => geleverd.push(opties),
+    });
+
+    // Er is ingeleverd ondanks de startfout.
+    expect(geleverd).toHaveLength(1);
+    // Er staat een PR-comment dat de review niet gelukt is.
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(1);
+    const body = prComment[0]?.argumenten.find((a) => a.startsWith('body=')) ?? '';
+    expect(body).toContain('Code-review niet gelukt');
+    expect(body).toContain('review kon niet starten');
+  });
+
   it('plaatst bevindingen op het issue als inleveren mislukt', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
       machine(envelop('claude-bouw-klaar'), envelop('claude-review-klaar')),

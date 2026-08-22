@@ -536,17 +536,29 @@ function bouwAf(
 
   // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
   // Na het inleveren is de worktree weg — de review móét ervoor draaien.
+  // Een throw uit de review — ook een startfout die `run()` onvoorwaardelijk gooit —
+  // mag het inleveren niet blokkeren: de bouw is geslaagd, de PR hoort er te komen (#289).
   let reviewUitkomst: ReviewUitkomst | undefined;
   if (uitkomst.afloop === 'klaar') {
-    reviewUitkomst = draaiReviewer({
-      prompt: reviewPrompt(item, werkmap, factoryMap),
-      werkmap,
-      sessie: randomUUID(),
-      extraMappen: [factoryMap],
-      budgetUsd: reviewBudgetUsd,
-      model: MODEL,
-      effort,
-    });
+    const reviewSessie = randomUUID();
+    try {
+      reviewUitkomst = draaiReviewer({
+        prompt: reviewPrompt(item, werkmap, factoryMap),
+        werkmap,
+        sessie: reviewSessie,
+        extraMappen: [factoryMap],
+        budgetUsd: reviewBudgetUsd,
+        model: MODEL,
+        effort,
+      });
+    } catch (fout) {
+      reviewUitkomst = {
+        afloop: 'mislukt',
+        sessie: reviewSessie,
+        weigeringen: 0,
+        fout: `review kon niet starten: ${fout instanceof Error ? fout.message : String(fout)}`,
+      };
+    }
   }
 
   verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);
