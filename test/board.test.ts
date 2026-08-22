@@ -238,7 +238,7 @@ describe('issuesUitBereik', () => {
 
     issuesUitBereik('v1.0.0', 'v1.1.0');
 
-    expect(aanroepen[0]?.argumenten).toEqual(['log', '--format=%s', 'v1.0.0..v1.1.0']);
+    expect(aanroepen[0]?.argumenten).toEqual(['log', '--format=%B', 'v1.0.0..v1.1.0']);
   });
 
   it('levert niets op bij een leeg bereik', () => {

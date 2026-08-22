@@ -112,7 +112,7 @@ describe('afronden', () => {
 
     expect(aanroepen.map((a) => a.argumenten)).toContainEqual([
       'log',
-      '--format=%s',
+      '--format=%B',
       'v1.0.0..v1.1.0',
     ]);
     expect(aanroepen.find((a) => a.argumenten[0] === 'project')?.argumenten).toContain(
@@ -130,6 +130,28 @@ describe('afronden', () => {
     ]);
     expect(comment?.argumenten[6]).toContain('v1.1.0');
     expect(gesloten(aanroepen)).toEqual(['185']);
+  });
+
+  it('verplaatst zowel het branch-item als een trailer-item naar Done (#222)', () => {
+    // Branch slice/182-1 → issue 182 (bestaand gedrag).
+    // Commit met "Refs: #183" → issue 183 (nieuw: trailer-parse).
+    const logMetTrailer = [
+      'Merge pull request #300 from gjvv13/slice/182-1',
+      '',
+      'trailers uit de git-historie meenemen',
+      '',
+      'Refs: #183',
+    ].join('\n');
+
+    // Elke board-opzoeking slaagt: het item staat op Uitrollen en verhuist naar Done.
+    const { uitvoerder, aanroepen } = opnemer({ log: logMetTrailer });
+    stelUitvoerderIn(uitvoerder);
+
+    afronden('v1.0.0', 'v1.1.0');
+
+    // Beide issues worden gesloten.
+    expect(gesloten(aanroepen)).toEqual(expect.arrayContaining(['182', '183']));
+    expect(gesloten(aanroepen)).toHaveLength(2);
   });
 
   it('sluit de ouder-epic zodra zijn laatste slice dicht is', () => {

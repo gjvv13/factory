@@ -389,7 +389,7 @@ describe('promote', () => {
 
     expect(aanroepen.map((a) => a.argumenten)).toContainEqual([
       'log',
-      '--format=%s',
+      '--format=%B',
       'v0.9.0..v1.0.0',
     ]);
     expect(aanroepen.find((a) => a.argumenten[0] === 'project')?.argumenten).toContain(
