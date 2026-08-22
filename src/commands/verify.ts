@@ -11,6 +11,8 @@ import {
   BASISLIJN_BESTAND,
 } from '../dekking-basislijn.js';
 import type { Verschil } from '../dekking-basislijn.js';
+import { leesDekkingsConfig } from '../dekking-config.js';
+import type { DekkingsConfig } from '../dekking-config.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -116,13 +118,13 @@ function beschrijfVerschil(verschil: Verschil): string {
  * oordeel. Een regressie waarschuwt (`waarschuw`) of laat verify falen (`blokkeer`); winst schuift
  * de basislijn omhoog. De aanroeper heeft `dekkingsRatchet === 'uit'` al uitgesloten.
  */
-function pasRatchetToe(config: AppConfig, nu: Dekkingscijfers): void {
-  const oordeel = beoordeelRatchet(nu, leesBasislijn(config.appDir), config.dekkingsTolerantie);
+function pasRatchetToe(config: DekkingsConfig, nu: Dekkingscijfers): void {
+  const oordeel = beoordeelRatchet(nu, leesBasislijn(config.dir), config.dekkingsTolerantie);
   kop('Dekkings-ratchet');
 
   if (oordeel.bootstrap) {
     if (oordeel.nieuweBasislijn !== undefined) {
-      schrijfBasislijn(config.appDir, oordeel.nieuweBasislijn);
+      schrijfBasislijn(config.dir, oordeel.nieuweBasislijn);
     }
     process.stdout.write(
       `  basislijn aangemaakt — commit ${BASISLIJN_BESTAND} (lines ${String(nu.lines)}%)\n`,
@@ -143,7 +145,7 @@ function pasRatchetToe(config: AppConfig, nu: Dekkingscijfers): void {
   }
 
   if (oordeel.nieuweBasislijn !== undefined) {
-    schrijfBasislijn(config.appDir, oordeel.nieuweBasislijn);
+    schrijfBasislijn(config.dir, oordeel.nieuweBasislijn);
     process.stdout.write(
       `  basislijn verhoogd: ${oordeel.verhogingen.map(beschrijfVerschil).join(', ')} — commit ${BASISLIJN_BESTAND}\n`,
     );
@@ -329,15 +331,15 @@ export function verify(opties: VerifyOpties = {}): void {
     // Voeg de per-soort istanbul-maps samen tot één gecombineerd cijfer; dat is de
     // eerlijke basis voor de drempel (i.p.v. de hoogste losse soort).
     const gecombineerd = schrijfGecombineerdeDekking(repoDir);
-    const config = appConfigVanRepo(repoDir);
-    const minimum = config?.dekkingsMinimum;
+    const dekkingsConfig = leesDekkingsConfig(repoDir);
+    const minimum = dekkingsConfig?.dekkingsMinimum;
     // De vaste bodem toetst tegen de regeldekking; de ratchet (hieronder) bewaakt alle vier.
     const oordeel = beoordeelDekking(dekkingen, minimum, gecombineerd?.lines);
     if (oordeel !== undefined && minimum !== undefined) {
       kop('Dekkingsdrempel');
       if (oordeel.faalt) {
         throw new GebruikersFout(
-          `Te weinig dekking: totaal ${String(oordeel.totaal)}% < drempel ${String(minimum)}% (dekkingsMinimum in factory.json).`,
+          `Te weinig dekking: totaal ${String(oordeel.totaal)}% < drempel ${String(minimum)}% (dekkingsMinimum).`,
         );
       }
       process.stdout.write(`  totaal ${String(oordeel.totaal)}% ≥ ${String(minimum)}%\n`);
@@ -346,11 +348,15 @@ export function verify(opties: VerifyOpties = {}): void {
       process.stdout.write(`  totaal ${String(gecombineerd.lines)}%\n`);
     }
 
-    if (gecombineerd !== undefined && config !== undefined && config.dekkingsRatchet !== 'uit') {
-      pasRatchetToe(config, gecombineerd);
+    if (
+      gecombineerd !== undefined &&
+      dekkingsConfig !== undefined &&
+      dekkingsConfig.dekkingsRatchet !== 'uit'
+    ) {
+      pasRatchetToe(dekkingsConfig, gecombineerd);
     }
 
-    toetsAfhankelijkheden(repoDir, config);
+    toetsAfhankelijkheden(repoDir, appConfigVanRepo(repoDir));
   }
 
   for (const titel of overgeslagen) {
