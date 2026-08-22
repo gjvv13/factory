@@ -427,6 +427,77 @@ describe('inleveren', () => {
       }).toThrow(/pnpm install --lockfile-only/);
     });
 
+    it('lost een conflict dat alleen in dist/ zit zelf op: rebase, opnieuw bouwen, door', () => {
+      process.chdir(maakRepo());
+      // dist/ is gegenereerde uitvoer en staat in versiebeheer; twee branches die src/
+      // raken botsen daar altijd in de sourcemaps. Er valt niets met de hand te mergen.
+      const distConflict = ['92d6da3', 'dist/cli.js', 'dist/cli.js.map', '', 'CONFLICT'].join('\n');
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.argumenten[0] === 'merge-tree') return { code: 1, stdout: distConflict };
+        if (aanroep.argumenten[0] === 'rebase' && aanroep.argumenten[1] === 'origin/main')
+          return { code: 1, stdout: '' };
+        if (aanroep.argumenten[0] === 'diff' && aanroep.argumenten.includes('--diff-filter=U'))
+          return { stdout: 'dist/cli.js\ndist/cli.js.map' };
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Opnieuw gebouwd, gerebased, en daarna gewoon de gelukkige weg: poort, push, PR.
+      expect(argsVan(aanroepen, 'pnpm').some((a) => a.includes('build'))).toBe(true);
+      expect(argsVan(aanroepen, 'git')).toContainEqual(['add', 'dist']);
+      expect(
+        argsVan(aanroepen, 'git').some((a) => a[0] === 'rebase' && a[1] === '--continue'),
+      ).toBe(true);
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(true);
+    });
+
+    it('rebaset niet zelf als er ook een bestand buiten dist/ botst', () => {
+      process.chdir(maakRepo());
+      // Eén src-bestand ertussen betekent dat een mens moet kijken; een build zou dat
+      // conflict verbergen in plaats van oplossen.
+      const gemengd = ['92d6da3', 'dist/cli.js', 'src/cli.ts', '', 'CONFLICT'].join('\n');
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.argumenten[0] === 'merge-tree'
+          ? { code: 1, stdout: gemengd }
+          : gelukkig(aanroep, index);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/git rebase origin\/main/);
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'rebase')).toBe(false);
+      expect(verify).not.toHaveBeenCalled();
+    });
+
+    it('valt terug op de melding als de rebase een echt conflict buiten dist/ blootlegt', () => {
+      process.chdir(maakRepo());
+      // De merge-tree-preview zag alleen dist/, maar de echte rebase legt een src-conflict
+      // bloot. Dan draaien we de rebase terug en laten we het aan de mens.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.argumenten[0] === 'merge-tree')
+          return { code: 1, stdout: ['92d6da3', 'dist/cli.js', '', 'CONFLICT'].join('\n') };
+        if (aanroep.argumenten[0] === 'rebase' && aanroep.argumenten[1] === 'origin/main')
+          return { code: 1, stdout: '' };
+        if (aanroep.argumenten[0] === 'diff' && aanroep.argumenten.includes('--diff-filter=U'))
+          return { stdout: 'src/cli.ts' };
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/git rebase origin\/main/);
+      // De rebase is teruggedraaid; er is niet gepusht.
+      expect(argsVan(aanroepen, 'git')).toContainEqual(['rebase', '--abort']);
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(false);
+    });
+
     it('blokkeert niet als merge-tree zelf faalt', () => {
       process.chdir(maakRepo());
       // Exitcode 1 betekent óók "kon die refs niet mergen" (geen origin/main bijv.).

@@ -1360,9 +1360,11 @@ describe('orkestreer --nacht', () => {
     expect(label).toContain('escalatie');
   });
 
-  it('logt ook een run die de CLI omvertrekt', () => {
-    // `claude` is niet te starten: `run` gooit. Zonder deze regel staat de dagteller op
-    // 1 en het log op niets — de stilte die je 's ochtends niet kunt lezen.
+  it('boekt en logt een run die de CLI omvertrekt, en stopt na twee zulke op rij', () => {
+    // `claude` is niet te starten: `run` gooit een GebruikersFout. Sinds #282 laat de
+    // reeks één zulke run niet de hele nacht kosten — hij boekt en logt hem (de stilte
+    // die je 's ochtends niet kunt lezen is precies wat we vermijden) en gaat door. Twee
+    // op rij is wél het signaal dat de machine stuk is; dán stopt de nacht.
     const basis = nachtBord(WACHTRIJ);
     const geenClaude: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'claude'
@@ -1370,12 +1372,13 @@ describe('orkestreer --nacht', () => {
         : basis(aanroep, index);
     stelUitvoerderIn(maakUitvoerderOpnemer(geenClaude).uitvoerder);
 
-    expect(() => {
-      orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
-    }).toThrow(/claude/);
+    // Geen throw meer: de noodstop vangt het, netjes.
+    orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
 
-    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#51 assistant refine afgebroken/);
-    expect(leesStaat(paden, NU).gestart).toBe(1);
+    expect(readFileSync(paden.logPad, 'utf8')).toMatch(/#\d+ \w+ refine afgebroken/);
+    // Twee geboekte runs (de twee mislukte starts), daarna de noodstop.
+    expect(leesStaat(paden, NU).gestart).toBe(2);
+    expect(uitvoer.join('')).toMatch(/twee runs op rij mislukt/);
   });
 
   it('geeft elke runregel zijn eigen tijdstempel', () => {
