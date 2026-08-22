@@ -67,9 +67,31 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
     guard is een controle; een `as` is een belofte die niemand nakijkt.
   - `as unknown as` is nooit goed. Kom je daar toch uit, dan klopt het type
     eronder niet — repareer dat.
-- Invoer van buiten (HTTP-body, omgevingsvariabelen, JSON-bestanden) wordt
-  gevalideerd met Zod voordat het het domein binnenkomt. Binnen het domein
-  vertrouwen we types; op de grens vertrouwen we niets.
+- Invoer van buiten (HTTP-body, omgevingsvariabelen, JSON-bestanden,
+  brein-output) wordt gevalideerd met Zod voordat het het domein binnenkomt.
+  Binnen het domein vertrouwen we types; op de grens vertrouwen we niets.
+  - **Brein-output is invoer van buiten.** Het model levert vrije tekst; de
+    Zod-parse hoort in `clients/` (niet in `core/`), want het is een
+    koppelingsdetail. Faalt de parse, dan is de zekerheid nul — hetzelfde als
+    bij te lage zekerheid: niets doen (zie _Natuurlijke taal_).
+  - **Grenstypen afleiden uit het schema.** Een domeintype dat uit een
+    Zod-schema gevalideerd wordt, wordt afgeleid met
+    `z.infer<typeof schema>` — niet met de hand geschreven naast het schema.
+    Handgeschreven types driften uiteen zodra het schema verandert. De regel
+    geldt alleen voor grenstypen; zuivere domeintypen die geen externe grens
+    overschrijden blijven gewoon een `type` of `interface`.
+
+    ```ts
+    // clients/claude-client.ts — het schema levert zowel het type als de parse
+    const intentieSchema = z.object({
+      actie: z.enum(['toevoegen', 'verwijderen', 'tonen']),
+      zekerheid: z.number().min(0).max(1),
+    });
+    type Intentie = z.infer<typeof intentieSchema>;
+
+    const parsed = intentieSchema.safeParse(response);
+    if (!parsed.success) return undefined; // zekerheid nul
+    ```
 - Exporteer types met `export type` en importeer ze met `import type`.
 
 ## Naamgeving
@@ -184,7 +206,9 @@ Elke app heeft z'n **eigen** brein, maar volgens één patroon:
 - Twee implementaties in `clients/`: een deterministische **keyword-stand-in**
   (dev/e2e, geen sleutel nodig) en de echte **Claude-client** met structured
   output. Alleen de gekozen provider wordt dynamisch geladen (config
-  `LLM_PROVIDER`), zodat de andere niet in geheugen of dekking komt.
+  `LLM_PROVIDER`), zodat de andere niet in geheugen of dekking komt. De
+  Zod-parse van het modelantwoord hoort hier, in `clients/` — zie de
+  validatieregel in _Types_.
 - De uitkomst is een **intentie met een zekerheid**: bij twijfel navragen in plaats
   van gokken, bij te lage zekerheid niets doen.
 - Een intentie voert een **bestaande, deterministische** actie uit (het brein
