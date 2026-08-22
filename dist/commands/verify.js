@@ -3,6 +3,7 @@ import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
 import { beoordeelRatchet, leesBasislijn, schrijfBasislijn, BASISLIJN_BESTAND, } from '../dekking-basislijn.js';
+import { toetsFlagVerloop } from '../flag-verloop.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 /**
  * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
@@ -275,6 +276,10 @@ export function verify(opties = {}) {
         }
         if (gecombineerd !== undefined && config !== undefined && config.dekkingsRatchet !== 'uit') {
             pasRatchetToe(config, gecombineerd);
+        }
+        const flagStand = config?.flagVerloop ?? 'waarschuw';
+        if (flagStand !== 'uit') {
+            toetsFlagVerloop(config?.appDir ?? repoDir, flagStand, new Date(Date.now()));
         }
         toetsAfhankelijkheden(repoDir, config);
     }

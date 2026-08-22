@@ -45,6 +45,13 @@ const appConfigSchema = z.object({
    */
   integratie: z.enum(['merge-queue', 'lokaal']).default('merge-queue'),
   /**
+   * Gedrag van de feature-flag-verloopcheck in de volledige `factory verify`. `waarschuw`
+   * (default) meldt verlopen flags geel en houdt de poort groen; `blokkeer` laat verify
+   * falen; `uit` slaat de stap over. Vereist een `flag-meta.json` naast `factory.json`;
+   * zonder dat bestand is de stap een stille no-op.
+   */
+  flagVerloop: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
+  /**
    * Gedrag van de afhankelijkheden-audit in de volledige `factory verify`. `waarschuw`
    * (default) meldt kwetsbare pakketten geel en houdt de poort groen; `blokkeer` laat
    * verify falen; `uit` slaat de stap over. Advies-eerst, net als de dekkings-ratchet:

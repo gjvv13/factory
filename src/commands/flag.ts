@@ -1,4 +1,5 @@
 import { vereisAppConfig, vereisOmgeving } from '../app-config.js';
+import { beoordeelFlagVerloop, beschrijfVervalstatus, leesFlagMeta } from '../flag-verloop.js';
 import { GebruikersFout, ok } from '../shell.js';
 
 interface FlagRij {
@@ -32,9 +33,18 @@ export async function flag(
       process.stdout.write(`(geen flags in ${omgeving})\n`);
       return;
     }
+    const meta = leesFlagMeta(config.appDir);
+    const statussen = meta !== undefined ? beoordeelFlagVerloop(meta, new Date(Date.now())) : [];
+    const statusMap = new Map(statussen.map((s) => [s.naam, s]));
+
     for (const rij of payload.flags) {
       const stand = rij.enabled ? 'AAN' : 'uit';
-      process.stdout.write(`${stand.padEnd(4)} ${rij.key.padEnd(24)} ${rij.description}\n`);
+      let regel = `${stand.padEnd(4)} ${rij.key.padEnd(24)} ${rij.description}`;
+      const flagStatus = statusMap.get(rij.key);
+      if (flagStatus !== undefined) {
+        regel += ` — ${beschrijfVervalstatus(flagStatus)}`;
+      }
+      process.stdout.write(`${regel}\n`);
     }
     return;
   }

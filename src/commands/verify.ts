@@ -11,6 +11,7 @@ import {
   BASISLIJN_BESTAND,
 } from '../dekking-basislijn.js';
 import type { Verschil } from '../dekking-basislijn.js';
+import { toetsFlagVerloop } from '../flag-verloop.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -342,6 +343,11 @@ export function verify(opties: VerifyOpties = {}): void {
 
     if (gecombineerd !== undefined && config !== undefined && config.dekkingsRatchet !== 'uit') {
       pasRatchetToe(config, gecombineerd);
+    }
+
+    const flagStand = config?.flagVerloop ?? 'waarschuw';
+    if (flagStand !== 'uit') {
+      toetsFlagVerloop(config?.appDir ?? repoDir, flagStand, new Date(Date.now()));
     }
 
     toetsAfhankelijkheden(repoDir, config);
