@@ -874,6 +874,45 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(body).toContain('Code-review niet gelukt');
   });
 
+  it('levert de bouw tóch in als de review niet kan starten (#289)', () => {
+    // Een startfout (commando niet gevonden, spawn ENOENT) gooit onvoorwaardelijk in
+    // run() — de toleranter-vlag vangt alleen een niet-nul exitcode. bouwAf moet die
+    // throw opvangen zodat de bouw niet alsnog rood wordt.
+    const geleverd: unknown[] = [];
+    let claudeTeller = 0;
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') {
+        claudeTeller++;
+        if (claudeTeller === 1) return { stdout: envelop('claude-bouw-klaar') };
+        // Tweede claude-aanroep (review): het commando kan niet starten.
+        return { startfout: 'spawn ENOENT' };
+      }
+      return machine(envelop('claude-bouw-klaar'))({ commando, argumenten }, 0);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+    orkestreerBouw({
+      eenmalig: true,
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: (opties) => geleverd.push(opties),
+    });
+
+    // De bouw is ingeleverd ondanks de review-startfout.
+    expect(geleverd).toHaveLength(1);
+    // Er staat een comment dat de review niet gelukt is.
+    const prComment = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        typeof a.argumenten[1] === 'string' &&
+        a.argumenten[1].includes('/comments'),
+    );
+    expect(prComment).toHaveLength(1);
+    const body = prComment[0]?.argumenten.find((a) => a.startsWith('body=')) ?? '';
+    expect(body).toContain('Code-review niet gelukt');
+  });
+
   it('plaatst bevindingen op het issue als inleveren mislukt', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
       machine(envelop('claude-bouw-klaar'), envelop('claude-review-klaar')),
