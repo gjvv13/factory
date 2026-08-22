@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { beoordeelDekking, telKwetsbaarheden, verify } from '../src/commands/verify.js';
+import { beoordeelDekking, STAPPEN, telKwetsbaarheden, verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
@@ -44,6 +44,32 @@ describe('verify — coverage', () => {
     const aanroepen = vangAanroepen();
     verify({ preCommit: true });
     expect(aanroepen.find((a) => a.script === 'test:unit')?.coverage).toBe(false);
+  });
+});
+
+describe('verify — pact-verify stap in STAPPEN', () => {
+  const pactStap = STAPPEN.find((s) => s.script === 'test:pact-verify');
+  const scripts = STAPPEN.map((s) => s.script);
+
+  it('staat na test:contract en vóór test:e2e', () => {
+    const contractIdx = scripts.indexOf('test:contract');
+    const pactIdx = scripts.indexOf('test:pact-verify');
+    const e2eIdx = scripts.indexOf('test:e2e');
+    expect(pactIdx).toBeGreaterThan(contractIdx);
+    expect(pactIdx).toBeLessThan(e2eIdx);
+  });
+
+  it('draait niet bij --snel', () => {
+    expect(pactStap?.snel).toBe(false);
+  });
+
+  it('draait niet bij --pre-commit', () => {
+    expect(pactStap?.preCommit).toBe(false);
+  });
+
+  it('heeft geen coverageNaam', () => {
+    expect(pactStap).toBeDefined();
+    expect('coverageNaam' in pactStap!).toBe(false);
   });
 });
 

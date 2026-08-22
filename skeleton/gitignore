@@ -7,7 +7,8 @@ data/*.sqlite-shm
 .tmp/
 logs/
 coverage/
-pacts/
+pacts/*
+!pacts/verify/
 .whatsapp-session/
 *.local.env
 environments/*.secrets.env

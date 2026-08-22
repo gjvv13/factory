@@ -27,7 +27,7 @@ interface Stap {
  * wordt overgeslagen, zodat dezelfde poort werkt in de factory (die geen
  * e2e-tests heeft) en in een applicatie (die ze wel heeft).
  */
-const STAPPEN: readonly Stap[] = [
+export const STAPPEN: readonly Stap[] = [
   { script: 'format:check', titel: 'Opmaak (prettier)', snel: true, preCommit: true },
   { script: 'lint', titel: 'Statische analyse (eslint)', snel: true, preCommit: true },
   { script: 'typecheck', titel: 'Types (tsc)', snel: true, preCommit: true },
@@ -38,6 +38,12 @@ const STAPPEN: readonly Stap[] = [
     snel: true,
     preCommit: false,
     coverageNaam: 'contract',
+  },
+  {
+    script: 'test:pact-verify',
+    titel: 'Pact provider-verificatie',
+    snel: false,
+    preCommit: false,
   },
   {
     script: 'test:integration',
