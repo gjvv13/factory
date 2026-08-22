@@ -14,6 +14,7 @@ import type { Verschil } from '../dekking-basislijn.js';
 import { leesDekkingsConfig } from '../dekking-config.js';
 import type { DekkingsConfig } from '../dekking-config.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
+import { toetsFlagVerloop } from '../flag-verloop.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -358,6 +359,11 @@ export function verify(opties: VerifyOpties = {}): void {
     }
 
     const appConfig = appConfigVanRepo(repoDir);
+    const flagStand = appConfig?.flagVerloop ?? 'waarschuw';
+    if (flagStand !== 'uit') {
+      toetsFlagVerloop(appConfig?.appDir ?? repoDir, flagStand, new Date(Date.now()));
+    }
+
     toetsAfhankelijkheden(repoDir, appConfig);
     toetsConfigSleutels(repoDir, appConfig, aanwezig);
   }

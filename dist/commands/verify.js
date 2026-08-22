@@ -5,6 +5,7 @@ import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
 import { beoordeelRatchet, leesBasislijn, schrijfBasislijn, BASISLIJN_BESTAND, } from '../dekking-basislijn.js';
 import { leesDekkingsConfig } from '../dekking-config.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
+import { toetsFlagVerloop } from '../flag-verloop.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 /**
  * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
@@ -287,6 +288,10 @@ export function verify(opties = {}) {
             pasRatchetToe(dekkingsConfig, gecombineerd);
         }
         const appConfig = appConfigVanRepo(repoDir);
+        const flagStand = appConfig?.flagVerloop ?? 'waarschuw';
+        if (flagStand !== 'uit') {
+            toetsFlagVerloop(appConfig?.appDir ?? repoDir, flagStand, new Date(Date.now()));
+        }
         toetsAfhankelijkheden(repoDir, appConfig);
         toetsConfigSleutels(repoDir, appConfig, aanwezig);
     }
