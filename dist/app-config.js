@@ -49,6 +49,13 @@ const appConfigSchema = z.object({
      * zolang je hem nog niet beoordeeld hebt.
      */
     audit: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
+    /**
+     * Gedrag van de config-sleuteltoets in de volledige `factory verify`. Controleert
+     * per omgeving (acc, prod) of de env-bestanden de sleutels bevatten die de code
+     * verwacht. `waarschuw` (default) meldt ontbrekende sleutels geel en houdt de poort
+     * groen; `blokkeer` laat verify falen; `uit` slaat de stap over.
+     */
+    configSleutels: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
     /** Vanaf welke ernst de audit meetelt. Default `high`: lager is in de praktijk ruis. */
     auditNiveau: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
     /**

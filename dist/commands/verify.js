@@ -4,6 +4,7 @@ import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
 import { beoordeelRatchet, leesBasislijn, schrijfBasislijn, BASISLIJN_BESTAND, } from '../dekking-basislijn.js';
 import { leesDekkingsConfig } from '../dekking-config.js';
+import { toetsConfigSleutels } from '../config-sleutels.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 /**
  * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
@@ -285,7 +286,9 @@ export function verify(opties = {}) {
             dekkingsConfig.dekkingsRatchet !== 'uit') {
             pasRatchetToe(dekkingsConfig, gecombineerd);
         }
-        toetsAfhankelijkheden(repoDir, appConfigVanRepo(repoDir));
+        const appConfig = appConfigVanRepo(repoDir);
+        toetsAfhankelijkheden(repoDir, appConfig);
+        toetsConfigSleutels(repoDir, appConfig, aanwezig);
     }
     for (const titel of overgeslagen) {
         waarschuwing(`${titel} overgeslagen (--snel)`);
