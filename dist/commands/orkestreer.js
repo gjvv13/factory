@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
@@ -182,7 +182,7 @@ function bouwWachtrij(cwd) {
     return bruikbaar;
 }
 /** De prompt voor de werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export function bouwPrompt(item, werkmap, factoryMap) {
+export function bouwPrompt(item, werkmap, factoryMap, apps = []) {
     const sjabloon = readFileSync(path.join(templatesDir, 'werker-refine.md'), 'utf8');
     const vervang = {
         '{{ISSUE}}': String(item.issue),
@@ -191,6 +191,7 @@ export function bouwPrompt(item, werkmap, factoryMap) {
         '{{KOLOM}}': WERK_KOLOM,
         '{{WERKMAP}}': werkmap,
         '{{FACTORY_MAP}}': factoryMap,
+        '{{BEKENDE_APPS}}': apps.join(', '),
     };
     return Object.entries(vervang).reduce((tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde), sjabloon);
 }
@@ -249,7 +250,7 @@ export async function orkestreer(opties = {}) {
                     // vier is even duur als een hangende werker om 04:00 (#206).
                     timeoutMs: instellingen.runTimeoutMs,
                     effort: instellingen.werkerEffort,
-                }),
+                }, appOpties() ?? []),
                 beschrijf: beschrijfRun,
                 gelukt: (u) => u.afloop === 'klaar',
             }));
@@ -310,7 +311,7 @@ export async function orkestreer(opties = {}) {
         }, () => werkAf(eerste, cwd, wortel, {
             budgetUsd: leesInstellingen(paden).budgetPerRun,
             effort: leesInstellingen(paden).werkerEffort,
-        }), beschrijfRun);
+        }, appOpties() ?? []), beschrijfRun);
     }
     finally {
         geefLockVrij();
@@ -379,7 +380,7 @@ async function draaiNacht(cwd, wortel, paden, nu) {
             noemer: 'vannacht',
             aantal: instellingen.dagmaximum - alGestart,
             leesRij: () => bouwWachtrij(cwd),
-            werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties),
+            werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties, appOpties() ?? []),
             beschrijf: beschrijfRun,
             gelukt: (u) => u.afloop === 'klaar',
             naElkeRun: (aantal) => {
@@ -398,7 +399,7 @@ async function draaiNacht(cwd, wortel, paden, nu) {
     }
 }
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
-async function werkAf(item, cwd, wortel, draai) {
+async function werkAf(item, cwd, wortel, draai, apps = []) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
@@ -425,7 +426,7 @@ async function werkAf(item, cwd, wortel, draai) {
     try {
         const sessie = randomUUID();
         const uitkomst = await draaiWerker({
-            prompt: bouwPrompt(item, werkmap, factoryMap),
+            prompt: bouwPrompt(item, werkmap, factoryMap, apps),
             werkmap,
             sessie,
             extraMappen: [factoryMap],

@@ -3,6 +3,7 @@ het werk, je repareert het niet.
 
 - Issue: **#{{ISSUE}}** — {{TITEL}}
 - Applicatie: **{{APP}}**
+- Bekende applicaties: {{BEKENDE_APPS}}
 - Werkmap: `{{WERKMAP}}` — de worktree met het gebouwde werk
 - De factory (proces, templates, guidelines): `{{FACTORY_MAP}}` — **alleen lezen**.
 

@@ -401,6 +401,7 @@ export function sluitIssue(issue, cwd) {
 }
 const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
   user(login:$eigenaar){ projectV2(number:$project){
+    appVeld: field(name:"App"){ ... on ProjectV2SingleSelectField { options { name } } }
     items(first:100, after:$na){
       pageInfo{ hasNextPage endCursor }
       nodes{
@@ -434,6 +435,7 @@ export function wachtrijVan(kolom, cwd) {
  * "er staat niets in", en de aanroeper hoort dat verschil te merken.
  */
 export function bordItems(cwd) {
+    laatsteAppOpties = undefined;
     const omgeving = ghOmgeving();
     if (!omgeving.kan) {
         return undefined;
@@ -463,6 +465,18 @@ export function bordItems(cwd) {
         }
         catch {
             return undefined;
+        }
+        // De veldopties zitten op projectniveau en zijn op elke pagina gelijk; lees ze
+        // alleen bij de eerste pagina om de parse niet te herhalen.
+        if (pagina === 0) {
+            const opties = antwoord.data?.user?.projectV2?.appVeld?.options;
+            laatsteAppOpties =
+                opties === undefined
+                    ? []
+                    : opties
+                        .map((optie) => optie.name)
+                        .filter((naam) => naam !== undefined)
+                        .sort();
         }
         const items = antwoord.data?.user?.projectV2?.items;
         if (items === undefined) {
@@ -499,6 +513,22 @@ export function bordItems(cwd) {
     waarschuwing('board heeft meer dan 50 paginas; wachtrij mogelijk onvolledig.');
     return gevonden.sort((a, b) => a.aangemaakt.localeCompare(b.aangemaakt) || a.issue - b.issue);
 }
+/**
+ * De opties van het App-veld op het board, uit de meest recente `bordItems`-lezing.
+ *
+ * Dit is het register van bestaande applicaties: veldopties staan er altijd, ook als
+ * geen enkel item die app draagt. Levert `undefined` als het board niet gelezen kon
+ * worden (net als `bordItems` zelf), en een lege array als het veld geen opties heeft.
+ *
+ * Geen tweede API-aanroep: de opties zitten in dezelfde query als de items en worden
+ * bij de eerste pagina uitgelezen. Roep `bordItems` aan vóór `appOpties` — zonder een
+ * eerdere lezing is er niets om terug te geven.
+ */
+export function appOpties() {
+    return laatsteAppOpties;
+}
+// Gevuld door `bordItems` bij de eerste pagina; `undefined` tot de eerste lezing.
+let laatsteAppOpties;
 /** Het label waaraan een geëscaleerd item te herkennen is. */
 export const ESCALATIE_LABEL = 'escalatie';
 /**
