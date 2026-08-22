@@ -31,6 +31,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory nieuw <naam>`                                | Nieuwe applicatie uit het skeleton, met een vrij poortblok                                                |
 | `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
+| `factory opruimen [--dry]`                            | Gemergede branches opruimen: lokaal en op de remote                                                       |
 | `factory orkestreer <--dry\|--eenmalig>`              | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |
 | `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
 | `factory orkestreer <--installeer\|--verwijder>`      | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                |
