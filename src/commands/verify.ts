@@ -40,6 +40,12 @@ const STAPPEN: readonly Stap[] = [
     coverageNaam: 'contract',
   },
   {
+    script: 'test:integration',
+    titel: 'Integration tests',
+    snel: false,
+    preCommit: false,
+  },
+  {
     script: 'test:e2e',
     titel: 'End-to-end tests',
     snel: false,

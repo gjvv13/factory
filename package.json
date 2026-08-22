@@ -50,6 +50,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "verify": "node dist/cli.js verify"
   },
   "dependencies": {
