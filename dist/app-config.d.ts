@@ -26,6 +26,11 @@ declare const appConfigSchema: z.ZodObject<{
         waarschuw: "waarschuw";
         blokkeer: "blokkeer";
     }>>;
+    configSleutels: z.ZodDefault<z.ZodEnum<{
+        uit: "uit";
+        waarschuw: "waarschuw";
+        blokkeer: "blokkeer";
+    }>>;
     auditNiveau: z.ZodDefault<z.ZodEnum<{
         low: "low";
         moderate: "moderate";

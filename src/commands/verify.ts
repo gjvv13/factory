@@ -13,6 +13,7 @@ import {
 import type { Verschil } from '../dekking-basislijn.js';
 import { leesDekkingsConfig } from '../dekking-config.js';
 import type { DekkingsConfig } from '../dekking-config.js';
+import { toetsConfigSleutels } from '../config-sleutels.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -356,7 +357,9 @@ export function verify(opties: VerifyOpties = {}): void {
       pasRatchetToe(dekkingsConfig, gecombineerd);
     }
 
-    toetsAfhankelijkheden(repoDir, appConfigVanRepo(repoDir));
+    const appConfig = appConfigVanRepo(repoDir);
+    toetsAfhankelijkheden(repoDir, appConfig);
+    toetsConfigSleutels(repoDir, appConfig, aanwezig);
   }
 
   for (const titel of overgeslagen) {
