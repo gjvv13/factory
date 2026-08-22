@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../../src/config.js';
+import { loadConfig, VERWACHTE_SLEUTELS, GEHEIME_SLEUTELS } from '../../src/config.js';
 
 describe('config', () => {
   it('valt terug op veilige standaarden', () => {
@@ -27,5 +27,10 @@ describe('config', () => {
     expect(loadConfig({ DATABASE_FILE: 'data/acc.sqlite' }).databaseFile).toMatch(
       /\/data\/acc\.sqlite$/,
     );
+  });
+
+  it('exporteert VERWACHTE_SLEUTELS en GEHEIME_SLEUTELS als readonly arrays', () => {
+    expect(Array.isArray(VERWACHTE_SLEUTELS)).toBe(true);
+    expect(Array.isArray(GEHEIME_SLEUTELS)).toBe(true);
   });
 });

@@ -28,7 +28,8 @@
     "release": "factory release",
     "promote": "factory promote",
     "env": "factory env",
-    "flag": "factory flag"
+    "flag": "factory flag",
+    "config:sleutels": "tsx scripts/config-sleutels.ts"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.2",
