@@ -11,6 +11,7 @@ import {
   BASISLIJN_BESTAND,
 } from '../dekking-basislijn.js';
 import type { Verschil } from '../dekking-basislijn.js';
+import { toetsConfigSleutels } from '../config-sleutels.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
 
 interface Stap {
@@ -345,6 +346,7 @@ export function verify(opties: VerifyOpties = {}): void {
     }
 
     toetsAfhankelijkheden(repoDir, config);
+    toetsConfigSleutels(repoDir, config, aanwezig);
   }
 
   for (const titel of overgeslagen) {

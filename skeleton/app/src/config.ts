@@ -38,6 +38,21 @@ function readVersion(rootDir: string): string {
 }
 
 /**
+ * Sleutels die in het env-bestand van elke omgeving moeten staan.
+ * Vul deze aan wanneer je een sleutel toevoegt die per omgeving moet variëren.
+ * Een `.default()` in het Zod-schema betekent niet dat de default goed is voor
+ * elke omgeving — `DATABASE_FILE` heeft default `data/dev.sqlite`: prima voor
+ * dev, onjuist voor prod.
+ */
+export const VERWACHTE_SLEUTELS: readonly string[] = [];
+
+/**
+ * Sleutels die in het secrets-bestand horen (niet in git).
+ * Worden alleen gecontroleerd als het secrets-bestand er is.
+ */
+export const GEHEIME_SLEUTELS: readonly string[] = [];
+
+/**
  * Leest en valideert de configuratie uit de omgevingsvariabelen.
  * Faalt hard bij ongeldige waarden: een verkeerd geconfigureerde omgeving
  * mag nooit half opstarten.
