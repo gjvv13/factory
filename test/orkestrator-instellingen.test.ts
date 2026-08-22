@@ -282,5 +282,36 @@ describe('orkestrator-instellingen', () => {
       // Onbekende kosten worden een `?` en niet stil $0,00 — dat laatste liegt.
       expect(regels[1]).toMatch(/#51 assistant bouw escalatie \? \? beurten/);
     });
+
+    it('schrijft de uitsplitsing achter de beurten als hij er is (#298)', () => {
+      logRun(paden, new Date('2026-08-22T04:12:03Z'), {
+        issue: 131,
+        soort: 'bouw',
+        app: 'factory',
+        uitkomst: 'klaar',
+        kosten: 3.21,
+        beurten: 60,
+        uitsplitsing: '(bouw $2.09 · review $1.12)',
+      });
+
+      const regel = readFileSync(paden.logPad, 'utf8').trim();
+      expect(regel).toMatch(
+        /#131 factory bouw klaar \$3\.21 60 beurten \(bouw \$2\.09 · review \$1\.12\)/,
+      );
+    });
+
+    it('schrijft dezelfde regel als voorheen zonder uitsplitsing (#298)', () => {
+      logRun(paden, new Date('2026-08-22T04:12:03Z'), {
+        issue: 131,
+        soort: 'bouw',
+        app: 'factory',
+        uitkomst: 'escalatie',
+        kosten: 2.09,
+        beurten: 37,
+      });
+
+      const regel = readFileSync(paden.logPad, 'utf8').trim();
+      expect(regel).toMatch(/#131 factory bouw escalatie \$2\.09 37 beurten$/);
+    });
   });
 });
