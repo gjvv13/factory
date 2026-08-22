@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { bordItems, ESCALATIE_LABEL, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { appOpties, bordItems, ESCALATIE_LABEL, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { leesInstellingen, metBoekhouding, standaardPaden, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
@@ -265,7 +265,7 @@ export async function orkestreerBouw(opties = {}) {
             // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
             // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
             leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren),
+            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? []),
             beschrijf: beschrijfBouw,
             gelukt: (u) => u.bouw.afloop === 'klaar',
         }));
@@ -280,7 +280,7 @@ export async function orkestreerBouw(opties = {}) {
         // Er is nog geen onbemande bouw-nacht; wie dit start is een mens (#265).
         pot: 'interactief',
         item: eerste,
-    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren), beschrijfBouw);
+    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? []), beschrijfBouw);
 }
 /**
  * Wat er van een bouw-run in het log komt.
@@ -320,7 +320,7 @@ export function beschrijfBouw(resultaat) {
     };
 }
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export function bouwPrompt(item, werkmap, factoryMap, bronMappen = []) {
+export function bouwPrompt(item, werkmap, factoryMap, bronMappen = [], apps = []) {
     const sjabloon = readFileSync(path.join(templatesDir, 'werker-bouw.md'), 'utf8');
     const bronBlok = bronMappen.length === 0
         ? ''
@@ -333,11 +333,12 @@ export function bouwPrompt(item, werkmap, factoryMap, bronMappen = []) {
         '{{WERKMAP}}': werkmap,
         '{{FACTORY_MAP}}': factoryMap,
         '{{BRON_MAPPEN}}': bronBlok,
+        '{{BEKENDE_APPS}}': apps.join(', '),
     };
     return Object.entries(vervang).reduce((tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde), sjabloon);
 }
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
-export function reviewPrompt(item, werkmap, factoryMap) {
+export function reviewPrompt(item, werkmap, factoryMap, apps = []) {
     const sjabloon = readFileSync(path.join(templatesDir, 'werker-review.md'), 'utf8');
     const vervang = {
         '{{ISSUE}}': String(item.issue),
@@ -345,6 +346,7 @@ export function reviewPrompt(item, werkmap, factoryMap) {
         '{{APP}}': item.app,
         '{{WERKMAP}}': werkmap,
         '{{FACTORY_MAP}}': factoryMap,
+        '{{BEKENDE_APPS}}': apps.join(', '),
     };
     return Object.entries(vervang).reduce((tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde), sjabloon);
 }
@@ -355,7 +357,7 @@ export function reviewPrompt(item, werkmap, factoryMap) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn) {
+async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = []) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -387,7 +389,7 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
         // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
         werkplek(String(item.issue), { cwd: spiegel });
         uitkomst = await draaiBouwer({
-            prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen),
+            prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
             werkmap,
             sessie: randomUUID(),
             extraMappen: [factoryMap, ...bronMappen],
@@ -413,7 +415,7 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
     if (uitkomst.afloop === 'klaar') {
         try {
             reviewUitkomst = await draaiReviewer({
-                prompt: reviewPrompt(item, werkmap, factoryMap),
+                prompt: reviewPrompt(item, werkmap, factoryMap, apps),
                 werkmap,
                 sessie: randomUUID(),
                 extraMappen: [factoryMap],

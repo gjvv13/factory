@@ -7,6 +7,7 @@ escaleer je.
 - Issue: **#{{ISSUE}}** — {{TITEL}}
 - Applicatie: **{{APP}}**
 - Kolom op het board: **{{KOLOM}}**
+- Bekende applicaties: {{BEKENDE_APPS}}
 
 Deze drie feiten zijn je gegeven. **Lees het board niet op.** Niet met
 `gh project item-list`, niet met een GraphQL-query. Het board kost per uitlezing een

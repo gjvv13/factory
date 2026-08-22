@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bouwNachtScript,
   bouwOrkestreerPlist,
+  bouwPrompt,
   eigenVersie,
   escalatieComment,
   leesEscalatie,
@@ -68,7 +69,16 @@ function boardItem(
 
 function boardAntwoord(items: unknown[]): string {
   return JSON.stringify({
-    data: { user: { projectV2: { items: { pageInfo: { hasNextPage: false }, nodes: items } } } },
+    data: {
+      user: {
+        projectV2: {
+          appVeld: {
+            options: [{ name: 'assistant' }, { name: 'beheer' }, { name: 'factory' }],
+          },
+          items: { pageInfo: { hasNextPage: false }, nodes: items },
+        },
+      },
+    },
   });
 }
 
@@ -1733,5 +1743,26 @@ describe('orkestreer --installeer en --verwijder', () => {
 
     // Idempotent: een tweede keer verwijderen is een no-op en geen fout.
     await expect(orkestreer({ verwijder: true, paden })).resolves.not.toThrow();
+  });
+});
+
+describe('bouwPrompt (refine)', () => {
+  it('bevat de app-lijst in de gerenderde prompt', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 51,
+        titel: 'Test',
+        app: 'assistant',
+        kolom: 'Klaar voor technische refinement',
+        aangemaakt: '',
+        labels: [],
+      },
+      '/w/assistant',
+      '/w/factory',
+      ['assistant', 'beheer', 'factory'],
+    );
+
+    expect(prompt).toContain('assistant, beheer, factory');
+    expect(prompt).not.toContain('{{BEKENDE_APPS}}');
   });
 });

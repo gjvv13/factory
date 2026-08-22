@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   alleKinderenDicht,
+  appOpties,
+  bordItems,
   isBacklogRepo,
   issuesUitBereik,
   issueUitBranch,
@@ -613,5 +615,64 @@ describe('zetItemsUitBereikOpDone', () => {
       (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close',
     );
     expect(gesloten.map((a) => a.argumenten[2])).toEqual(['185']);
+  });
+});
+
+describe('appOpties', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({});
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+  });
+
+  it('parseert de App-opties gesorteerd uit de board-respons', () => {
+    const respons = JSON.stringify({
+      data: {
+        user: {
+          projectV2: {
+            appVeld: {
+              options: [{ name: 'factory' }, { name: 'assistant' }, { name: 'beheer' }],
+            },
+            items: { pageInfo: { hasNextPage: false }, nodes: [] },
+          },
+        },
+      },
+    });
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: respons })).uitvoerder);
+
+    bordItems();
+
+    expect(appOpties()).toEqual(['assistant', 'beheer', 'factory']);
+  });
+
+  it('levert een lege array als het App-veld geen opties heeft', () => {
+    const respons = JSON.stringify({
+      data: {
+        user: {
+          projectV2: {
+            appVeld: { options: [] },
+            items: { pageInfo: { hasNextPage: false }, nodes: [] },
+          },
+        },
+      },
+    });
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: respons })).uitvoerder);
+
+    bordItems();
+
+    expect(appOpties()).toEqual([]);
+  });
+
+  it('levert undefined als het board niet gelezen kon worden', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '' })).uitvoerder);
+
+    bordItems();
+
+    expect(appOpties()).toBeUndefined();
   });
 });

@@ -2,6 +2,9 @@
   "data": {
     "user": {
       "projectV2": {
+        "appVeld": {
+          "options": [{ "name": "assistant" }, { "name": "beheer" }, { "name": "factory" }]
+        },
         "items": {
           "pageInfo": {
             "hasNextPage": false

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
+  appOpties,
   bordItems,
   ESCALATIE_LABEL,
   kolomVan,
@@ -370,6 +371,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             instellingen.reviewBudgetPerRun,
             instellingen.werkerEffort,
             opties.leverIn ?? inleveren,
+            appOpties() ?? [],
           ),
         beschrijf: beschrijfBouw,
         gelukt: (u) => u.bouw.afloop === 'klaar',
@@ -398,6 +400,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         instellingen.reviewBudgetPerRun,
         instellingen.werkerEffort,
         opties.leverIn ?? inleveren,
+        appOpties() ?? [],
       ),
     beschrijfBouw,
   );
@@ -463,6 +466,7 @@ export function bouwPrompt(
   werkmap: string,
   factoryMap: string,
   bronMappen: readonly string[] = [],
+  apps: readonly string[] = [],
 ): string {
   const sjabloon = readFileSync(path.join(templatesDir, 'werker-bouw.md'), 'utf8');
   const bronBlok =
@@ -477,6 +481,7 @@ export function bouwPrompt(
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
     '{{BRON_MAPPEN}}': bronBlok,
+    '{{BEKENDE_APPS}}': apps.join(', '),
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -485,7 +490,12 @@ export function bouwPrompt(
 }
 
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
-export function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string {
+export function reviewPrompt(
+  item: Bouwitem,
+  werkmap: string,
+  factoryMap: string,
+  apps: readonly string[] = [],
+): string {
   const sjabloon = readFileSync(path.join(templatesDir, 'werker-review.md'), 'utf8');
   const vervang: Record<string, string> = {
     '{{ISSUE}}': String(item.issue),
@@ -493,6 +503,7 @@ export function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string
     '{{APP}}': item.app,
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
+    '{{BEKENDE_APPS}}': apps.join(', '),
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -515,6 +526,7 @@ async function bouwAf(
   reviewBudgetUsd: number,
   effort: string,
   leverIn: (opties: InleverenOpties) => void,
+  apps: readonly string[] = [],
 ): Promise<BouwAfResultaat> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -553,7 +565,7 @@ async function bouwAf(
     werkplek(String(item.issue), { cwd: spiegel });
 
     uitkomst = await draaiBouwer({
-      prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen),
+      prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
       werkmap,
       sessie: randomUUID(),
       extraMappen: [factoryMap, ...bronMappen],
@@ -579,7 +591,7 @@ async function bouwAf(
   if (uitkomst.afloop === 'klaar') {
     try {
       reviewUitkomst = await draaiReviewer({
-        prompt: reviewPrompt(item, werkmap, factoryMap),
+        prompt: reviewPrompt(item, werkmap, factoryMap, apps),
         werkmap,
         sessie: randomUUID(),
         extraMappen: [factoryMap],

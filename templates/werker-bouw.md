@@ -3,6 +3,7 @@ niemand kijkt mee.
 
 - Issue: **#{{ISSUE}}** — {{TITEL}}
 - Applicatie: **{{APP}}**
+- Bekende applicaties: {{BEKENDE_APPS}}
 - Je werkmap: `{{WERKMAP}}` — een eigen git-worktree op branch `{{BRANCH}}`. Hier mag je
   schrijven; dit is jouw kopie en niemand anders werkt erin.
 - De factory (proces, templates, guidelines): `{{FACTORY_MAP}}` — **alleen lezen**.
