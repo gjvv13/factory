@@ -5,7 +5,7 @@ import {
   type RunRegel,
   type WerkerSoort,
 } from './orkestrator-instellingen.js';
-import { ok, waarschuwing } from './shell.js';
+import { GebruikersFout, ok, waarschuwing } from './shell.js';
 
 /** Het minimum dat de lus van een item moet weten. */
 export interface ReeksItem {
@@ -120,20 +120,37 @@ export function draaiReeks<T extends ReeksItem, U>(opzet: ReeksOpzet<T, U>): Ree
     }
     gedaanIssues.add(volgende.issue);
 
-    const { uitkomst } = metBoekhouding(
-      {
-        paden: opzet.paden,
-        nu: opzet.nu,
-        soort: opzet.soort,
-        pot: opzet.pot,
-        item: volgende,
-      },
-      () => opzet.werkAf(volgende),
-      opzet.beschrijf,
-    );
+    // Een `GebruikersFout` uit één run is "dit item kon niet landen" — bijvoorbeeld een
+    // `inleveren` die op main botst (#282). Dat is voor de reeks een mislukte run, geen
+    // reden om te stoppen: geboekt, gelogd met de reden (dat doet `metBoekhouding` bij
+    // een throw), en door naar het volgende. Een andere fout is "de machine is stuk" en
+    // die gooit wél door — elke volgende run loopt er net zo goed op stuk. De noodstop
+    // bij twee mislukkingen op rij hieronder is het vangnet voor "alles strandt".
+    let geslaagdeRun = false;
     gedaan += 1;
-    kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
-    if (opzet.gelukt(uitkomst)) {
+    try {
+      const { uitkomst } = metBoekhouding(
+        {
+          paden: opzet.paden,
+          nu: opzet.nu,
+          soort: opzet.soort,
+          pot: opzet.pot,
+          item: volgende,
+        },
+        () => opzet.werkAf(volgende),
+        opzet.beschrijf,
+      );
+      kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
+      geslaagdeRun = opzet.gelukt(uitkomst);
+    } catch (fout) {
+      if (!(fout instanceof GebruikersFout)) {
+        throw fout;
+      }
+      waarschuwing(
+        `#${String(volgende.issue)} kon niet landen: ${fout.message.split('\n')[0] ?? ''}`,
+      );
+    }
+    if (geslaagdeRun) {
       geslaagd += 1;
       mislukteOpRij = 0;
     } else {

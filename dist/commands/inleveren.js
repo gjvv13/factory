@@ -3,7 +3,7 @@ import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { issueUitBranch, plaatsComment, zetKolom } from '../board.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
-import { GebruikersFout, git, installeer, kop, ok, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
+import { GebruikersFout, git, installeer, kop, ok, pakketbeheerder, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
 import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
 import { verify } from './verify.js';
 import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js';
@@ -46,13 +46,23 @@ export function inleveren(opties = {}) {
     runMetHerhaling('git', ['fetch', '-q', 'origin', 'main'], { cwd: repoDir }, { wat: 'git fetch' });
     const botsing = conflictMetMain(repoDir);
     if (botsing !== undefined) {
-        throw new GebruikersFout(`main is verder gelopen en botst met ${branch} (${botsing.join(', ')}).\n` +
-            '  Rebase erop, los het één keer op, en lever daarna opnieuw in:\n' +
-            '    git rebase origin/main\n' +
-            '    # los de conflicten op, dan: git add <bestand> && git rebase --continue\n' +
-            lockfileHint(botsing) +
-            '    factory inleveren\n' +
-            '  De kwaliteitspoort draait dan opnieuw, over het samengevoegde resultaat.');
+        // Een conflict dat alleen in `dist/` zit is geen conflict: dat is gegenereerde
+        // uitvoer, en `dist/` staat in versiebeheer zodat de CLI zonder buildstap draait.
+        // Twee branches die beide `src/` raken botsen dáárom altijd in de sourcemaps, en bij
+        // een reeks (#265) is elke merge tussen twee runs zo'n geval. Rebasen, opnieuw
+        // bouwen, doorgaan — er valt niets met de hand te mergen (#282).
+        if (alleenDist(botsing) && losDistConflictOp(repoDir)) {
+            ok('conflict zat alleen in dist/ — opnieuw gebouwd en gerebased.');
+        }
+        else {
+            throw new GebruikersFout(`main is verder gelopen en botst met ${branch} (${botsing.join(', ')}).\n` +
+                '  Rebase erop, los het één keer op, en lever daarna opnieuw in:\n' +
+                '    git rebase origin/main\n' +
+                '    # los de conflicten op, dan: git add <bestand> && git rebase --continue\n' +
+                lockfileHint(botsing) +
+                '    factory inleveren\n' +
+                '  De kwaliteitspoort draait dan opnieuw, over het samengevoegde resultaat.');
+        }
     }
     // Lockfile in lijn met package.json brengen zodat de merge-queue er niet op
     // struikelt (`--frozen-lockfile`). `--lockfile-only`: alleen de lockfile, geen
@@ -165,6 +175,52 @@ function conflictMetMain(repoDir) {
     const einde = regels.indexOf('');
     const bestanden = (einde === -1 ? regels : regels.slice(0, einde)).filter((regel) => regel !== '');
     return bestanden.length === 0 ? ['onbekend welk bestand'] : bestanden;
+}
+/** Of elk botsend bestand gegenereerde uitvoer is (`dist/`), en dus door een build op te lossen. */
+function alleenDist(bestanden) {
+    return bestanden.length > 0 && bestanden.every((bestand) => bestand.startsWith('dist/'));
+}
+/**
+ * Rebaset op `origin/main` en lost een puur-`dist/`-conflict op door opnieuw te bouwen.
+ *
+ * De `merge-tree`-preview zei dat alleen `dist/` botst, maar de echte rebase is de
+ * waarheid: pas ná `git rebase` weten we welke bestanden werkelijk conflicteren. Zit er
+ * dan tóch iets buiten `dist/` bij, dan draaien we de rebase terug en laten we het aan de
+ * mens — een build overschrijft `src/` niet en zou een echt conflict verbergen.
+ *
+ * Geeft `false` als er niet schoon op te lossen viel; de aanroeper valt dan terug op de
+ * melding-met-de-hand.
+ */
+function losDistConflictOp(repoDir) {
+    const rebase = git(['rebase', 'origin/main'], repoDir, { capture: true, toleranter: true });
+    if (rebase.code === 0) {
+        // Geen conflict na alles: de preview was te voorzichtig (bijv. een merge die wél
+        // samengaat). Niets meer te doen.
+        return true;
+    }
+    const conflicten = git(['diff', '--name-only', '--diff-filter=U'], repoDir, { capture: true })
+        .stdout.split('\n')
+        .filter((regel) => regel !== '');
+    if (!alleenDist(conflicten)) {
+        git(['rebase', '--abort'], repoDir, { toleranter: true });
+        return false;
+    }
+    // `dist/` is gegenereerd uit `src/`; opnieuw bouwen levert het conflictvrij op.
+    const { commando, basisArgumenten } = pakketbeheerder();
+    run(commando, [...basisArgumenten, 'run', 'build'], { cwd: repoDir, capture: true });
+    git(['add', 'dist'], repoDir);
+    // GIT_EDITOR leeg: `rebase --continue` mag geen editor openen in een pijplijn.
+    const verder = run('git', ['rebase', '--continue'], {
+        cwd: repoDir,
+        capture: true,
+        toleranter: true,
+        env: { ...process.env, GIT_EDITOR: 'true' },
+    });
+    if (verder.code !== 0) {
+        git(['rebase', '--abort'], repoDir, { toleranter: true });
+        return false;
+    }
+    return true;
 }
 /**
  * Een extra regel voor de lockfile, want die mag je niet met de hand samenvoegen.
