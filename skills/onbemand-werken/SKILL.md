@@ -50,7 +50,9 @@ Niet elke onzekerheid is een escalatie. Ga door, en noem het in je samenvatting,
 - het antwoord in de code te vinden was en je het gevonden hebt (met bewijsplaats) —
   níet gevonden is geen detail, dat is de regel hierboven;
 - de keuze omkeerbaar is en niemand er last van heeft als hij anders uitpakt;
-- het een detail is dat de opdracht bewust aan jou laat.
+- het een detail is dat de opdracht bewust aan jou laat;
+- een uitspraak over welke apps bestaan: die komt uit de app-lijst in je prompt, niet
+  uit een directory-listing of `ls`. De lijst is de bron van waarheid.
 
 Het verschil zit in wie de gevolgen draagt. Draag jij ze, ga door. Draagt iemand
 anders ze, vraag het.

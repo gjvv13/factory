@@ -105,9 +105,9 @@ export interface BouwAfResultaat {
  */
 export declare function beschrijfBouw(resultaat: BouwAfResultaat): RunRegel;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
-export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
+export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[], apps?: readonly string[]): string;
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
-export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string): string;
+export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
 /** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
 /** Wat `--reeks` kan zijn: een aantal van de kop, of precies deze items. */
 export type ReeksKeuze = {
