@@ -12,8 +12,8 @@ import {
   WERKER_TOEGESTAAN,
   WERKER_VERBODEN,
 } from '../src/werker.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer } from './helpers.js';
+import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
+import { maakAsyncUitvoerderOpnemer } from './helpers.js';
 
 /**
  * Het contract met de `claude`-CLI voor een bouw-run. Geen Pact: dat is een dienst van
@@ -38,19 +38,19 @@ const OPDRACHT = {
 
 describe('draaiBouwer', () => {
   afterEach(() => {
-    herstelUitvoerder();
+    herstelAsyncUitvoerder();
   });
 
   function metEnvelop(naam: string, code = 0) {
-    const opnemer = maakUitvoerderOpnemer(() => ({ code, stdout: envelop(naam) }));
-    stelUitvoerderIn(opnemer.uitvoerder);
+    const opnemer = maakAsyncUitvoerderOpnemer(() => ({ code, stdout: envelop(naam) }));
+    stelAsyncUitvoerderIn(opnemer.uitvoerder);
     return opnemer;
   }
 
-  it('leest een geslaagde bouw met bewijs per criterium', () => {
+  it('leest een geslaagde bouw met bewijs per criterium', async () => {
     metEnvelop('claude-bouw-klaar');
 
-    const uitkomst = draaiBouwer(OPDRACHT);
+    const uitkomst = await draaiBouwer(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('klaar');
     expect(uitkomst.kosten).toBeCloseTo(4.812);
@@ -59,10 +59,10 @@ describe('draaiBouwer', () => {
     expect(verdict?.uitkomst === 'klaar' && verdict.criteria).toHaveLength(2);
   });
 
-  it('weigert een criterium zonder bewijs als klaar', () => {
+  it('weigert een criterium zonder bewijs als klaar', async () => {
     metEnvelop('claude-bouw-geen-bewijs');
 
-    const uitkomst = draaiBouwer(OPDRACHT);
+    const uitkomst = await draaiBouwer(OPDRACHT);
 
     // Dit is de hele reden dat het schema bestaat: een leeg `bewijs` mag niet als
     // afgevinkt criterium doorgaan. Het is een mislukking, geen halve overwinning.
@@ -71,21 +71,21 @@ describe('draaiBouwer', () => {
     expect(uitkomst.verdict).toBeUndefined();
   });
 
-  it('herkent is_error bij exitcode 0 als mislukt', () => {
+  it('herkent is_error bij exitcode 0 als mislukt', async () => {
     // De gemeten val uit #153: de exitcode zegt niets, het verdict alles.
     metEnvelop('claude-bouw-fout');
 
-    const uitkomst = draaiBouwer(OPDRACHT);
+    const uitkomst = await draaiBouwer(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toMatch(/poort niet groen/);
     expect(uitkomst.weigeringen).toBe(1);
   });
 
-  it('roept claude aan met het bouw-schema en de bouw-rechten', () => {
+  it('roept claude aan met het bouw-schema en de bouw-rechten', async () => {
     const { aanroepen } = metEnvelop('claude-bouw-klaar');
 
-    draaiBouwer(OPDRACHT);
+    await draaiBouwer(OPDRACHT);
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(BOUW_JSON_SCHEMA));
@@ -135,19 +135,19 @@ describe('draaiBouwer', () => {
 
 describe('draaiReviewer', () => {
   afterEach(() => {
-    herstelUitvoerder();
+    herstelAsyncUitvoerder();
   });
 
   function metEnvelop(naam: string, code = 0) {
-    const opnemer = maakUitvoerderOpnemer(() => ({ code, stdout: envelop(naam) }));
-    stelUitvoerderIn(opnemer.uitvoerder);
+    const opnemer = maakAsyncUitvoerderOpnemer(() => ({ code, stdout: envelop(naam) }));
+    stelAsyncUitvoerderIn(opnemer.uitvoerder);
     return opnemer;
   }
 
-  it('leest een review met twee bevindingen', () => {
+  it('leest een review met twee bevindingen', async () => {
     metEnvelop('claude-review-klaar');
 
-    const uitkomst = draaiReviewer(OPDRACHT);
+    const uitkomst = await draaiReviewer(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('klaar');
     expect(uitkomst.kosten).toBeCloseTo(1.23);
@@ -160,20 +160,20 @@ describe('draaiReviewer', () => {
     expect(verdict?.oordeel).toMatch(/grotendeels goed/);
   });
 
-  it('accepteert nul bevindingen als geldige uitkomst', () => {
+  it('accepteert nul bevindingen als geldige uitkomst', async () => {
     metEnvelop('claude-review-leeg');
 
-    const uitkomst = draaiReviewer(OPDRACHT);
+    const uitkomst = await draaiReviewer(OPDRACHT);
 
     expect(uitkomst.afloop).toBe('klaar');
     expect(uitkomst.verdict?.bevindingen).toHaveLength(0);
     expect(uitkomst.verdict?.oordeel).toMatch(/Geen bijzonderheden/);
   });
 
-  it('herkent is_error als mislukt, zonder het inleveren te blokkeren', () => {
+  it('herkent is_error als mislukt, zonder het inleveren te blokkeren', async () => {
     metEnvelop('claude-review-fout');
 
-    const uitkomst = draaiReviewer(OPDRACHT);
+    const uitkomst = await draaiReviewer(OPDRACHT);
 
     // Een gefaalde review is geen reden om de bouw te blokkeren (#184).
     expect(uitkomst.afloop).toBe('mislukt');
@@ -181,10 +181,10 @@ describe('draaiReviewer', () => {
     expect(uitkomst.verdict).toBeUndefined();
   });
 
-  it('roept claude aan met het review-schema en de lees-alleen-rechten', () => {
+  it('roept claude aan met het review-schema en de lees-alleen-rechten', async () => {
     const { aanroepen } = metEnvelop('claude-review-klaar');
 
-    draaiReviewer(OPDRACHT);
+    await draaiReviewer(OPDRACHT);
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(REVIEW_JSON_SCHEMA));

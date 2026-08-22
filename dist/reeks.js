@@ -21,7 +21,7 @@ import { GebruikersFout, ok, waarschuwing } from './shell.js';
  * zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in plaats van
  * de hele reeks te kosten.
  */
-export function draaiReeks(opzet) {
+export async function draaiReeks(opzet) {
     const gedaanIssues = new Set();
     const gemeld = new Set();
     let gedaan = 0;
@@ -58,7 +58,7 @@ export function draaiReeks(opzet) {
         let geslaagdeRun = false;
         gedaan += 1;
         try {
-            const { uitkomst } = metBoekhouding({
+            const { uitkomst } = await metBoekhouding({
                 paden: opzet.paden,
                 nu: opzet.nu,
                 soort: opzet.soort,

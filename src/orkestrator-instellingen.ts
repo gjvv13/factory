@@ -376,7 +376,7 @@ export interface RunRegel {
  * ook zo'n run krijgt zijn logregel, want een teller op 1 met een leeg log is precies
  * de stilte die je 's ochtends niet kunt lezen.
  */
-export function metBoekhouding<T>(
+export async function metBoekhouding<T>(
   opzet: {
     readonly paden: OrkestratorPaden;
     readonly nu: Date;
@@ -385,14 +385,14 @@ export function metBoekhouding<T>(
     readonly pot: RunPot;
     readonly item: { readonly issue: number; readonly app: string };
   },
-  draai: () => T,
+  draai: () => Promise<T>,
   beschrijf: (uitkomst: T) => RunRegel,
-): { readonly uitkomst: T; readonly gestart: number } {
+): Promise<{ readonly uitkomst: T; readonly gestart: number }> {
   const { paden, nu, soort, item } = opzet;
   const gestart = boekRun(paden, nu, opzet.pot);
   let uitkomst: T;
   try {
-    uitkomst = draai();
+    uitkomst = await draai();
   } catch (fout) {
     logRun(paden, new Date(Date.now()), {
       issue: item.issue,

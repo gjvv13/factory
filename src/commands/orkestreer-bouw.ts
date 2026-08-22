@@ -251,7 +251,7 @@ export interface BouwOpties {
  * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
  * valt vóórdat er iets gebeurt.
  */
-export function orkestreerBouw(opties: BouwOpties = {}): void {
+export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
   if (opties.dry === true && opties.eenmalig === true) {
     throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
   }
@@ -346,7 +346,7 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
         : `Reeks: ${keuze.issues.map((n) => `#${String(n)}`).join(', ')}`,
     );
     meldReeks(
-      draaiReeks({
+      await draaiReeks({
         paden,
         nu: new Date(Date.now()),
         soort: 'bouw',
@@ -380,7 +380,7 @@ export function orkestreerBouw(opties: BouwOpties = {}): void {
 
   // Een bouw-run stond tot #264 nergens: `logRun` werd alleen uit de nacht-lus
   // aangeroepen, en die is refine-only. Juist de duurste soort was dus onzichtbaar.
-  metBoekhouding(
+  await metBoekhouding(
     {
       paden,
       nu: new Date(Date.now()),
@@ -470,7 +470,7 @@ export function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-function bouwAf(
+async function bouwAf(
   item: Bouwitem,
   cwd: string,
   wortel: string,
@@ -478,7 +478,7 @@ function bouwAf(
   reviewBudgetUsd: number,
   effort: string,
   leverIn: (opties: InleverenOpties) => void,
-): BouwUitkomst {
+): Promise<BouwUitkomst> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
   zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -515,7 +515,7 @@ function bouwAf(
     // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
     werkplek(String(item.issue), { cwd: spiegel });
 
-    uitkomst = draaiBouwer({
+    uitkomst = await draaiBouwer({
       prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen),
       werkmap,
       sessie: randomUUID(),
@@ -541,7 +541,7 @@ function bouwAf(
   let reviewUitkomst: ReviewUitkomst | undefined;
   if (uitkomst.afloop === 'klaar') {
     try {
-      reviewUitkomst = draaiReviewer({
+      reviewUitkomst = await draaiReviewer({
         prompt: reviewPrompt(item, werkmap, factoryMap),
         werkmap,
         sessie: randomUUID(),

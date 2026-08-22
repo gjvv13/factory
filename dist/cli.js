@@ -146,7 +146,7 @@ async function main(argumenten) {
             const issue = leesIssue(waarden.get('--issue'));
             const reeks = leesReeks(waarden.get('--reeks'));
             if (leesSoort(waarden.get('--soort')) === 'bouw') {
-                orkestreerBouw({
+                await orkestreerBouw({
                     dry: schakelaars.has('--dry'),
                     eenmalig: schakelaars.has('--eenmalig'),
                     ...(issue === undefined ? {} : { issue }),
@@ -159,7 +159,7 @@ async function main(argumenten) {
                 return;
             }
             if (positioneel[0] === 'antwoord') {
-                orkestreerAntwoord(positioneel[1], positioneel[2], {
+                await orkestreerAntwoord(positioneel[1], positioneel[2], {
                     opnieuw: schakelaars.has('--opnieuw'),
                 });
                 return;
@@ -167,7 +167,7 @@ async function main(argumenten) {
             if (positioneel[0] !== undefined) {
                 throw new GebruikersFout(`Onbekend subcommando '${positioneel[0]}'. Zie: factory help`);
             }
-            orkestreer({
+            await orkestreer({
                 dry: schakelaars.has('--dry'),
                 eenmalig: schakelaars.has('--eenmalig'),
                 nacht: schakelaars.has('--nacht'),

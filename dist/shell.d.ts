@@ -51,10 +51,34 @@ export interface ProcesUitkomst {
  * worden zonder echt git, pnpm of pm2 aan te roepen.
  */
 export type Uitvoerder = (commando: string, argumenten: string[], options: RunOptions) => ProcesUitkomst;
-/** Vervangt de proces-uitvoerder. Alleen bedoeld voor tests. */
+/**
+ * Async variant van `Uitvoerder`, voor aanroepen die een procesgroep moeten beheren.
+ *
+ * De werker-keten (#224) gebruikt deze variant: `spawn` met `detached: true` zet het
+ * kindproces in een eigen procesgroep, en bij een timeout doodt `process.kill(-pid)`
+ * de hele groep — inclusief kleinkinderen die `spawnSync`'s timeout niet raakt.
+ */
+export type AsyncUitvoerder = (commando: string, argumenten: string[], options: RunOptions) => Promise<ProcesUitkomst>;
+/**
+ * Vervangt de proces-uitvoerder. Alleen bedoeld voor tests.
+ *
+ * Zet ook de async uitvoerder op een wrapper die dezelfde callback aanroept, zodat
+ * tests die alleen de sync uitvoerder instellen automatisch ook de async paden
+ * (de werker-keten via `runAsync`, #224) dekken zonder apart `stelAsyncUitvoerderIn`
+ * te hoeven aanroepen.
+ */
 export declare function stelUitvoerderIn(uitvoerder: Uitvoerder): void;
 /** Herstelt de echte proces-uitvoerder na een test. */
 export declare function herstelUitvoerder(): void;
+/** Vervangt de async proces-uitvoerder. Alleen bedoeld voor tests. */
+export declare function stelAsyncUitvoerderIn(uitvoerder: AsyncUitvoerder): void;
+/** Herstelt de echte async proces-uitvoerder na een test. */
+export declare function herstelAsyncUitvoerder(): void;
+/**
+ * Async variant van `run()`: zelfde interpretatie, maar via de async uitvoerder die
+ * een procesgroep beheert. Alleen de werker-keten gebruikt dit pad (#224).
+ */
+export declare function runAsync(commando: string, argumenten: string[], options?: RunOptions): Promise<RunResult>;
 /**
  * Voert een commando uit. Stdin staat standaard dicht: de pipeline is niet
  * interactief en mag nooit op invoer blijven wachten.

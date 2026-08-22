@@ -311,7 +311,7 @@ export interface BouwUitkomst extends WerkerBasis {
  * exitcode, en geen verdict is een mislukking en geen "waarschijnlijk gelukt". Het
  * verschil is het schema — een criterium zonder bewijs komt er niet als `klaar` door.
  */
-export declare function draaiBouwer(opdracht: WerkerOpdracht): BouwUitkomst;
+export declare function draaiBouwer(opdracht: WerkerOpdracht): Promise<BouwUitkomst>;
 /** Wat een review-run oplevert: dezelfde envelop-informatie, een ander verdict. */
 export interface ReviewUitkomst extends WerkerBasis {
     readonly verdict?: ReviewVerdict;
@@ -324,6 +324,6 @@ export interface ReviewUitkomst extends WerkerBasis {
  * dat geen reden om het inleveren te blokkeren — de review is een extra poort, geen
  * voorwaarde.
  */
-export declare function draaiReviewer(opdracht: WerkerOpdracht): ReviewUitkomst;
-export declare function draaiWerker(opdracht: WerkerOpdracht): WerkerUitkomst;
+export declare function draaiReviewer(opdracht: WerkerOpdracht): Promise<ReviewUitkomst>;
+export declare function draaiWerker(opdracht: WerkerOpdracht): Promise<WerkerUitkomst>;
 export {};

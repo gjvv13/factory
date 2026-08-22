@@ -44,7 +44,7 @@ interface Opdrachtitem extends BacklogItem {
 /** De prompt voor de werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string): string;
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
-export declare function orkestreer(opties?: OrkestreerOpties): void;
+export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
 /** Wat er uit een escalatie-comment terug te lezen valt. */
 export interface Escalatie {
     readonly vraag: string;
@@ -94,7 +94,7 @@ export interface AntwoordOpties {
  * een hervatting $0,02 tegen $0,32 voor een verse run, want de context zit in de
  * cache. Het werk tot de escalatie blijft dus staan; de werker begint niet opnieuw.
  */
-export declare function orkestreerAntwoord(issueArgument: string | undefined, tekst: string | undefined, opties?: AntwoordOpties, cwd?: string): void;
+export declare function orkestreerAntwoord(issueArgument: string | undefined, tekst: string | undefined, opties?: AntwoordOpties, cwd?: string): Promise<void>;
 export interface OrkestreerPlistOpzet {
     /** Absoluut pad naar de globaal geïnstalleerde factory-bin (buiten ~/Documents). */
     readonly bin: string;

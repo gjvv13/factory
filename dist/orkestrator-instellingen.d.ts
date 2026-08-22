@@ -155,10 +155,10 @@ export declare function metBoekhouding<T>(opzet: {
         readonly issue: number;
         readonly app: string;
     };
-}, draai: () => T, beschrijf: (uitkomst: T) => RunRegel): {
+}, draai: () => Promise<T>, beschrijf: (uitkomst: T) => RunRegel): Promise<{
     readonly uitkomst: T;
     readonly gestart: number;
-};
+}>;
 /**
  * Voegt een regel toe aan het runlog.
  *
