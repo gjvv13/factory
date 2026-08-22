@@ -52,4 +52,19 @@ describe('leesArgumenten', () => {
   it('weigert elke vlag bij een commando zonder vlaggen', () => {
     expect(() => leesArgumenten(['--snel'])).toThrow(GebruikersFout);
   });
+
+  it('accepteert een waarde die met -- begint in de =-vorm', () => {
+    const { waarden } = leesArgumenten(['--titel=--iets'], { waarden: ['--titel'] });
+    expect(waarden.get('--titel')).toBe('--iets');
+  });
+
+  it('weigert een lege waarde in de =-vorm', () => {
+    expect(() => leesArgumenten(['--titel='], { waarden: ['--titel'] })).toThrow(GebruikersFout);
+  });
+
+  it('weigert een waarde die met -- begint in de gescheiden vorm', () => {
+    expect(() =>
+      leesArgumenten(['--titel', '--dry'], { waarden: ['--titel'], schakelaars: ['--dry'] }),
+    ).toThrow(GebruikersFout);
+  });
 });
