@@ -346,13 +346,16 @@ export function logRun(
     readonly uitkomst: string;
     readonly kosten?: number;
     readonly beurten?: number;
+    /** Uitsplitsing per fase, bijv. `(bouw $2.09 · review $1.12)` (#298). */
+    readonly uitsplitsing?: string;
   },
 ): void {
   const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
   const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
+  const uitsplitsing = regel.uitsplitsing === undefined ? '' : ` ${regel.uitsplitsing}`;
   schrijfLog(
     paden,
-    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten`,
+    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}`,
   );
 }
 
@@ -361,6 +364,12 @@ export interface RunRegel {
   readonly uitkomst: string;
   readonly kosten?: number;
   readonly beurten?: number;
+  /**
+   * Optionele uitsplitsing achter de beurten, bijvoorbeeld `(bouw $2.09 · review $1.12)`.
+   * Verschijnt alleen als er meer dan één fase draaide; zonder dit veld is de logregel
+   * ongewijzigd (#298).
+   */
+  readonly uitsplitsing?: string;
 }
 
 /**

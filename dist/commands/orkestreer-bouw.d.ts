@@ -1,5 +1,6 @@
 import { type BacklogItem } from '../board.js';
-import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type RunRegel, type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import { type InleverenOpties } from './inleveren.js';
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
@@ -88,6 +89,21 @@ export interface BouwOpties {
  * valt vóórdat er iets gebeurt.
  */
 export declare function orkestreerBouw(opties?: BouwOpties): Promise<void>;
+/**
+ * Het resultaat van `bouwAf`: de bouw-uitkomst plus de optionele review-uitkomst als
+ * wrapper, zodat `beschrijfBouw` de kosten van beide fasen kan optellen (#298).
+ */
+export interface BouwAfResultaat {
+    readonly bouw: BouwUitkomst;
+    readonly review?: ReviewUitkomst;
+}
+/**
+ * Wat er van een bouw-run in het log komt.
+ *
+ * Somt de kosten en beurten van bouw + review op tot één totaal, met een uitsplitsing
+ * als de review gedraaid heeft (#298). Zonder review is de logregel ongewijzigd.
+ */
+export declare function beschrijfBouw(resultaat: BouwAfResultaat): RunRegel;
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[]): string;
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */

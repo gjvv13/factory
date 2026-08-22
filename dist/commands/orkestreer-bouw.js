@@ -267,7 +267,7 @@ export async function orkestreerBouw(opties = {}) {
             leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
             werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren),
             beschrijf: beschrijfBouw,
-            gelukt: (u) => u.afloop === 'klaar',
+            gelukt: (u) => u.bouw.afloop === 'klaar',
         }));
         return;
     }
@@ -285,16 +285,38 @@ export async function orkestreerBouw(opties = {}) {
 /**
  * Wat er van een bouw-run in het log komt.
  *
- * Zelfde vorm als bij een refine-run, inclusief de eigen tekst voor een afkapping
- * (#206): "afgekapt (30 min)" is 's ochtends leesbaar, "mislukt" niet.
+ * Somt de kosten en beurten van bouw + review op tot één totaal, met een uitsplitsing
+ * als de review gedraaid heeft (#298). Zonder review is de logregel ongewijzigd.
  */
-function beschrijfBouw(uitkomst) {
+export function beschrijfBouw(resultaat) {
+    const { bouw, review } = resultaat;
+    const uitkomst = bouw.afgekaptNaMinuten === undefined
+        ? bouw.afloop
+        : `afgekapt (${String(bouw.afgekaptNaMinuten)} min)`;
+    // Zonder review: alleen de bouw-kosten, geen uitsplitsing — de logregel is ongewijzigd.
+    if (review === undefined) {
+        return {
+            uitkomst,
+            ...(bouw.kosten === undefined ? {} : { kosten: bouw.kosten }),
+            ...(bouw.beurten === undefined ? {} : { beurten: bouw.beurten }),
+        };
+    }
+    // Met review: kosten en beurten optellen, met een uitsplitsing.
+    const bouwKostenTekst = bouw.kosten === undefined ? '?' : `$${bouw.kosten.toFixed(2)}`;
+    const reviewKostenTekst = review.kosten === undefined ? '?' : `$${review.kosten.toFixed(2)}`;
+    // Totaalkosten: alleen de bekende kosten optellen. Zijn beide onbekend, dan is het
+    // totaal ook onbekend.
+    const totaalKosten = bouw.kosten === undefined && review.kosten === undefined
+        ? undefined
+        : (bouw.kosten ?? 0) + (review.kosten ?? 0);
+    const totaalBeurten = bouw.beurten === undefined && review.beurten === undefined
+        ? undefined
+        : (bouw.beurten ?? 0) + (review.beurten ?? 0);
     return {
-        uitkomst: uitkomst.afgekaptNaMinuten === undefined
-            ? uitkomst.afloop
-            : `afgekapt (${String(uitkomst.afgekaptNaMinuten)} min)`,
-        ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
-        ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+        uitkomst,
+        ...(totaalKosten === undefined ? {} : { kosten: totaalKosten }),
+        ...(totaalBeurten === undefined ? {} : { beurten: totaalBeurten }),
+        uitsplitsing: `(bouw ${bouwKostenTekst} · review ${reviewKostenTekst})`,
     };
 }
 /** De prompt voor de bouw-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
@@ -407,7 +429,10 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
         }
     }
     verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);
-    return uitkomst;
+    return {
+        bouw: uitkomst,
+        ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
+    };
 }
 /** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
 function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn) {
