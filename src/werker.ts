@@ -137,7 +137,14 @@ const envelopSchema = z.object({
   total_cost_usd: z.number().optional(),
   result: z.string().nullish(),
   structured_output: z.unknown().optional(),
-  permission_denials: z.array(z.object({ tool_name: z.string() })).optional(),
+  permission_denials: z
+    .array(
+      z.object({
+        tool_name: z.string(),
+        tool_input: z.object({ command: z.string() }).optional(),
+      }),
+    )
+    .optional(),
 });
 
 /**
@@ -322,6 +329,8 @@ export interface WerkerOpdracht {
   readonly extraMappen?: readonly string[];
   readonly budgetUsd: number;
   readonly model: string;
+  /** Reasoning-effort, als `--effort` (#290); afwezig laat claude zijn eigen default kiezen. */
+  readonly effort?: string;
   /**
    * Kap de run af na zoveel milliseconden (#206). Zonder grens hing een werker de hele
    * nacht: het slot blijft staan, de rij komt niet vooruit, en 's ochtends staat er één
@@ -394,6 +403,7 @@ export function werkerArgumenten(opdracht: WerkerOpdracht): string[] {
     ...(opdracht.hervat === true ? [] : ['--session-id', opdracht.sessie]),
     '--model',
     opdracht.model,
+    ...(opdracht.effort === undefined ? [] : ['--effort', opdracht.effort]),
     '--max-budget-usd',
     String(opdracht.budgetUsd),
     '--json-schema',
@@ -423,6 +433,28 @@ export function werkerArgumenten(opdracht: WerkerOpdracht): string[] {
  * afwijkende envelop, `is_error` — geldt voor beide even hard, en dat wil je op één
  * plek houden: het zijn allemaal gemeten valkuilen.
  */
+/**
+ * Het label van één geweigerd gereedschap, voor de voetnoot en de wrijvingsmelding.
+ *
+ * Voor een Bash-weigering het commando in plaats van kaal "Bash": zonder het commando
+ * weet niemand wélke grens raakte, en dan is de rechtenlijst verbreden gokken (#290).
+ * Samengevat tot het werkwoord — plus het subcommando bij `git`/`gh`/`pnpm`/`npx`/`node` —
+ * zodat het label aansluit op de patronen in de rechtenlijst (`git push`, `chmod`).
+ */
+function weigeringLabel(denial: {
+  readonly tool_name: string;
+  readonly tool_input?: { readonly command: string } | undefined;
+}): string {
+  const commando = denial.tool_input?.command;
+  if (denial.tool_name !== 'Bash' || commando === undefined) {
+    return denial.tool_name;
+  }
+  const woorden = commando.trim().split(/\s+/);
+  const verb = woorden[0] ?? 'Bash';
+  const metSubcommando = ['git', 'gh', 'pnpm', 'npx', 'node'];
+  return metSubcommando.includes(verb) && woorden[1] !== undefined ? `${verb} ${woorden[1]}` : verb;
+}
+
 function leesEnvelop(opdracht: WerkerOpdracht):
   | { readonly soort: 'mislukt'; readonly uitkomst: WerkerBasis }
   | {
@@ -481,7 +513,7 @@ function leesEnvelop(opdracht: WerkerOpdracht):
     };
   }
   const data = envelop.data;
-  const geweigerd = [...new Set((data.permission_denials ?? []).map((d) => d.tool_name))];
+  const geweigerd = [...new Set((data.permission_denials ?? []).map(weigeringLabel))];
   const basis = {
     sessie: data.session_id,
     weigeringen: data.permission_denials?.length ?? 0,

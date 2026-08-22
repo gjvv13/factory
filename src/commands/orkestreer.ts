@@ -307,6 +307,7 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
               // Dezelfde tijdslimiet als de nacht: een hangende werker in een reeks van
               // vier is even duur als een hangende werker om 04:00 (#206).
               timeoutMs: instellingen.runTimeoutMs,
+              effort: instellingen.werkerEffort,
             }),
           beschrijf: beschrijfRun,
           gelukt: (u) => u.afloop === 'klaar',
@@ -376,7 +377,11 @@ export function orkestreer(opties: OrkestreerOpties = {}): void {
         pot: 'interactief',
         item: eerste,
       },
-      () => werkAf(eerste, cwd, wortel, { budgetUsd: leesInstellingen(paden).budgetPerRun }),
+      () =>
+        werkAf(eerste, cwd, wortel, {
+          budgetUsd: leesInstellingen(paden).budgetPerRun,
+          effort: leesInstellingen(paden).werkerEffort,
+        }),
       beschrijfRun,
     );
   } finally {
@@ -421,6 +426,7 @@ function draaiNacht(cwd: string, wortel: string, paden: OrkestratorPaden, nu: Da
     // Alleen onbemand een grens: een nacht die vastloopt kost de hele rij, terwijl een
     // run die ik zelf start onder mijn ogen gebeurt en gewoon met ctrl-c stopt.
     timeoutMs: instellingen.runTimeoutMs,
+    effort: instellingen.werkerEffort,
   };
 
   const versie = eigenVersie();
@@ -482,6 +488,8 @@ interface RunUitkomst {
 interface DraaiOpties {
   readonly budgetUsd: number;
   readonly env?: NodeJS.ProcessEnv;
+  /** Reasoning-effort van de werker, als `--effort` (#290). */
+  readonly effort?: string;
   /** Tijdsgrens per run (#206); afwezig betekent geen grens — zo blijft `--eenmalig` met de hand onbeperkt. */
   readonly timeoutMs?: number;
 }
@@ -524,6 +532,7 @@ function werkAf(item: Opdrachtitem, cwd: string, wortel: string, draai: DraaiOpt
       budgetUsd: draai.budgetUsd,
       ...(draai.timeoutMs === undefined ? {} : { timeoutMs: draai.timeoutMs }),
       model: MODEL,
+      ...(draai.effort === undefined ? {} : { effort: draai.effort }),
       ...(draai.env === undefined ? {} : { env: draai.env }),
     });
 
@@ -900,10 +909,12 @@ function werkAntwoordAf(
           sessie: escalatie.sessie,
           hervat: true,
         };
+  const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
   const uitkomst = draaiWerker({
     ...opdracht,
-    budgetUsd: leesInstellingen(opties.paden ?? standaardPaden()).budgetPerRun,
+    budgetUsd: instellingen.budgetPerRun,
     model: MODEL,
+    effort: instellingen.werkerEffort,
   });
 
   if (uitkomst.sessieWeg === true) {

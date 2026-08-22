@@ -66,6 +66,7 @@ describe('orkestrator-instellingen', () => {
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
+        werkerEffort: 'medium',
       });
     });
 
@@ -78,6 +79,7 @@ describe('orkestrator-instellingen', () => {
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
+        werkerEffort: 'medium',
       });
     });
 
@@ -117,7 +119,18 @@ describe('orkestrator-instellingen', () => {
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
         runTimeoutMs: 30 * 60_000,
+        werkerEffort: 'medium',
       });
+    });
+
+    it('leest een eigen werker-effort en valt anders terug op medium (#290)', () => {
+      schrijfEnv('FACTORY_WERKER_EFFORT=low\n');
+      expect(leesInstellingen(paden).werkerEffort).toBe('low');
+    });
+
+    it('weigert een onbekende effort-waarde luid', () => {
+      schrijfEnv('FACTORY_WERKER_EFFORT=turbo\n');
+      expect(() => leesInstellingen(paden)).toThrow(/FACTORY_WERKER_EFFORT/);
     });
 
     it('faalt luid op een onmogelijke waarde', () => {

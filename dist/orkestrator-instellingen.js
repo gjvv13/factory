@@ -51,6 +51,13 @@ const instellingenSchema = z.object({
      * orkestrator naast de eerste. 55 minuten laat marge voor het opruimen erna.
      */
     FACTORY_RUN_TIMEOUT_MIN: z.coerce.number().int().min(1).max(55).default(30),
+    /**
+     * De reasoning-effort van elke werker (#290), als `--effort`. Default `medium`: bij
+     * een goed-gerefined item is bouwen vaak mechanisch, en `high` betekent veel
+     * denk-tokens per beurt. De echte kostenmeting draait deze knop; de instelling maakt
+     * hem, reversibel via het env-bestand.
+     */
+    FACTORY_WERKER_EFFORT: z.enum(['low', 'medium', 'high']).default('medium'),
     [TOKEN_SLEUTEL]: z.string().min(1).optional(),
 });
 /** Regels in `sleutel=waarde`-vorm, zoals de env-bestanden van de apps. */
@@ -91,6 +98,7 @@ export function leesInstellingen(paden) {
             bouwBudgetPerRun: 10,
             reviewBudgetPerRun: 3,
             runTimeoutMs: 30 * 60_000,
+            werkerEffort: 'medium',
         };
     }
     waarschuwBijSlappeRechten(paden.envPad);
@@ -108,6 +116,7 @@ export function leesInstellingen(paden) {
         bouwBudgetPerRun: gelezen.data.FACTORY_BOUW_BUDGET_USD,
         reviewBudgetPerRun: gelezen.data.FACTORY_REVIEW_BUDGET_USD,
         runTimeoutMs: gelezen.data.FACTORY_RUN_TIMEOUT_MIN * 60_000,
+        werkerEffort: gelezen.data.FACTORY_WERKER_EFFORT,
         ...(token === undefined ? {} : { token }),
     };
 }
@@ -154,7 +163,8 @@ export function zorgVoorEnvBestand(paden) {
         '# Dit bestand hoort rechten 600 te hebben: er staat een token in.\n' +
         `${TOKEN_SLEUTEL}=\n` +
         'FACTORY_DAGMAXIMUM=4\n' +
-        'FACTORY_BUDGET_USD=5\n', { mode: 0o600 });
+        'FACTORY_BUDGET_USD=5\n' +
+        'FACTORY_WERKER_EFFORT=medium\n', { mode: 0o600 });
 }
 // --- De dagteller: wat GitHub niet weet --------------------------------------
 const staatSchema = z.object({
