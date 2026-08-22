@@ -183,3 +183,38 @@ describe('issuesUitBereik — git-log-parse tegen opgenomen uitvoer', () => {
     expect(parseIssuesUitLog('')).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// issuesUitBereik: trailer-parse (%B-uitvoer met Refs/Closes/Fixes-trailers)
+// ---------------------------------------------------------------------------
+
+describe('issuesUitBereik — trailer-parse tegen opgenomen %B-uitvoer', () => {
+  it('herkent slice-merges én Refs/Closes/Fixes-trailers, ontdubbeld en gesorteerd', () => {
+    const log = leesFixture('git-log-met-trailers.txt').trim();
+    const nummers = parseIssuesUitLog(log);
+
+    // slice/182-1 → 182, Refs: #183 → 183 (tweemaal, ontdubbeld), Fixes #200 → 200,
+    // Closes: #201 → 201. "#99 midden in een zin" wordt genegeerd.
+    expect(nummers).toEqual([182, 183, 200, 201]);
+  });
+
+  it('negeert een #N midden in een zin (geen regelbegin)', () => {
+    const log = leesFixture('git-log-met-trailers.txt').trim();
+    const nummers = parseIssuesUitLog(log);
+
+    expect(nummers).not.toContain(99);
+  });
+
+  it('herkent trailers case-insensitief en met of zonder dubbele punt', () => {
+    const log = ['Refs: #10', 'closes #20', 'FIXES: #30', 'Refs #40'].join('\n');
+
+    expect(parseIssuesUitLog(log)).toEqual([10, 20, 30, 40]);
+  });
+
+  it('de bestaande %s-fixture blijft groen (backward-compatibel)', () => {
+    const log = leesFixture('git-log-merges.txt').trim();
+    const nummers = parseIssuesUitLog(log);
+
+    expect(nummers).toEqual([108, 112, 121, 122, 132]);
+  });
+});
