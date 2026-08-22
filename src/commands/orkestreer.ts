@@ -44,10 +44,10 @@ import {
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
-import { type ReeksKeuze } from './orkestreer-bouw.js';
+import { type ReeksKeuze, werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker, type Afloop, type WerkerUitkomst } from '../werker.js';
+import { draaiWerker, type Afloop, type WerkerBasis, type WerkerUitkomst } from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 
 /**
@@ -632,12 +632,19 @@ const VRAAG_EIND = '<!-- /orkestrator:vraag -->';
 const ADVIES_MERK = '<!-- orkestrator:advies -->';
 const ADVIES_EIND = '<!-- /orkestrator:advies -->';
 
+/** Het soort werker dat escaleerde — bepaalt welk pad `antwoord` neemt. */
+export type EscalatieSoort = 'refine' | 'bouw';
+
 /** Wat er uit een escalatie-comment terug te lezen valt. */
 export interface Escalatie {
   readonly vraag: string;
   readonly advies: string;
   readonly sessie: string;
   readonly werkmap: string;
+  /** Ontbreekt in oude comments; dat is altijd `'refine'`. */
+  readonly soort: EscalatieSoort;
+  /** De app waar het item bij hoort — nodig om het bouw-antwoordpad te hervatten. */
+  readonly app?: string;
 }
 
 /**
@@ -651,15 +658,17 @@ export function escalatieComment(
   issue: number,
   vraag: string,
   advies: string,
-  uitkomst: WerkerUitkomst,
+  uitkomst: WerkerBasis,
   werkmap: string,
+  soort: EscalatieSoort = 'refine',
+  app?: string,
 ): string {
   return (
     `**Escalatie.**\n\n` +
     `${VRAAG_MERK}\n**Vraag:** ${vraag}\n${VRAAG_EIND}\n\n` +
     `${ADVIES_MERK}\n**Advies:** ${advies}\n${ADVIES_EIND}\n\n` +
     `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
-    voetnoot(uitkomst, werkmap)
+    voetnoot(uitkomst, werkmap, soort, app)
   );
 }
 
@@ -682,10 +691,19 @@ export function laatsteEscalatie(issue: number, cwd: string): Escalatie | undefi
   return undefined;
 }
 
-/** Leest een escalatie terug uit de comment die `escalatieComment` schreef. */
+/**
+ * Leest een escalatie terug uit de comment die `escalatieComment` schreef.
+ *
+ * Optionele velden `soort` en `app` staan vóór `sessie`; ontbreken ze (oude comments),
+ * dan is `soort` altijd `'refine'` — voor #306 bestond er geen bouw-escalatie die het
+ * antwoordpad kon bereiken.
+ */
 export function leesEscalatie(comment: string): Escalatie | undefined {
-  const sessie = /<!-- orkestrator: sessie=([^\s]+) werkmap=(.+?) -->/.exec(comment);
-  if (sessie?.[1] === undefined || sessie[2] === undefined) {
+  const sessie =
+    /<!-- orkestrator:(?:\s+soort=(\S+))?(?:\s+app=(\S+))?\s+sessie=([^\s]+)\s+werkmap=(.+?)\s*-->/.exec(
+      comment,
+    );
+  if (sessie?.[3] === undefined || sessie[4] === undefined) {
     return undefined;
   }
   const vraag = tussen(comment, VRAAG_MERK, VRAAG_EIND);
@@ -693,7 +711,15 @@ export function leesEscalatie(comment: string): Escalatie | undefined {
   if (vraag === undefined || advies === undefined) {
     return undefined;
   }
-  return { vraag, advies, sessie: sessie[1], werkmap: sessie[2] };
+  const soort = sessie[1] === 'bouw' ? ('bouw' as const) : ('refine' as const);
+  return {
+    vraag,
+    advies,
+    sessie: sessie[3],
+    werkmap: sessie[4],
+    soort,
+    ...(sessie[2] === undefined ? {} : { app: sessie[2] }),
+  };
 }
 
 /**
@@ -820,15 +846,27 @@ function rondAf(
  * later mee. De werkmap staat erbij omdat de werker daar de code leest; hervatten
  * zelf blijkt niet map-gebonden (gemeten, anders dan #104 aannam).
  */
-function voetnoot(uitkomst: WerkerUitkomst, werkmap: string): string {
+function voetnoot(
+  uitkomst: WerkerBasis,
+  werkmap: string,
+  soort: EscalatieSoort = 'refine',
+  app?: string,
+): string {
   const delen = [
     uitkomst.kosten === undefined ? undefined : `$${uitkomst.kosten.toFixed(2)}`,
     uitkomst.beurten === undefined ? undefined : `${String(uitkomst.beurten)} beurten`,
     uitkomst.weigeringen > 0 ? `${String(uitkomst.weigeringen)}× geweigerd` : undefined,
   ].filter((deel) => deel !== undefined);
+  // `soort` en `app` staan vóór `werkmap`: het pad kan spaties bevatten, en de
+  // lazy match `werkmap=(.+?) -->` stopt bij het sluitteken — nieuwe velden erachter
+  // zouden in de match meelopen.
+  const extra =
+    soort === 'refine' && app === undefined
+      ? ''
+      : ` soort=${soort}${app === undefined ? '' : ` app=${app}`}`;
   return (
     `<sub>${delen.join(' · ')}</sub>\n` +
-    `<!-- orkestrator: sessie=${uitkomst.sessie} werkmap=${werkmap} -->`
+    `<!-- orkestrator:${extra} sessie=${uitkomst.sessie} werkmap=${werkmap} -->`
   );
 }
 
@@ -969,6 +1007,13 @@ async function werkAntwoordAf(
   opties: AntwoordOpties,
   cwd: string,
 ): Promise<void> {
+  // Een bouw-escalatie volgt een heel ander pad: draaiBouwer, review, inleveren.
+  // Die logica zit in orkestreer-bouw.ts, naast de rest van het bouw-pad.
+  if (escalatie.soort === 'bouw') {
+    await werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd);
+    return;
+  }
+
   kop(`Antwoord op #${String(issue)}`);
   const opdracht =
     opties.opnieuw === true
@@ -1071,7 +1116,7 @@ function verseOpdracht(
 }
 
 /** De prompt waarmee de sessie hervat wordt: jouw antwoord, en verder niets nieuws. */
-function vervolgPrompt(escalatie: Escalatie, tekst: string): string {
+export function vervolgPrompt(escalatie: Escalatie, tekst: string): string {
   return (
     `Antwoord op je vraag "${escalatie.vraag}":\n\n${tekst}\n\n` +
     'Werk hiermee verder en geef opnieuw een verdict. Loop vóór je antwoord de gesloten ' +
