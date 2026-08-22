@@ -1,6 +1,6 @@
 {
   "name": "factory",
-  "version": "1.15.52",
+  "version": "1.15.54",
   "private": false,
   "type": "module",
   "description": "Software factory: pipeline, gereedschap en gedeelde configuratie voor de applicaties.",
