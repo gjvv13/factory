@@ -127,6 +127,21 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
 - Faal hard bij een verkeerd geconfigureerde omgeving: half opstarten is erger
   dan niet opstarten.
 - Vang nooit een fout om hem stil te laten verdwijnen. Loggen en doorgooien mag.
+- Kan de aanroeper er zinnig op reageren, dan is falen geen uitzondering maar een
+  **resultaat**: een discriminated union (`{ ok: false, reden }` of een
+  domeinspecifieke variant). Het return-type dwingt de aanroeper beide takken af te
+  handelen; een `Error` doet dat niet. Kan de aanroeper er níets mee, dan is het een
+  bug → gooi `Error` (de regel hierboven).
+- In `http/` is het HTTP-antwoord zelf het resultaatkanaal: een statuscode + body.
+  Gooi daar geen `Error` voor een 400; antwoord met een 400. De Result-conventie
+  geldt voor `core/` en `clients/`.
+- Geen gedeeld `Result<T, E>`-type. Per geval een union die past bij het domein.
+- Nooit berichtinhoud, namen van personen, tokens of sleutels loggen — op geen enkel
+  niveau. Logs op de mini zijn persistente bestanden, geen vluchtige console-uitvoer.
+  Log een id, een lengte, een kanaal of een categorie: genoeg om het probleem te
+  vinden, niet genoeg om iets persoonlijks te lezen.
+- Gebruikersgerichte uitvoer (de CLI die het antwoord toont) is geen log — daar
+  gelden de regels van het kanaal, niet van logging.
 
 ## Commentaar
 
