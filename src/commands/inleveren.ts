@@ -46,10 +46,25 @@ function commitAlsGewijzigd(repoDir: string, bestand: string, melding: string): 
   return true;
 }
 
-/** De URL van de bestaande PR voor deze branch, of undefined als er nog geen is. */
-function bestaandePr(repoDir: string, branch: string): string | undefined {
-  const url = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url', '--jq', '.url'], repoDir);
-  return url === undefined || url === '' ? undefined : url;
+/** De status van een bestaande PR: open, gemerged of gesloten. */
+interface PrStatus {
+  readonly url: string;
+  readonly state: 'OPEN' | 'MERGED' | 'CLOSED';
+}
+
+/**
+ * De bestaande PR voor deze branch, of undefined als er nog geen is.
+ *
+ * Geeft naast de URL ook de state terug, zodat de aanroeper onderscheid kan
+ * maken tussen een open PR (hergebruiken) en een gemergede of gesloten PR (een
+ * nieuwe openen). Zonder dat onderscheid meldt `inleveren` een gemergede PR als
+ * geslaagde inlevering — het werk verdwijnt stil (#275).
+ */
+function bestaandePr(repoDir: string, branch: string): PrStatus | undefined {
+  const json = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url,state'], repoDir);
+  if (json === undefined || json === '') return undefined;
+  const parsed = JSON.parse(json) as { url: string; state: string };
+  return { url: parsed.url, state: parsed.state as PrStatus['state'] };
 }
 
 /**
@@ -128,15 +143,35 @@ export function inleveren(opties: InleverenOpties = {}): void {
     opties.titel === undefined
       ? ['--fill']
       : ['--title', opties.titel, '--body', 'Ingeleverd via `factory inleveren`.'];
-  const prUrl =
-    bestaandePr(repoDir, branch) ??
-    uitvoerVan(
+
+  // Een bestaande PR hergebruiken mag alleen als hij nog open is. Een gemergede of
+  // gesloten PR is geen inlevering: het werk zit in geen enkele open PR en bereikt
+  // main dus niet, terwijl de uitvoer zegt dat het gelukt is (#275).
+  const bestaande = bestaandePr(repoDir, branch);
+  let prUrl: string | undefined;
+
+  if (bestaande !== undefined && bestaande.state === 'OPEN') {
+    prUrl = bestaande.url;
+  } else {
+    if (bestaande !== undefined) {
+      const toestand = bestaande.state === 'MERGED' ? 'gemerged' : 'gesloten';
+      waarschuwing(
+        `bestaande PR ${bestaande.url} is al ${toestand} — er wordt een nieuwe geopend.`,
+      );
+    }
+    prUrl = uitvoerVan(
       'gh',
       ['pr', 'create', '--base', 'main', '--head', branch, ...titelArgumenten],
       repoDir,
     );
-  if (prUrl === undefined || prUrl === '') {
-    throw new GebruikersFout('Kon geen PR aanmaken of vinden met gh.');
+    if (prUrl === undefined || prUrl === '') {
+      const reden =
+        bestaande !== undefined
+          ? `De branch ${branch} heeft een ${bestaande.state === 'MERGED' ? 'gemergede' : 'gesloten'} PR (${bestaande.url}), ` +
+            'maar er is niets nieuws om in te leveren.'
+          : 'Kon geen PR aanmaken of vinden met gh.';
+      throw new GebruikersFout(reden);
+    }
   }
 
   // Het item schuift zelf mee (#128). Vanaf hier is de slice ingeleverd en dus onderweg

@@ -19,10 +19,20 @@ function commitAlsGewijzigd(repoDir, bestand, melding) {
     git(['commit', '-q', '-m', melding], repoDir);
     return true;
 }
-/** De URL van de bestaande PR voor deze branch, of undefined als er nog geen is. */
+/**
+ * De bestaande PR voor deze branch, of undefined als er nog geen is.
+ *
+ * Geeft naast de URL ook de state terug, zodat de aanroeper onderscheid kan
+ * maken tussen een open PR (hergebruiken) en een gemergede of gesloten PR (een
+ * nieuwe openen). Zonder dat onderscheid meldt `inleveren` een gemergede PR als
+ * geslaagde inlevering — het werk verdwijnt stil (#275).
+ */
 function bestaandePr(repoDir, branch) {
-    const url = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url', '--jq', '.url'], repoDir);
-    return url === undefined || url === '' ? undefined : url;
+    const json = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url,state'], repoDir);
+    if (json === undefined || json === '')
+        return undefined;
+    const parsed = JSON.parse(json);
+    return { url: parsed.url, state: parsed.state };
 }
 /**
  * Levert de huidige slice-branch in: lockfile in lijn brengen, de poort draaien,
@@ -87,10 +97,27 @@ export function inleveren(opties = {}) {
     const titelArgumenten = opties.titel === undefined
         ? ['--fill']
         : ['--title', opties.titel, '--body', 'Ingeleverd via `factory inleveren`.'];
-    const prUrl = bestaandePr(repoDir, branch) ??
-        uitvoerVan('gh', ['pr', 'create', '--base', 'main', '--head', branch, ...titelArgumenten], repoDir);
-    if (prUrl === undefined || prUrl === '') {
-        throw new GebruikersFout('Kon geen PR aanmaken of vinden met gh.');
+    // Een bestaande PR hergebruiken mag alleen als hij nog open is. Een gemergede of
+    // gesloten PR is geen inlevering: het werk zit in geen enkele open PR en bereikt
+    // main dus niet, terwijl de uitvoer zegt dat het gelukt is (#275).
+    const bestaande = bestaandePr(repoDir, branch);
+    let prUrl;
+    if (bestaande !== undefined && bestaande.state === 'OPEN') {
+        prUrl = bestaande.url;
+    }
+    else {
+        if (bestaande !== undefined) {
+            const toestand = bestaande.state === 'MERGED' ? 'gemerged' : 'gesloten';
+            waarschuwing(`bestaande PR ${bestaande.url} is al ${toestand} — er wordt een nieuwe geopend.`);
+        }
+        prUrl = uitvoerVan('gh', ['pr', 'create', '--base', 'main', '--head', branch, ...titelArgumenten], repoDir);
+        if (prUrl === undefined || prUrl === '') {
+            const reden = bestaande !== undefined
+                ? `De branch ${branch} heeft een ${bestaande.state === 'MERGED' ? 'gemergede' : 'gesloten'} PR (${bestaande.url}), ` +
+                    'maar er is niets nieuws om in te leveren.'
+                : 'Kon geen PR aanmaken of vinden met gh.';
+            throw new GebruikersFout(reden);
+        }
     }
     // Het item schuift zelf mee (#128). Vanaf hier is de slice ingeleverd en dus onderweg
     // naar acc en prod; dat is precies wat de kolom Uitrollen betekent. Een branch zonder

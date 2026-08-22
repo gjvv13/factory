@@ -221,11 +221,11 @@ describe('inleveren', () => {
     ]);
   });
 
-  it('hergebruikt een bestaande PR in plaats van een nieuwe te maken', () => {
+  it('hergebruikt een bestaande open PR in plaats van een nieuwe te maken', () => {
     process.chdir(maakRepo());
     const bepaal: UitkomstBepaler = (aanroep) => {
       if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
-        return { stdout: PR_URL }; // bestaande PR
+        return { stdout: JSON.stringify({ url: PR_URL, state: 'OPEN' }) };
       }
       return gelukkig(aanroep, 0);
     };
@@ -236,6 +236,114 @@ describe('inleveren', () => {
 
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(false);
     expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+  });
+
+  it('opent een nieuwe PR als de bestaande al gemerged is', () => {
+    process.chdir(maakRepo());
+    const MERGED_URL = 'https://github.com/gjvv13/factory/pull/268';
+    const NIEUWE_URL = 'https://github.com/gjvv13/factory/pull/270';
+    const regels = vangStdout();
+    const bepaal: UitkomstBepaler = (aanroep) => {
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
+        return { stdout: JSON.stringify({ url: MERGED_URL, state: 'MERGED' }) };
+      }
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'create') {
+        return { stdout: NIEUWE_URL };
+      }
+      return gelukkig(aanroep, 0);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    // Waarschuwt over de gemergede PR.
+    expect(regels.join('')).toContain('al gemerged');
+    expect(regels.join('')).toContain(MERGED_URL);
+    // Opent een nieuwe PR en zet daar auto-merge op.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
+    expect(argsVan(aanroepen, 'gh')).toContainEqual([
+      'pr',
+      'merge',
+      NIEUWE_URL,
+      '--auto',
+      '--merge',
+    ]);
+  });
+
+  it('faalt met een duidelijke reden als de branch niets nieuws heeft na een gemergede PR', () => {
+    process.chdir(maakRepo());
+    const MERGED_URL = 'https://github.com/gjvv13/factory/pull/268';
+    const bepaal: UitkomstBepaler = (aanroep) => {
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
+        return { stdout: JSON.stringify({ url: MERGED_URL, state: 'MERGED' }) };
+      }
+      // gh pr create faalt: er is niets nieuws om in te leveren.
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'create') {
+        return { code: 1 };
+      }
+      return gelukkig(aanroep, 0);
+    };
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+    expect(() => {
+      inleveren();
+    }).toThrow(/gemergede PR/);
+    expect(() => {
+      inleveren();
+    }).toThrow(/niets nieuws/);
+  });
+
+  it('zet het board niet naar Uitrollen als er geen open PR is', () => {
+    process.chdir(maakRepo());
+    const bepaal: UitkomstBepaler = (aanroep) => {
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
+        return { stdout: JSON.stringify({ url: PR_URL, state: 'MERGED' }) };
+      }
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'create') {
+        return { code: 1 };
+      }
+      return gelukkigMetBoard(aanroep, 0);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      inleveren();
+    }).toThrow();
+
+    // Het board mag niet zijn bijgewerkt: er staat geen open PR.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[0] === 'project')).toBe(false);
+  });
+
+  it('opent een nieuwe PR als de bestaande gesloten is', () => {
+    process.chdir(maakRepo());
+    const CLOSED_URL = 'https://github.com/gjvv13/factory/pull/268';
+    const NIEUWE_URL = 'https://github.com/gjvv13/factory/pull/270';
+    const regels = vangStdout();
+    const bepaal: UitkomstBepaler = (aanroep) => {
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
+        return { stdout: JSON.stringify({ url: CLOSED_URL, state: 'CLOSED' }) };
+      }
+      if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'create') {
+        return { stdout: NIEUWE_URL };
+      }
+      return gelukkig(aanroep, 0);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren();
+
+    expect(regels.join('')).toContain('al gesloten');
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
+    expect(argsVan(aanroepen, 'gh')).toContainEqual([
+      'pr',
+      'merge',
+      NIEUWE_URL,
+      '--auto',
+      '--merge',
+    ]);
   });
 
   it('geeft een expliciete titel door aan de PR', () => {
