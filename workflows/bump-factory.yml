@@ -76,10 +76,19 @@ jobs:
         run: |
           huidig=$(node -p "require('./package.json').devDependencies.factory.split('#').pop()")
           # Nieuwste factory-tag, semver-gesorteerd. De factory-repo is publiek, dus
-          # ls-remote heeft geen sleutel nodig.
-          nieuwste=$(git ls-remote --tags --refs https://github.com/gjvv13/factory.git 'v*' \
-            | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)
-          if [ -z "$nieuwste" ] || [ "$huidig" = "$nieuwste" ]; then
+          # ls-remote heeft geen sleutel nodig. Een mislukte opzoeking mag niet
+          # doorgaan als "niets te doen": dat verbergt een netwerkblip achter een
+          # groen vinkje (#263).
+          if ! tags=$(git ls-remote --tags --refs https://github.com/gjvv13/factory.git 'v*' 2>&1); then
+            echo "::error::kon de factory-tags niet opvragen: ${tags:-git ls-remote gaf niets terug}. Zie #263."
+            exit 1
+          fi
+          nieuwste=$(printf '%s' "$tags" | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)
+          if [ -z "$nieuwste" ]; then
+            echo "::error::git ls-remote lukte, maar leverde geen v*-tags op — dat klopt niet."
+            exit 1
+          fi
+          if [ "$huidig" = "$nieuwste" ]; then
             echo "factory al op $huidig — niets te doen."
             exit 0
           fi
