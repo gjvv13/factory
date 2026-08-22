@@ -5,6 +5,7 @@ import {
   appOpties,
   bordItems,
   ESCALATIE_LABEL,
+  haalLabelWeg,
   kolomVan,
   plaatsComment,
   zetKolom,
@@ -24,6 +25,12 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
+import {
+  escalatieComment,
+  vervolgPrompt,
+  type AntwoordOpties,
+  type Escalatie,
+} from './orkestreer.js';
 import {
   bronMappenVan,
   bronMomentopname,
@@ -638,12 +645,20 @@ function verwerkBouw(
   }
 
   const verdict = uitkomst.verdict;
+  const werkmap = bouwWerkplek(item.app, item.issue, wortel);
   if (verdict?.uitkomst === 'escalatie') {
     blokkeer(item, cwd);
     plaatsComment(
       item.issue,
-      `**Escalatie tijdens het bouwen.**\n\n**Vraag:** ${verdict.vraag}\n\n` +
-        `**Advies:** ${verdict.advies}\n\nEr is niets ingeleverd.\n\n${voetnoot}`,
+      escalatieComment(
+        item.issue,
+        verdict.vraag,
+        verdict.advies,
+        uitkomst,
+        werkmap,
+        'bouw',
+        item.app,
+      ),
       cwd,
     );
     ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
@@ -659,7 +674,6 @@ function verwerkBouw(
   // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
   // schuiven (#128) en de werkplek opruimen. Zonder auto-merge, want deze werker mag
   // code voorstellen en niet landen.
-  const werkmap = bouwWerkplek(item.app, item.issue, wortel);
   plaatsComment(
     item.issue,
     `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
@@ -804,7 +818,162 @@ function plaatsPrComment(item: Bouwitem, tekst: string): boolean {
   return uitkomst.code === 0;
 }
 
-/** Of het opgegeven `--soort` bestaat, en welke. Onbekend is een fout, geen stille default. */
+// --- antwoord: een bouw-escalatie beantwoorden --------------------------------
+
+/**
+ * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
+ * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in
+ * `orkestreer.ts` omdat zij het schema, de permissions en de afronding deelt met
+ * `bouwAf` — `werkAntwoordAf` delegeert hier naartoe op `soort === 'bouw'`.
+ */
+export async function werkBouwAntwoordAf(
+  issue: number,
+  tekst: string,
+  escalatie: Escalatie,
+  opties: AntwoordOpties,
+  cwd: string,
+): Promise<void> {
+  kop(`Bouw-antwoord op #${String(issue)}`);
+
+  const app = escalatie.app;
+  if (app === undefined) {
+    throw new GebruikersFout(
+      `De escalatie-comment op #${String(issue)} bevat geen app-veld; hervatten kan niet.\n` +
+        '  Dit is een comment uit een oudere versie. Begin een verse run:\n' +
+        `    factory orkestreer --soort bouw --issue ${String(issue)} --eenmalig`,
+    );
+  }
+
+  const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
+  const werkmap = bouwWerkplek(app, issue, wortel);
+  const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+
+  const opdracht =
+    opties.opnieuw === true
+      ? verseBouwOpdracht(issue, app, tekst, escalatie, cwd, wortel)
+      : {
+          prompt: vervolgPrompt(escalatie, tekst),
+          werkmap: escalatie.werkmap,
+          sessie: escalatie.sessie,
+          hervat: true,
+        };
+
+  const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
+  const uitkomst = await draaiBouwer({
+    ...opdracht,
+    budgetUsd: instellingen.bouwBudgetPerRun,
+    model: MODEL,
+    effort: instellingen.werkerEffort,
+  });
+
+  if (uitkomst.sessieWeg === true) {
+    throw new GebruikersFout(
+      `De sessie ${escalatie.sessie} bestaat niet meer, dus hervatten kan niet.\n` +
+        `  Begin een verse run met je antwoord erbij:\n` +
+        `    factory orkestreer antwoord ${String(issue)} "${tekst}" --opnieuw\n` +
+        '  Dat kost meer (geen cache) en het werk tot de escalatie is weg, maar het loopt door.',
+    );
+  }
+
+  if (uitkomst.afloop === 'mislukt') {
+    plaatsComment(
+      issue,
+      `**Bouw-antwoord verwerkt, maar de run mislukte.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
+        `<sub>${uitkomst.kosten === undefined ? '' : `$${uitkomst.kosten.toFixed(2)} · `}` +
+        `${uitkomst.beurten === undefined ? '' : `${String(uitkomst.beurten)} beurten`}</sub>\n` +
+        `<!-- orkestrator: soort=bouw app=${app} sessie=${uitkomst.sessie} werkmap=${werkmap} -->`,
+      cwd,
+    );
+    throw new GebruikersFout(`De run mislukte: ${uitkomst.fout ?? 'onbekende fout'}`);
+  }
+
+  const verdict = uitkomst.verdict;
+  if (verdict?.uitkomst === 'escalatie') {
+    // Nog een vraag. Het escalatie-label blijft staan; er is gewoon een nieuwe ronde nodig.
+    plaatsComment(
+      issue,
+      escalatieComment(issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', app),
+      cwd,
+    );
+    ok(`#${String(issue)} escaleert opnieuw`);
+    return;
+  }
+
+  if (verdict?.uitkomst !== 'klaar') {
+    throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitkomst.`);
+  }
+
+  // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
+  let reviewUitkomst: ReviewUitkomst | undefined;
+  try {
+    reviewUitkomst = await draaiReviewer({
+      prompt: reviewPrompt(
+        { issue, app, titel: '', labels: [], kolom: GECLAIMD_KOLOM, aangemaakt: '' },
+        werkmap,
+        factoryMap,
+      ),
+      werkmap,
+      sessie: randomUUID(),
+      extraMappen: [factoryMap],
+      budgetUsd: instellingen.reviewBudgetPerRun,
+      model: MODEL,
+      effort: instellingen.werkerEffort,
+    });
+  } catch (fout) {
+    const reden = fout instanceof Error ? fout.message : String(fout);
+    waarschuwing(`review kon niet draaien: ${reden}`);
+    reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
+  }
+
+  // Het item ophalen voor de titel (PR-titel bij inleveren) en de volledige Bouwitem.
+  const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
+  const titel = item?.titel ?? `#${String(issue)}`;
+  const bouwitem: Bouwitem = {
+    issue,
+    app,
+    titel,
+    labels: item?.labels ?? [],
+    kolom: GECLAIMD_KOLOM,
+    aangemaakt: item?.aangemaakt ?? '',
+  };
+
+  // Het escalatie-label weghalen: het item is niet meer vastgelopen.
+  haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+
+  verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren);
+}
+
+/**
+ * Bouwt een verse bouw-opdracht op voor `--opnieuw`: de sessie is weg, dus de volledige
+ * prompt moet er opnieuw in, mét het antwoord op de eerdere vraag.
+ */
+function verseBouwOpdracht(
+  issue: number,
+  app: string,
+  tekst: string,
+  escalatie: Escalatie,
+  cwd: string,
+  wortel: string,
+): { prompt: string; werkmap: string; sessie: string } {
+  const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
+  if (item?.app === undefined) {
+    throw new GebruikersFout(
+      `Kon #${String(issue)} niet op het board vinden (of het heeft geen App-veld);\n` +
+        '  zonder die gegevens is er geen opdracht om verse mee te beginnen.',
+    );
+  }
+  const werkmap = bouwWerkplek(app, issue, wortel);
+  const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+  return {
+    prompt:
+      `${bouwPrompt({ ...item, app: item.app }, werkmap, factoryMap)}\n\n` +
+      `## Eerder gevraagd\n\nEen eerdere poging stelde deze vraag:\n\n> ${escalatie.vraag}\n\n` +
+      `Het antwoord is:\n\n> ${tekst}\n\nWerk daarmee verder.`,
+    werkmap,
+    sessie: randomUUID(),
+  };
+}
+
 /** Wat `--reeks` kan zijn: een aantal van de kop, of precies deze items. */
 export type ReeksKeuze =
   | { readonly soort: 'aantal'; readonly aantal: number }

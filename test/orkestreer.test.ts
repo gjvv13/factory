@@ -593,6 +593,41 @@ describe('escalatie-comment', () => {
     // Een handgeschreven comment is geen escalatie; die mag `antwoord` niet hervatten.
     expect(leesEscalatie('gewoon een opmerking van een mens')).toBeUndefined();
   });
+
+  it('leest een bouw-escalatie met soort en app terug (#306)', () => {
+    const comment = escalatieComment(
+      224,
+      'Async of sync?',
+      'Async — het blokkeert anders.',
+      UITKOMST,
+      '/w/assistant-wt/224',
+      'bouw',
+      'assistant',
+    );
+    const terug = leesEscalatie(comment);
+
+    expect(terug?.soort).toBe('bouw');
+    expect(terug?.app).toBe('assistant');
+    expect(terug?.vraag).toBe('Async of sync?');
+    expect(terug?.advies).toBe('Async — het blokkeert anders.');
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
+    expect(terug?.werkmap).toBe('/w/assistant-wt/224');
+  });
+
+  it('leest oude comments zonder soort als refine (backwards-compatibiliteit)', () => {
+    // Vóór #306 stond er geen `soort` of `app` in de marker.
+    const comment = escalatieComment(94, 'v', 'a', UITKOMST, '/w/assistant');
+    const terug = leesEscalatie(comment);
+
+    expect(terug?.soort).toBe('refine');
+    expect(terug?.app).toBeUndefined();
+  });
+
+  it('bevat het antwoord-commando ook bij een bouw-escalatie', () => {
+    expect(escalatieComment(224, 'v', 'a', UITKOMST, '/w', 'bouw', 'assistant')).toContain(
+      'factory orkestreer antwoord 224',
+    );
+  });
 });
 
 describe('escalatie in de wachtrij', () => {
@@ -753,6 +788,36 @@ describe('orkestreer status', () => {
     const tekst = uitvoer.join('');
     expect(tekst).toContain('WASM of native crypto-SDK?');
     expect(tekst).toContain('geen native compilatie');
+    expect(tekst).toContain('factory orkestreer antwoord 51');
+  });
+
+  it('toont ook een bouw-escalatie met de vraag en het antwoord-commando (#306)', () => {
+    const BOUW_ESCALATIE = escalatieComment(
+      51,
+      'Async of sync?',
+      'Async — blokkeert anders.',
+      {
+        afloop: 'escalatie' as const,
+        sessie: 'bouw-esc-1',
+        kosten: 2.0,
+        beurten: 10,
+        weigeringen: 0,
+      },
+      '/w/assistant-wt/51',
+      'bouw',
+      'assistant',
+    );
+    const metBouw: UitkomstBepaler = (aanroep, index) =>
+      aanroep.argumenten[1]?.includes('/comments') === true
+        ? { stdout: commentsAntwoord([BOUW_ESCALATIE]) }
+        : statusBepaler(aanroep, index);
+    zetBeideUitvoerdersOp(metBouw);
+
+    orkestreerStatus('/repo', { paden: statusPaden });
+
+    const tekst = uitvoer.join('');
+    expect(tekst).toContain('Async of sync?');
+    expect(tekst).toContain('Async — blokkeert anders.');
     expect(tekst).toContain('factory orkestreer antwoord 51');
   });
 
@@ -956,6 +1021,55 @@ describe('orkestreer antwoord', () => {
     await expect(orkestreerAntwoord('51', '  ', {}, '/repo')).rejects.toThrow(
       /Gebruik: factory orkestreer antwoord/,
     );
+  });
+
+  it('hervat een bouw-escalatie met het bouw-schema en schrijft een nieuwe escalatie-comment (#306)', async () => {
+    // De werker escaleert opnieuw — zo toetsen we de routing zonder het hele
+    // inleverpad te moeten mocken.
+    const BOUW_ESCALATIE = escalatieComment(
+      51,
+      'Async of sync?',
+      'Async.',
+      {
+        afloop: 'escalatie' as const,
+        sessie: 'bouw-sessie-1234',
+        kosten: 2.0,
+        beurten: 10,
+        weigeringen: 0,
+      },
+      '/w/assistant-wt/51',
+      'bouw',
+      'assistant',
+    );
+    const bouwBepaler: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werkerEscaleert() };
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/comments')) {
+        return { stdout: commentsAntwoord([BOUW_ESCALATIE]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor Bouwen') };
+      }
+      return {};
+    };
+    const { aanroepen } = zetBeideUitvoerdersOp(bouwBepaler);
+    const wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-antw-'));
+
+    await orkestreerAntwoord('51', 'doe async', { werkplaatsWortel: wortel }, '/repo');
+    rmSync(wortel, { recursive: true, force: true });
+
+    // De `claude`-aanroep hervat de bestaande sessie.
+    const claude = aanroepen.find((a) => a.commando === 'claude');
+    expect(claude?.argumenten[0]).toBe('--resume');
+    expect(claude?.argumenten[1]).toBe('bouw-sessie-1234');
+    // Het schema bevat `criteria` (bouw), niet `slices` (refine).
+    const schemaArg = claude?.argumenten[claude.argumenten.indexOf('--json-schema') + 1] ?? '';
+    expect(schemaArg).toContain('criteria');
+    expect(schemaArg).not.toContain('"slices"');
+    // De nieuwe escalatie-comment heeft de bouw-markers.
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    const terug = leesEscalatie(comment);
+    expect(terug?.soort).toBe('bouw');
+    expect(terug?.app).toBe('assistant');
   });
 });
 
