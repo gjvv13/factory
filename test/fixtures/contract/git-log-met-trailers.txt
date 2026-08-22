@@ -1,0 +1,17 @@
+Merge pull request #300 from gjvv13/slice/182-1
+
+trailers uit de git-historie meenemen (#222)
+
+Refs: #183
+
+release: v1.15.45
+
+laat de auto-release via een auto-merge-PR lopen i.p.v. direct naar main te pushen
+
+This commit also touches #99 but that is not a trailer
+
+Fixes #200
+
+Closes: #201
+
+fixes: #183
