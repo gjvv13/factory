@@ -134,6 +134,41 @@ describe('accepteer-werker contracttest: waargenomen zonder bewijs', () => {
   });
 });
 
+describe('accepteer-werker contracttest: gemengde uitkomst met escalatie-criteria', () => {
+  it('parseert een envelop met niet-waarneembaar en gefaald criteria', async () => {
+    const { uitvoerder } = metFixture('claude-accepteer-escalatie.json');
+    stelAsyncUitvoerderIn(uitvoerder);
+
+    const uitkomst = await draaiAccepteerder({
+      prompt: 'test',
+      werkmap: '/tmp/test',
+      sessie: 'test-sessie',
+      budgetUsd: 3,
+      model: 'claude-opus-4-6',
+    });
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict).toBeDefined();
+    expect(uitkomst.verdict?.uitkomst).toBe('klaar');
+    if (uitkomst.verdict?.uitkomst === 'klaar') {
+      expect(uitkomst.verdict.criteria).toHaveLength(3);
+
+      // Waargenomen criterium met bewijs.
+      expect(uitkomst.verdict.criteria[0]?.status).toBe('waargenomen');
+      expect(uitkomst.verdict.criteria[0]?.bewijs).toBeDefined();
+
+      // Niet-waarneembaar criterium zonder bewijs.
+      expect(uitkomst.verdict.criteria[1]?.status).toBe('niet-waarneembaar');
+      expect(uitkomst.verdict.criteria[1]?.bewijs).toBeUndefined();
+
+      // Gefaald criterium met bewijs (de aanroep en het afwijkende antwoord).
+      expect(uitkomst.verdict.criteria[2]?.status).toBe('gefaald');
+      expect(uitkomst.verdict.criteria[2]?.bewijs).toBeDefined();
+      expect(uitkomst.verdict.criteria[2]?.bewijs?.antwoord).toContain('500');
+    }
+  });
+});
+
 describe('accepteer-werker permissions', () => {
   it('bevat geen schrijf-gereedschappen in de toestemmingslijst', () => {
     // De accepteer-werker mag alleen HTTP-aanroepen doen, niet schrijven naar de
