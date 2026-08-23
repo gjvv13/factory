@@ -1,0 +1,128 @@
+{
+  "data": {
+    "user": {
+      "projectV2": {
+        "appVeld": {
+          "options": [{ "name": "assistant" }, { "name": "beheer" }, { "name": "factory" }]
+        },
+        "items": {
+          "pageInfo": {
+            "hasNextPage": false
+          },
+          "nodes": [
+            {
+              "status": {
+                "name": "Uitrollen"
+              },
+              "app": {
+                "name": "assistant"
+              },
+              "content": {
+                "number": 201,
+                "title": "Nieuwe intentie: boodschappen toevoegen",
+                "state": "OPEN",
+                "createdAt": "2026-08-10T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Uitrollen"
+              },
+              "app": {
+                "name": "assistant"
+              },
+              "content": {
+                "number": 202,
+                "title": "Herinnering-commando via natuurlijke taal",
+                "state": "OPEN",
+                "createdAt": "2026-08-12T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Uitrollen"
+              },
+              "app": {
+                "name": "beheer"
+              },
+              "content": {
+                "number": 203,
+                "title": "Health-dashboard per omgeving",
+                "state": "OPEN",
+                "createdAt": "2026-08-14T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 204,
+                "title": "Iets anders dat niet op Uitrollen staat",
+                "state": "OPEN",
+                "createdAt": "2026-08-15T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
+                "name": "Done"
+              },
+              "app": {
+                "name": "assistant"
+              },
+              "content": {
+                "number": 205,
+                "title": "Al afgerond item",
+                "state": "OPEN",
+                "createdAt": "2026-08-09T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

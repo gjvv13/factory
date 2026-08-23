@@ -1035,12 +1035,17 @@ export function leesIssue(waarde: string | undefined): number | undefined {
   return nummer;
 }
 
-export function leesSoort(waarde: string | undefined): 'refine' | 'bouw' {
+export function leesSoort(waarde: string | undefined): 'refine' | 'bouw' | 'accepteer' {
   if (waarde === undefined || waarde === 'refine') {
     return 'refine';
   }
   if (waarde === 'bouw') {
     return 'bouw';
   }
-  throw new GebruikersFout(`Onbekende --soort '${waarde}'. Kies: refine (default) of bouw.`);
+  if (waarde === 'accepteer') {
+    return 'accepteer';
+  }
+  throw new GebruikersFout(
+    `Onbekende --soort '${waarde}'. Kies: refine (default), bouw of accepteer.`,
+  );
 }

@@ -752,6 +752,9 @@ export function leesSoort(waarde) {
     if (waarde === 'bouw') {
         return 'bouw';
     }
-    throw new GebruikersFout(`Onbekende --soort '${waarde}'. Kies: refine (default) of bouw.`);
+    if (waarde === 'accepteer') {
+        return 'accepteer';
+    }
+    throw new GebruikersFout(`Onbekende --soort '${waarde}'. Kies: refine (default), bouw of accepteer.`);
 }
 //# sourceMappingURL=orkestreer-bouw.js.map
