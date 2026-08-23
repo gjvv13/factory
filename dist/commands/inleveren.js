@@ -20,6 +20,16 @@ function commitAlsGewijzigd(repoDir, bestand, melding) {
     return true;
 }
 /**
+ * Parseert de JSON-uitvoer van `gh pr view --json url,state` tot url + state.
+ * Een lege string (geen PR voor deze branch) geeft undefined.
+ */
+export function parsePrView(json) {
+    if (json === '')
+        return undefined;
+    const parsed = JSON.parse(json);
+    return { url: parsed.url, state: parsed.state };
+}
+/**
  * De bestaande PR voor deze branch, of undefined als er nog geen is.
  *
  * Geeft naast de URL ook de state terug, zodat de aanroeper onderscheid kan
@@ -29,10 +39,12 @@ function commitAlsGewijzigd(repoDir, bestand, melding) {
  */
 function bestaandePr(repoDir, branch) {
     const json = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url,state'], repoDir);
-    if (json === undefined || json === '')
+    if (json === undefined)
         return undefined;
-    const parsed = JSON.parse(json);
-    return { url: parsed.url, state: parsed.state };
+    const result = parsePrView(json);
+    if (result === undefined)
+        return undefined;
+    return { url: result.url, state: result.state };
 }
 /**
  * Levert de huidige slice-branch in: lockfile in lijn brengen, de poort draaien,
