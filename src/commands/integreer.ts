@@ -70,6 +70,18 @@ interface WachtrijItem {
   readonly createdAt: string;
 }
 
+/**
+ * Parseert de JSON-uitvoer van `gh pr list --json number,createdAt` tot een
+ * oudste-eerst-wachtrij. Een lege string (geen resultaten) geeft een lege lijst.
+ */
+export function parseWachtrij(json: string): { nummer: number; createdAt: string }[] {
+  if (json === '') return [];
+  const rijen = JSON.parse(json) as { number: number; createdAt: string }[];
+  return rijen
+    .map((r) => ({ nummer: r.number, createdAt: r.createdAt }))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 /** Waar de run naar keek, voor in een foutmelding: het repo van `--repo` of de werkmap. */
 function doelOmschrijving(repoDir: string, repoArg: readonly string[]): string {
   return repoArg[1] ?? repoDir;
@@ -100,13 +112,7 @@ function wachtrij(repoDir: string, repoArg: readonly string[]): WachtrijItem[] {
       `De wachtrij kon niet gelezen worden: \`gh pr list\` faalde voor ${doelOmschrijving(repoDir, repoArg)}.`,
     );
   }
-  if (uit === '') {
-    return [];
-  }
-  const rijen = JSON.parse(uit) as { number: number; createdAt: string }[];
-  return rijen
-    .map((r) => ({ nummer: r.number, createdAt: r.createdAt }))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return parseWachtrij(uit);
 }
 
 type Uitkomst = 'gemerged' | 'kickback' | 'wacht';
@@ -287,14 +293,23 @@ function repoVan(repoDir: string): string {
   return nwo;
 }
 
+/**
+ * Leest de factory-devDependency (git-url + tag) uit een ruwe package.json-string.
+ * Geeft undefined als `devDependencies.factory` ontbreekt of leeg is.
+ */
+export function parseFactoryDep(inhoud: string): string | undefined {
+  const data: unknown = JSON.parse(inhoud);
+  const dep =
+    typeof data === 'object' && data !== null && 'devDependencies' in data
+      ? (data as { devDependencies?: Record<string, string> }).devDependencies?.factory
+      : undefined;
+  return dep === undefined || dep === '' ? undefined : dep;
+}
+
 /** De factory-devDependency (git-url + tag) uit de app-package.json, voor de globale install. */
 function factoryDep(appDir: string): string {
-  const inhoud: unknown = JSON.parse(readFileSync(path.join(appDir, 'package.json'), 'utf8'));
-  const dep =
-    typeof inhoud === 'object' && inhoud !== null && 'devDependencies' in inhoud
-      ? (inhoud as { devDependencies?: Record<string, string> }).devDependencies?.factory
-      : undefined;
-  if (dep === undefined || dep === '') {
+  const dep = parseFactoryDep(readFileSync(path.join(appDir, 'package.json'), 'utf8'));
+  if (dep === undefined) {
     throw new GebruikersFout('Geen factory-dependency in package.json gevonden.');
   }
   return dep;

@@ -3,6 +3,14 @@ export declare const WACHTRIJ_LABEL = "wachtrij";
 /** Maakt het `wachtrij`-label aan als het nog niet bestaat (idempotent, faalt niet als het er al is). */
 export declare function zorgVoorWachtrijLabel(repoDir: string): void;
 /**
+ * Parseert de JSON-uitvoer van `gh pr list --json number,createdAt` tot een
+ * oudste-eerst-wachtrij. Een lege string (geen resultaten) geeft een lege lijst.
+ */
+export declare function parseWachtrij(json: string): {
+    nummer: number;
+    createdAt: string;
+}[];
+/**
  * Of er voor deze app een integreer-LaunchAgent geïnstalleerd is. `inleveren` gebruikt
  * dit om een lokale-wachtrij-app te waarschuwen als niemand de rij afwerkt — anders
  * blijft een gelabelde PR stil staan (de stille-drain-storing uit #108).
@@ -25,6 +33,11 @@ export interface PlistOpzet {
  * zodat macOS TCC de launchd-agent niet blokkeert.
  */
 export declare function bouwPlist(opzet: PlistOpzet): string;
+/**
+ * Leest de factory-devDependency (git-url + tag) uit een ruwe package.json-string.
+ * Geeft undefined als `devDependencies.factory` ontbreekt of leeg is.
+ */
+export declare function parseFactoryDep(inhoud: string): string | undefined;
 /**
  * Zet de factory-git-dep (`git+https://…/factory.git#vX.Y.Z`) om in een codeload-
  * tarball-URL + kale versie. We installeren globaal via de tarball en niet via de

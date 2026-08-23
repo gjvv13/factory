@@ -12,6 +12,14 @@ export interface InleverenOpties {
     readonly cwd?: string;
 }
 /**
+ * Parseert de JSON-uitvoer van `gh pr view --json url,state` tot url + state.
+ * Een lege string (geen PR voor deze branch) geeft undefined.
+ */
+export declare function parsePrView(json: string): {
+    url: string;
+    state: string;
+} | undefined;
+/**
  * Levert de huidige slice-branch in: lockfile in lijn brengen, de poort draaien,
  * de branch pushen, een PR naar main openen en die in de merge-queue zetten. De
  * queue integreert branches daarna serieel en conflictvrij naar main, dus de sessie

@@ -7,6 +7,13 @@ export default defineConfig({
     include: ['test/contract/**/*.test.ts'],
     environment: 'node',
     restoreMocks: true,
-    ...coverageOptie('contract', { include: ['src/board.ts'] }),
+    ...coverageOptie('contract', {
+      include: [
+        'src/board.ts',
+        'src/commands/integreer.ts',
+        'src/commands/promote.ts',
+        'src/commands/inleveren.ts',
+      ],
+    }),
   },
 });
