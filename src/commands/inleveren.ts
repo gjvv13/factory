@@ -53,6 +53,16 @@ interface PrStatus {
 }
 
 /**
+ * Parseert de JSON-uitvoer van `gh pr view --json url,state` tot url + state.
+ * Een lege string (geen PR voor deze branch) geeft undefined.
+ */
+export function parsePrView(json: string): { url: string; state: string } | undefined {
+  if (json === '') return undefined;
+  const parsed = JSON.parse(json) as { url: string; state: string };
+  return { url: parsed.url, state: parsed.state };
+}
+
+/**
  * De bestaande PR voor deze branch, of undefined als er nog geen is.
  *
  * Geeft naast de URL ook de state terug, zodat de aanroeper onderscheid kan
@@ -62,9 +72,10 @@ interface PrStatus {
  */
 function bestaandePr(repoDir: string, branch: string): PrStatus | undefined {
   const json = uitvoerVan('gh', ['pr', 'view', branch, '--json', 'url,state'], repoDir);
-  if (json === undefined || json === '') return undefined;
-  const parsed = JSON.parse(json) as { url: string; state: string };
-  return { url: parsed.url, state: parsed.state as PrStatus['state'] };
+  if (json === undefined) return undefined;
+  const result = parsePrView(json);
+  if (result === undefined) return undefined;
+  return { url: result.url, state: result.state as PrStatus['state'] };
 }
 
 /**
