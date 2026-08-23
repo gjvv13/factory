@@ -22,14 +22,14 @@ import { z } from 'zod';
  * `Bash(echo … > bestand)` — dat is precies wat de proefrun deed. In een `-p`-sessie
  * kan niets goedgekeurd worden wat hier niet in staat, dus deze lijst ís de grens.
  */
-export declare const WERKER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(gh api:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
+export declare const WERKER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
 /**
  * Wat een **bouw**-werker mag (#183). Wél schrijven — dat is de opdracht — maar niet
  * pushen en geen PR openen: de supervisor levert in met `factory inleveren
  * --geen-automerge`, zodat het openen van een PR een beslissing van de factory blijft en
  * niet van het model. Committen mag wel; zonder commit is er niets in te leveren.
  */
-export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write", "Edit", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(mkdir:*)", "Bash(mktemp:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)", "Bash(git restore:*)", "Bash(pnpm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(gh issue view:*)", "Bash(gh api:*)"];
+export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write", "Edit", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(mkdir:*)", "Bash(mktemp:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)", "Bash(git restore:*)", "Bash(pnpm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(gh issue view:*)"];
 /**
  * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
  * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
@@ -51,7 +51,7 @@ export declare const BOUWER_VERBODEN: readonly ["Bash(git push:*)", "Bash(git ch
  * naar acc — dat is de enige manier waarop hij criteria uitoefent. Geen `Write`, geen
  * `Edit`, geen `git commit`: hij observeert, hij muteert niet.
  */
-export declare const ACCEPTEER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(gh api:*)", "Bash(curl:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
+export declare const ACCEPTEER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(curl:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
 export declare const WERKER_VERBODEN: readonly ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)"];
 /**
