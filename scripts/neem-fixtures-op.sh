@@ -57,9 +57,43 @@ echo "→ git log v1.15.0..v1.15.1…"
 git log --format=%s v1.15.0..v1.15.1 > "$DIR/git-log-merges-live.txt"
 echo "  opgenomen als git-log-merges-live.txt"
 
+# -- Integreer: gh pr list (wachtrij) ------------------------------------------
+# Neemt de huidige open PR's met het wachtrij-label op. Pas het label aan als de
+# wachtrij een ander label gebruikt.
+echo "→ gh pr list (wachtrij-label)…"
+gh pr list --state open --label wachtrij --json number,createdAt \
+  > "$DIR/gh-pr-list-live.json" 2>/dev/null || echo '[]' > "$DIR/gh-pr-list-live.json"
+echo "  opgenomen als gh-pr-list-live.json"
+
+# -- Promote: /health-body ------------------------------------------------------
+# Neemt de /health-body van de lokale dev-omgeving op. Pas de poort aan als de app
+# op een andere poort draait; zonder draaiende app valt deze stap stil door.
+echo "→ health-body (localhost:3001)…"
+curl -sf http://127.0.0.1:3001/health > "$DIR/health-body-live.json" 2>/dev/null \
+  || echo "(overgeslagen — geen draaiende app op :3001)"
+
+# -- Inleveren: gh pr view (url + state) ----------------------------------------
+# Neemt de huidige branch-PR op. Zonder open PR geeft gh een fout; dat is verwacht.
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+echo "→ gh pr view $BRANCH…"
+gh pr view "$BRANCH" --json url,state > "$DIR/gh-pr-view-url-live.json" 2>/dev/null \
+  || echo "(overgeslagen — geen PR voor $BRANCH)"
+
+# -- Integreer: package.json (factory-dep) --------------------------------------
+# Kopieert de package.json van een app als fixture. Pas het pad aan als de app
+# ergens anders staat.
+APP_DIR="${APP_DIR:-../assistant}"
+if [ -f "$APP_DIR/package.json" ]; then
+  echo "→ package.json uit $APP_DIR…"
+  cp "$APP_DIR/package.json" "$DIR/app-package-live.json"
+  echo "  opgenomen als app-package-live.json"
+else
+  echo "(overgeslagen — $APP_DIR/package.json niet gevonden)"
+fi
+
 echo ""
 echo "Klaar. Bekijk de *-live.* bestanden, kopieer de relevante velden naar de"
-echo "vaste fixtures (issue-sub-issues-1-3.json, etc.) en commit."
+echo "vaste fixtures (issue-sub-issues-1-3.json, gh-pr-list.json, etc.) en commit."
 echo ""
 echo "De live-bestanden staan in .gitignore en worden niet meegecommit — ze"
 echo "bevatten de volledige API-respons, inclusief tokens en tijdstempels."
