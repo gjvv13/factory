@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "session_id": "acc-fout-1234-5678-9abc-def012345678",
+  "num_turns": 3,
+  "total_cost_usd": 0.45,
+  "permission_denials": [],
+  "result": "Acc is niet bereikbaar; alle aanroepen faalden met ECONNREFUSED."
+}

@@ -1,4 +1,6 @@
 import { type BacklogItem } from '../board.js';
+import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type AccepteerUitkomst } from '../werker.js';
 /** De markering waaraan een bewijs-comment van de accepteer-werker te herkennen is. */
 export declare const ACCEPTEER_MARKERING = "<!-- accepteer:bewijs -->";
 /** Een item dat geaccepteerd kan worden: het `App`-veld moet gezet zijn. */
@@ -51,13 +53,33 @@ export declare function verwachteTag(issue: number, appCwd: string): string | un
 export declare function versieDekt(draaiend: string, verwacht: string): boolean;
 export interface AccepteerOpties {
     readonly dry?: boolean;
+    /** Accepteert één item en stopt. */
+    readonly eenmalig?: boolean;
     /** Richt de run op dit issue in plaats van op de kop van de rij. */
     readonly issue?: number;
     /** Injecteerbaar voor tests; in productie de echte wortel in $HOME. */
     readonly werkplaatsWortel?: string;
+    readonly paden?: OrkestratorPaden;
 }
 /**
- * Draait de accepteer-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er
- * te zien valt vóórdat er iets gebeurt.
+ * Draait de accepteer-taaksoort.
+ *
+ * - `--dry`: toont de wachtrij en de acc-preconditie, schrijft niets.
+ * - `--eenmalig`: oefent de criteria van één item uit op acc en plaatst bij
+ *   alles-waargenomen een bewijs-comment.
  */
 export declare function orkestreerAccepteer(opties?: AccepteerOpties): Promise<void>;
+/** Het resultaat van `accepteerAf`, voor het log. */
+export interface AccepteerAfResultaat {
+    readonly accepteer: AccepteerUitkomst;
+}
+/** De prompt voor de accepteer-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
+export declare function accepteerPrompt(item: Accepteeritem, accPoort: number, factoryMap: string): string;
+/**
+ * Vertaalt de uitkomst van de accepteer-werker naar wat er op GitHub gebeurt.
+ *
+ * - Alles `waargenomen` → bewijs-comment mét ACCEPTEER_MARKERING; item blijft staan.
+ * - Iets `gefaald` of `niet-waarneembaar` → rapport-comment zonder markering.
+ * - Escalatie of mislukt → blokkeer met escalatie-label.
+ */
+export declare function verwerkAcceptatie(item: Accepteeritem, uitkomst: AccepteerUitkomst, cwd: string): void;

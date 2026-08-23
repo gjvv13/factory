@@ -19,7 +19,7 @@ import { z } from 'zod';
  */
 /** De paden buiten `~/Documents` waar de orkestrator zijn eigen staat bewaart. */
 /** De twee werkersoorten. Staat hier omdat het runlog en de dagteller ze beide kennen. */
-export type WerkerSoort = 'refine' | 'bouw';
+export type WerkerSoort = 'refine' | 'bouw' | 'accepteer';
 export interface OrkestratorPaden {
     /** Instellingen én token: `~/.config/factory/orkestrator.env`, rechten 0600. */
     readonly envPad: string;

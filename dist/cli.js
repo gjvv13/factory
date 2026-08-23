@@ -160,6 +160,7 @@ async function main(argumenten) {
             if (soort === 'accepteer') {
                 await orkestreerAccepteer({
                     dry: schakelaars.has('--dry'),
+                    eenmalig: schakelaars.has('--eenmalig'),
                     ...(issue === undefined ? {} : { issue }),
                 });
                 return;

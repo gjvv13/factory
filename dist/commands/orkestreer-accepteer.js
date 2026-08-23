@@ -1,20 +1,27 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { bordItems, orkestratorComments } from '../board.js';
+import { bordItems, orkestratorComments, plaatsComment, zetLabel, } from '../board.js';
+import { leesInstellingen, metBoekhouding, standaardPaden, } from '../orkestrator-instellingen.js';
+import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, uitvoerVan, waarschuwing } from '../shell.js';
-import { werkplaatsWortel } from '../werkplaats.js';
+import { ESCALATIE_LABEL } from '../board.js';
+import { versWerkplaats, werkplaatsWortel } from '../werkplaats.js';
 import { versieUitHealth } from './promote.js';
+import { draaiAccepteerder } from '../werker.js';
 /**
  * De derde taaksoort: een werker die accepteert in plaats van refinet of bouwt (#169).
  *
- * Deze slice levert alleen `--dry`: de wachtrij van acceptabele items en, voor het
- * gekozen item, of acc de nieuwe versie draait — zonder dat er iets geschreven wordt.
+ * Slice 1 (#177) leverde `--dry`: de wachtrij en de acc-preconditie.
+ * Slice 2 (#178) levert `--eenmalig`: de werker die de criteria uitoefent op acc.
  */
 /** Waar de accepteer-werker uit put: items die gebouwd en uitgerold zijn. */
 const ACCEPTEER_KOLOM = 'Uitrollen';
 /** De markering waaraan een bewijs-comment van de accepteer-werker te herkennen is. */
 export const ACCEPTEER_MARKERING = '<!-- accepteer:bewijs -->';
 const APP_CONFIG_BESTAND = 'factory.json';
+const EIGENAAR = 'gjvv13';
+const MODEL = 'claude-opus-4-6';
 /**
  * De accepteer-wachtrij uit één board-lezing: open items op **Uitrollen** die nog geen
  * bewijs-comment van de accepteer-werker dragen, oudste eerst.
@@ -124,12 +131,18 @@ export function versieDekt(draaiend, verwacht) {
     return dPat >= vPat;
 }
 /**
- * Draait de accepteer-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er
- * te zien valt vóórdat er iets gebeurt.
+ * Draait de accepteer-taaksoort.
+ *
+ * - `--dry`: toont de wachtrij en de acc-preconditie, schrijft niets.
+ * - `--eenmalig`: oefent de criteria van één item uit op acc en plaatst bij
+ *   alles-waargenomen een bewijs-comment.
  */
 export async function orkestreerAccepteer(opties = {}) {
-    if (opties.dry !== true) {
-        throw new GebruikersFout('Gebruik: factory orkestreer --soort accepteer --dry (tonen). De accepteer-werker is nog niet gebouwd.');
+    if (opties.dry === true && opties.eenmalig === true) {
+        throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
+    }
+    if (opties.dry !== true && opties.eenmalig !== true) {
+        throw new GebruikersFout('Gebruik: factory orkestreer --soort accepteer --dry (tonen) of --eenmalig (één item accepteren).');
     }
     const cwd = process.cwd();
     const items = bordItems(cwd);
@@ -165,26 +178,142 @@ export async function orkestreerAccepteer(opties = {}) {
     // Bepaal de verwachte tag: de oudste release die de merge van dit issue bevat.
     const appCwd = path.join(wortel, eerste.app);
     const tag = verwachteTag(eerste.issue, appCwd);
-    const regels = [
-        `\nZou nu toetsen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}`,
-        `  acc-poort: ${String(info.poort)}`,
-    ];
-    if (info.draaiend !== undefined) {
-        if (tag !== undefined) {
-            const dekt = versieDekt(info.draaiend, tag);
-            regels.push(dekt
-                ? `  acc draait: ${info.draaiend} ✓ (verwacht ≥ ${tag})`
-                : `  acc draait: ${info.draaiend} ✗ (verwacht ≥ ${tag}) — acc draait de nieuwe versie nog niet`);
+    if (opties.dry === true) {
+        const regels = [
+            `\nZou nu toetsen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}`,
+            `  acc-poort: ${String(info.poort)}`,
+        ];
+        if (info.draaiend !== undefined) {
+            if (tag !== undefined) {
+                const dekt = versieDekt(info.draaiend, tag);
+                regels.push(dekt
+                    ? `  acc draait: ${info.draaiend} ✓ (verwacht ≥ ${tag})`
+                    : `  acc draait: ${info.draaiend} ✗ (verwacht ≥ ${tag}) — acc draait de nieuwe versie nog niet`);
+            }
+            else {
+                regels.push(`  acc draait: ${info.draaiend} (verwachte tag niet bepaalbaar)`);
+            }
         }
         else {
-            regels.push(`  acc draait: ${info.draaiend} (verwachte tag niet bepaalbaar)`);
+            regels.push(`  acc draait: niet bereikbaar — acc draait de nieuwe versie nog niet`);
         }
+        regels.push(`Er is niets geschreven — niet naar GitHub, niet naar acc.`);
+        process.stdout.write(regels.join('\n') + '\n');
+        return;
+    }
+    // --- --eenmalig: de werker daadwerkelijk draaien ---
+    // Preconditie: draait acc de nieuwe versie? Zo niet, dan stoppen we vóór de
+    // claude-run — geen aanroepen, geen bewijs-comment, geen kosten.
+    if (info.draaiend === undefined) {
+        waarschuwing(`#${String(eerste.issue)} (${eerste.app}): acc is niet bereikbaar op poort ${String(poort)}; acceptatie overgeslagen.`);
+        return;
+    }
+    if (tag !== undefined && !versieDekt(info.draaiend, tag)) {
+        waarschuwing(`#${String(eerste.issue)} (${eerste.app}): acc draait ${info.draaiend}, verwacht ≥ ${tag}; acceptatie overgeslagen.`);
+        return;
+    }
+    const paden = opties.paden ?? standaardPaden();
+    const instellingen = leesInstellingen(paden);
+    await metBoekhouding({
+        paden,
+        nu: new Date(Date.now()),
+        soort: 'accepteer',
+        pot: 'interactief',
+        item: eerste,
+    }, () => accepteerAf(eerste, cwd, wortel, info, instellingen.reviewBudgetPerRun, instellingen.werkerEffort), beschrijfAcceptatie);
+}
+/** Wat er van een accepteer-run in het log komt. */
+function beschrijfAcceptatie(resultaat) {
+    const { accepteer } = resultaat;
+    return {
+        uitkomst: accepteer.afloop,
+        ...(accepteer.kosten === undefined ? {} : { kosten: accepteer.kosten }),
+        ...(accepteer.beurten === undefined ? {} : { beurten: accepteer.beurten }),
+    };
+}
+/** De prompt voor de accepteer-werker: het sjabloon met de feiten die hij niet mag opzoeken. */
+export function accepteerPrompt(item, accPoort, factoryMap) {
+    const sjabloon = readFileSync(path.join(templatesDir, 'werker-accepteer.md'), 'utf8');
+    const vervang = {
+        '{{ISSUE}}': String(item.issue),
+        '{{TITEL}}': item.titel,
+        '{{APP}}': item.app,
+        '{{ACC_POORT}}': String(accPoort),
+        '{{FACTORY_MAP}}': factoryMap,
+    };
+    return Object.entries(vervang).reduce((tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde), sjabloon);
+}
+/**
+ * Accepteert één item: draait de accepteer-werker en verwerkt de uitkomst.
+ *
+ * Het item wordt **niet** verplaatst: bij alles-waargenomen krijgt het een bewijs-
+ * comment en blijft op Uitrollen. Dat is bewust: accepteren is niet promoten.
+ */
+async function accepteerAf(item, cwd, wortel, accInfo, budgetUsd, effort) {
+    kop(`#${String(item.issue)} — ${item.titel}`);
+    const spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
+    const factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
+    const uitkomst = await draaiAccepteerder({
+        prompt: accepteerPrompt(item, accInfo.poort, factoryMap),
+        werkmap: spiegel,
+        sessie: randomUUID(),
+        extraMappen: [factoryMap],
+        budgetUsd,
+        model: MODEL,
+        effort,
+    });
+    verwerkAcceptatie(item, uitkomst, cwd);
+    return { accepteer: uitkomst };
+}
+/**
+ * Vertaalt de uitkomst van de accepteer-werker naar wat er op GitHub gebeurt.
+ *
+ * - Alles `waargenomen` → bewijs-comment mét ACCEPTEER_MARKERING; item blijft staan.
+ * - Iets `gefaald` of `niet-waarneembaar` → rapport-comment zonder markering.
+ * - Escalatie of mislukt → blokkeer met escalatie-label.
+ */
+export function verwerkAcceptatie(item, uitkomst, cwd) {
+    if (uitkomst.afloop === 'mislukt') {
+        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+        plaatsComment(item.issue, `**Acceptatie-run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
+            `<sub>${uitkomst.kosten === undefined ? '' : `$${uitkomst.kosten.toFixed(2)}`}` +
+            `${uitkomst.beurten === undefined ? '' : ` · ${String(uitkomst.beurten)} beurten`}</sub>`, cwd);
+        waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
+        return;
+    }
+    const verdict = uitkomst.verdict;
+    if (verdict?.uitkomst === 'escalatie') {
+        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+        plaatsComment(item.issue, `**Acceptatie-escalatie.**\n\n**Vraag:** ${verdict.vraag}\n\n**Advies:** ${verdict.advies}`, cwd);
+        ok(`#${String(item.issue)} geëscaleerd.`);
+        return;
+    }
+    if (verdict?.uitkomst !== 'klaar') {
+        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+        waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
+        return;
+    }
+    // Beoordeel de criteria: alles-waargenomen → bewijs-comment.
+    const allemaalWaargenomen = verdict.criteria.every((c) => c.status === 'waargenomen');
+    const tabel = `| Criterium | Status | Bewijs |\n| --- | --- | --- |\n` +
+        verdict.criteria
+            .map((c) => {
+            const bewijsTekst = c.status === 'waargenomen' && c.bewijs !== undefined
+                ? `\`${c.bewijs.aanroep}\` → ${c.bewijs.antwoord.slice(0, 200)}`
+                : '—';
+            return `| ${c.criterium} | ${c.status} | ${bewijsTekst} |`;
+        })
+            .join('\n');
+    if (allemaalWaargenomen) {
+        plaatsComment(item.issue, `**Acceptatie-bewijs** — alle criteria waargenomen op acc.\n\n${tabel}\n\n${ACCEPTEER_MARKERING}`, cwd);
+        // Het item wordt NIET verplaatst: het blijft in Uitrollen.
+        ok(`#${String(item.issue)} geaccepteerd — bewijs-comment geplaatst.`);
     }
     else {
-        regels.push(`  acc draait: niet bereikbaar — acc draait de nieuwe versie nog niet`);
+        // Niet alles waargenomen: rapporteer wat er is, zonder bewijs-markering.
+        plaatsComment(item.issue, `**Acceptatie-rapport** — niet alle criteria waargenomen.\n\n${tabel}`, cwd);
+        ok(`#${String(item.issue)} niet volledig geaccepteerd — rapport geplaatst.`);
     }
-    regels.push(`Er is niets geschreven — niet naar GitHub, niet naar acc.`);
-    process.stdout.write(regels.join('\n') + '\n');
 }
 /**
  * Het item waar deze run over gaat: de kop van de rij, of het gevraagde issue.

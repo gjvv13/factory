@@ -104,6 +104,24 @@ export const BOUWER_VERBODEN = [
   'Bash(gh release:*)',
 ] as const;
 
+/**
+ * Wat een **accepteer**-werker mag (#178). Lees-alleen, met `curl` voor HTTP-aanroepen
+ * naar acc — dat is de enige manier waarop hij criteria uitoefent. Geen `Write`, geen
+ * `Edit`, geen `git commit`: hij observeert, hij muteert niet.
+ */
+export const ACCEPTEER_TOEGESTAAN = [
+  'Read',
+  'Grep',
+  'Glob',
+  'Bash(gh issue view:*)',
+  'Bash(gh api:*)',
+  'Bash(curl:*)',
+  'Bash(git log:*)',
+  'Bash(git show:*)',
+  'Bash(git diff:*)',
+  'Bash(git status:*)',
+] as const;
+
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
 export const WERKER_VERBODEN = [
   'Write',
@@ -207,6 +225,100 @@ const reviewVerdictSchema = z.object({
 });
 
 export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;
+
+/**
+ * Het verdict van een accepteer-run (#178). Per acceptatiecriterium: is het
+ * waargenomen, niet-waarneembaar of gefaald? Een `waargenomen` zonder bewijs
+ * komt de `.refine()` niet door — dat is precies het punt: nooit een groen
+ * vinkje op een onbewezen criterium.
+ */
+const accepteerCriteriumSchema = z
+  .object({
+    criterium: z.string().min(1),
+    status: z.enum(['waargenomen', 'niet-waarneembaar', 'gefaald']),
+    bewijs: z
+      .object({
+        aanroep: z.string().min(1),
+        antwoord: z.string().min(1),
+      })
+      .optional(),
+  })
+  .refine((c) => c.status !== 'waargenomen' || c.bewijs !== undefined, {
+    message: 'waargenomen vereist bewijs (aanroep + antwoord)',
+  });
+
+const accepteerVerdictSchema = z.discriminatedUnion('uitkomst', [
+  z.object({
+    uitkomst: z.literal('klaar'),
+    criteria: z.array(accepteerCriteriumSchema).min(1),
+  }),
+  z.object({
+    uitkomst: z.literal('escalatie'),
+    vraag: z.string().min(1),
+    advies: z.string().min(1),
+  }),
+]);
+
+export type AccepteerVerdict = z.infer<typeof accepteerVerdictSchema>;
+
+/** Het JSON-schema voor `claude --json-schema` bij een accepteer-run. */
+export const ACCEPTEER_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    uitkomst: {
+      type: 'string',
+      enum: ['klaar', 'escalatie'],
+      description: 'klaar = alle criteria getoetst en gerapporteerd; escalatie = je hebt een vraag',
+    },
+    criteria: {
+      type: 'array',
+      description: 'alleen bij klaar: per acceptatiecriterium het resultaat met bewijs',
+      items: {
+        type: 'object',
+        properties: {
+          criterium: {
+            type: 'string',
+            description: 'het criterium zoals het in de issue-body staat',
+          },
+          status: {
+            type: 'string',
+            enum: ['waargenomen', 'niet-waarneembaar', 'gefaald'],
+            description:
+              'waargenomen = succesvol getoetst via acc; niet-waarneembaar = niet via HTTP te toetsen; gefaald = de aanroep faalde of gaf een onverwacht antwoord',
+          },
+          bewijs: {
+            type: 'object',
+            description: 'de acc-aanroep en het antwoord; verplicht bij waargenomen',
+            properties: {
+              aanroep: {
+                type: 'string',
+                description: 'de HTTP-aanroep (methode, URL, eventueel body)',
+              },
+              antwoord: {
+                type: 'string',
+                description: 'het antwoord van acc (statuscode + relevante body)',
+              },
+            },
+            required: ['aanroep', 'antwoord'],
+            additionalProperties: false,
+          },
+        },
+        required: ['criterium', 'status'],
+        additionalProperties: false,
+      },
+    },
+    vraag: {
+      type: 'string',
+      description: 'alleen bij escalatie: wat je precies wilt weten',
+    },
+    advies: {
+      type: 'string',
+      description: 'alleen bij escalatie: wat jij zou doen en waarom',
+    },
+  },
+  required: ['uitkomst'],
+  additionalProperties: false,
+} as const;
 
 /** Als `BOUW_JSON_SCHEMA`, maar voor een review: plat, met de hand, om dezelfde redenen. */
 export const REVIEW_JSON_SCHEMA = {
@@ -604,6 +716,39 @@ export async function draaiReviewer(opdracht: WerkerOpdracht): Promise<ReviewUit
     };
   }
   return { ...gelezen.basis, afloop: 'klaar', verdict: verdict.data };
+}
+
+/** Wat een accepteer-run oplevert: dezelfde envelop-informatie, een ander verdict. */
+export interface AccepteerUitkomst extends WerkerBasis {
+  readonly verdict?: AccepteerVerdict;
+}
+
+/**
+ * Draait één accepteer-werker (#178) en vertaalt zijn uitvoer naar een uitkomst.
+ *
+ * Lees-alleen: dezelfde verbodslijst als de refine-werker, met `curl` voor de
+ * HTTP-aanroepen naar acc. Een `waargenomen` zonder bewijs komt niet door de Zod-
+ * `.refine()` en landt als `mislukt`.
+ */
+export async function draaiAccepteerder(opdracht: WerkerOpdracht): Promise<AccepteerUitkomst> {
+  const gelezen = await leesEnvelop({
+    ...opdracht,
+    toegestaan: opdracht.toegestaan ?? ACCEPTEER_TOEGESTAAN,
+    verboden: opdracht.verboden ?? WERKER_VERBODEN,
+    jsonSchema: opdracht.jsonSchema ?? ACCEPTEER_JSON_SCHEMA,
+  });
+  if (gelezen.soort === 'mislukt') {
+    return gelezen.uitkomst;
+  }
+  const verdict = accepteerVerdictSchema.safeParse(gelezen.structured);
+  if (!verdict.success) {
+    return {
+      ...gelezen.basis,
+      afloop: 'mislukt',
+      fout: `geen bruikbaar accepteer-verdict: ${verdict.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`,
+    };
+  }
+  return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
 }
 
 export async function draaiWerker(opdracht: WerkerOpdracht): Promise<WerkerUitkomst> {

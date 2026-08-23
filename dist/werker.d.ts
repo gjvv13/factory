@@ -46,6 +46,12 @@ export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write
  * precies de grens omzeilen die hierboven staat. Git in zijn eigen werkmap kan hij wel.
  */
 export declare const BOUWER_VERBODEN: readonly ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git rebase:*)", "Bash(git reset:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)", "Bash(gh release:*)"];
+/**
+ * Wat een **accepteer**-werker mag (#178). Lees-alleen, met `curl` voor HTTP-aanroepen
+ * naar acc — dat is de enige manier waarop hij criteria uitoefent. Geen `Write`, geen
+ * `Edit`, geen `git commit`: hij observeert, hij muteert niet.
+ */
+export declare const ACCEPTEER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(gh api:*)", "Bash(curl:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
 export declare const WERKER_VERBODEN: readonly ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)"];
 /**
@@ -97,6 +103,83 @@ declare const reviewVerdictSchema: z.ZodObject<{
     oordeel: z.ZodString;
 }, z.core.$strip>;
 export type ReviewVerdict = z.infer<typeof reviewVerdictSchema>;
+declare const accepteerVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
+    uitkomst: z.ZodLiteral<"klaar">;
+    criteria: z.ZodArray<z.ZodObject<{
+        criterium: z.ZodString;
+        status: z.ZodEnum<{
+            waargenomen: "waargenomen";
+            "niet-waarneembaar": "niet-waarneembaar";
+            gefaald: "gefaald";
+        }>;
+        bewijs: z.ZodOptional<z.ZodObject<{
+            aanroep: z.ZodString;
+            antwoord: z.ZodString;
+        }, z.core.$strip>>;
+    }, z.core.$strip>>;
+}, z.core.$strip>, z.ZodObject<{
+    uitkomst: z.ZodLiteral<"escalatie">;
+    vraag: z.ZodString;
+    advies: z.ZodString;
+}, z.core.$strip>], "uitkomst">;
+export type AccepteerVerdict = z.infer<typeof accepteerVerdictSchema>;
+/** Het JSON-schema voor `claude --json-schema` bij een accepteer-run. */
+export declare const ACCEPTEER_JSON_SCHEMA: {
+    readonly type: "object";
+    readonly properties: {
+        readonly uitkomst: {
+            readonly type: "string";
+            readonly enum: readonly ["klaar", "escalatie"];
+            readonly description: "klaar = alle criteria getoetst en gerapporteerd; escalatie = je hebt een vraag";
+        };
+        readonly criteria: {
+            readonly type: "array";
+            readonly description: "alleen bij klaar: per acceptatiecriterium het resultaat met bewijs";
+            readonly items: {
+                readonly type: "object";
+                readonly properties: {
+                    readonly criterium: {
+                        readonly type: "string";
+                        readonly description: "het criterium zoals het in de issue-body staat";
+                    };
+                    readonly status: {
+                        readonly type: "string";
+                        readonly enum: readonly ["waargenomen", "niet-waarneembaar", "gefaald"];
+                        readonly description: "waargenomen = succesvol getoetst via acc; niet-waarneembaar = niet via HTTP te toetsen; gefaald = de aanroep faalde of gaf een onverwacht antwoord";
+                    };
+                    readonly bewijs: {
+                        readonly type: "object";
+                        readonly description: "de acc-aanroep en het antwoord; verplicht bij waargenomen";
+                        readonly properties: {
+                            readonly aanroep: {
+                                readonly type: "string";
+                                readonly description: "de HTTP-aanroep (methode, URL, eventueel body)";
+                            };
+                            readonly antwoord: {
+                                readonly type: "string";
+                                readonly description: "het antwoord van acc (statuscode + relevante body)";
+                            };
+                        };
+                        readonly required: readonly ["aanroep", "antwoord"];
+                        readonly additionalProperties: false;
+                    };
+                };
+                readonly required: readonly ["criterium", "status"];
+                readonly additionalProperties: false;
+            };
+        };
+        readonly vraag: {
+            readonly type: "string";
+            readonly description: "alleen bij escalatie: wat je precies wilt weten";
+        };
+        readonly advies: {
+            readonly type: "string";
+            readonly description: "alleen bij escalatie: wat jij zou doen en waarom";
+        };
+    };
+    readonly required: readonly ["uitkomst"];
+    readonly additionalProperties: false;
+};
 /** Als `BOUW_JSON_SCHEMA`, maar voor een review: plat, met de hand, om dezelfde redenen. */
 export declare const REVIEW_JSON_SCHEMA: {
     readonly type: "object";
@@ -325,5 +408,17 @@ export interface ReviewUitkomst extends WerkerBasis {
  * voorwaarde.
  */
 export declare function draaiReviewer(opdracht: WerkerOpdracht): Promise<ReviewUitkomst>;
+/** Wat een accepteer-run oplevert: dezelfde envelop-informatie, een ander verdict. */
+export interface AccepteerUitkomst extends WerkerBasis {
+    readonly verdict?: AccepteerVerdict;
+}
+/**
+ * Draait één accepteer-werker (#178) en vertaalt zijn uitvoer naar een uitkomst.
+ *
+ * Lees-alleen: dezelfde verbodslijst als de refine-werker, met `curl` voor de
+ * HTTP-aanroepen naar acc. Een `waargenomen` zonder bewijs komt niet door de Zod-
+ * `.refine()` en landt als `mislukt`.
+ */
+export declare function draaiAccepteerder(opdracht: WerkerOpdracht): Promise<AccepteerUitkomst>;
 export declare function draaiWerker(opdracht: WerkerOpdracht): Promise<WerkerUitkomst>;
 export {};
