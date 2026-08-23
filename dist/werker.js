@@ -28,7 +28,6 @@ export const WERKER_TOEGESTAAN = [
     'Grep',
     'Glob',
     'Bash(gh issue view:*)',
-    'Bash(gh api:*)',
     'Bash(git log:*)',
     'Bash(git show:*)',
     'Bash(git diff:*)',
@@ -70,7 +69,6 @@ export const BOUWER_TOEGESTAAN = [
     'Bash(npx:*)',
     'Bash(node:*)',
     'Bash(gh issue view:*)',
-    'Bash(gh api:*)',
 ];
 /**
  * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
@@ -109,7 +107,6 @@ export const ACCEPTEER_TOEGESTAAN = [
     'Grep',
     'Glob',
     'Bash(gh issue view:*)',
-    'Bash(gh api:*)',
     'Bash(curl:*)',
     'Bash(git log:*)',
     'Bash(git show:*)',

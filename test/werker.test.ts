@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import {
+  ACCEPTEER_TOEGESTAAN,
+  BOUWER_TOEGESTAAN,
   draaiWerker,
   werkerArgumenten,
   WERKER_TOEGESTAAN,
@@ -73,6 +75,17 @@ describe('werkerArgumenten', () => {
     }
     for (const verbod of WERKER_VERBODEN) {
       expect(args).toContain(verbod);
+    }
+  });
+
+  it('geeft geen enkele werker `gh api` — dat kan via de REST-API muteren (#338)', () => {
+    // `gh api` staat op geen enkele toestemmingslijst: het kan met `-X POST` comments
+    // plaatsen of labels zetten en omzeilt daarmee de expliciete verbodslijst (waar
+    // `gh issue edit`/`gh project` wél op staan). Geen werker heeft het nodig — ze lezen
+    // het issue via `gh issue view`, code via Read/Grep en acc via curl. Deze pin houdt
+    // het uit alle drie de lijsten, zoals de grenzen voor `rm` en `git -C` dat doen.
+    for (const lijst of [WERKER_TOEGESTAAN, BOUWER_TOEGESTAAN, ACCEPTEER_TOEGESTAAN]) {
+      expect(lijst).not.toContain('Bash(gh api:*)');
     }
   });
 
