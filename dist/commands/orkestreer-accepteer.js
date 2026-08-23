@@ -298,7 +298,7 @@ export function verwerkAcceptatie(item, uitkomst, cwd) {
     const tabel = `| Criterium | Status | Bewijs |\n| --- | --- | --- |\n` +
         verdict.criteria
             .map((c) => {
-            const bewijsTekst = c.status === 'waargenomen' && c.bewijs !== undefined
+            const bewijsTekst = c.status !== 'niet-waarneembaar' && c.bewijs !== undefined
                 ? `\`${c.bewijs.aanroep}\` → ${c.bewijs.antwoord.slice(0, 200)}`
                 : '—';
             return `| ${c.criterium} | ${c.status} | ${bewijsTekst} |`;
@@ -310,9 +310,24 @@ export function verwerkAcceptatie(item, uitkomst, cwd) {
         ok(`#${String(item.issue)} geaccepteerd — bewijs-comment geplaatst.`);
     }
     else {
-        // Niet alles waargenomen: rapporteer wat er is, zonder bewijs-markering.
-        plaatsComment(item.issue, `**Acceptatie-rapport** — niet alle criteria waargenomen.\n\n${tabel}`, cwd);
-        ok(`#${String(item.issue)} niet volledig geaccepteerd — rapport geplaatst.`);
+        // Niet alles waargenomen: escaleer — een niet-toetsbaar of gefaald criterium
+        // mag nooit stil passeren (#179). Het item blijft onaangeroerd in Uitrollen.
+        const problemen = verdict.criteria.filter((c) => c.status !== 'waargenomen');
+        const details = problemen
+            .map((c) => {
+            if (c.status === 'niet-waarneembaar') {
+                return `- **${c.criterium}** — niet-waarneembaar: dit criterium is niet via HTTP op acc te toetsen. Is het een waarneembaar criterium?`;
+            }
+            // gefaald
+            const bewijs = c.bewijs !== undefined
+                ? `\n  - Aanroep: \`${c.bewijs.aanroep}\`\n  - Antwoord: ${c.bewijs.antwoord.slice(0, 300)}`
+                : '';
+            return `- **${c.criterium}** — gefaald: de aanroep gaf een onverwacht antwoord.${bewijs}`;
+        })
+            .join('\n');
+        zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+        plaatsComment(item.issue, `**Acceptatie-escalatie** — #${String(item.issue)} (${item.app}): niet alle criteria waargenomen.\n\n${details}\n\n${tabel}`, cwd);
+        ok(`#${String(item.issue)} geëscaleerd — niet alle criteria waargenomen.`);
     }
 }
 /**

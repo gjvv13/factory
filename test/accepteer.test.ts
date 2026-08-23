@@ -461,7 +461,7 @@ describe('verwerkAcceptatie', () => {
     expect(kolomMutaties).toHaveLength(0);
   });
 
-  it('plaatst geen bewijs-comment als niet alles waargenomen is', () => {
+  it('escaleert bij een niet-waarneembaar criterium: label + comment zonder markering', () => {
     const { aanroepen } = zetBeideUitvoerdersOp();
     const item = testItem();
     const uitkomst: AccepteerUitkomst = {
@@ -493,6 +493,159 @@ describe('verwerkAcceptatie', () => {
     expect(comments).toHaveLength(1);
     const body = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
     expect(body).toBeUndefined();
+
+    // Het item krijgt het escalatie-label (#179).
+    const labels = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'edit' &&
+        a.argumenten.includes('--add-label'),
+    );
+    expect(labels).toHaveLength(1);
+
+    // De comment noemt het criterium en de reden.
+    const commentBody = comments[0]?.argumenten.find((arg) => arg.includes('niet-waarneembaar'));
+    expect(commentBody).toBeDefined();
+  });
+
+  it('escaleert bij een gefaald criterium: label + comment met bewijs', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Health geeft ok',
+            status: 'waargenomen',
+            bewijs: { aanroep: 'GET /health', antwoord: '200 ok' },
+          },
+          {
+            criterium: 'Boodschap toevoegen werkt',
+            status: 'gefaald',
+            bewijs: {
+              aanroep: 'POST /channels/http/inbound',
+              antwoord: '500 Internal Server Error',
+            },
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Escalatie-label gezet.
+    const labels = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'edit' &&
+        a.argumenten.includes('--add-label'),
+    );
+    expect(labels).toHaveLength(1);
+
+    // De comment bevat het bewijs: de aanroep en het afwijkende antwoord.
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+    const commentBody = comments[0]?.argumenten.join(' ');
+    expect(commentBody).toContain('POST /channels/http/inbound');
+    expect(commentBody).toContain('500 Internal Server Error');
+
+    // Geen bewijs-markering.
+    const markering = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
+    expect(markering).toBeUndefined();
+  });
+
+  it('telt een gemengde uitkomst als niet geaccepteerd: geen markering-comment', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Health geeft ok',
+            status: 'waargenomen',
+            bewijs: { aanroep: 'GET /health', antwoord: '200 ok' },
+          },
+          {
+            criterium: 'Tests dekken het gedrag',
+            status: 'niet-waarneembaar',
+          },
+          {
+            criterium: 'Boodschap toevoegen werkt',
+            status: 'gefaald',
+            bewijs: {
+              aanroep: 'POST /channels/http/inbound',
+              antwoord: '500 Internal Server Error',
+            },
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Geen bewijs-markering → de wachtrij ziet dit item niet als afgehandeld.
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+    const markering = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
+    expect(markering).toBeUndefined();
+
+    // Het escalatie-label is gezet.
+    const labels = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'edit' &&
+        a.argumenten.includes('--add-label'),
+    );
+    expect(labels).toHaveLength(1);
+  });
+
+  it('noemt het item, het criterium en de reden in het escalatiebericht', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem({ issue: 42, app: 'assistant', titel: 'Nieuwe feature' });
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Refactor in core is doorgevoerd',
+            status: 'niet-waarneembaar',
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+    const body = comments[0]?.argumenten.join(' ');
+    // Noemt het issue en de app.
+    expect(body).toContain('#42');
+    expect(body).toContain('assistant');
+    // Noemt het criterium.
+    expect(body).toContain('Refactor in core is doorgevoerd');
+    // Noemt de reden.
+    expect(body).toContain('niet-waarneembaar');
   });
 
   it('plaatst geen bewijs-comment bij een mislukte run (is_error)', () => {

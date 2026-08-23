@@ -1,0 +1,35 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "acc-esc-1234-5678-9abc-def012345678",
+  "num_turns": 6,
+  "total_cost_usd": 0.95,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "uitkomst": "klaar",
+    "criteria": [
+      {
+        "criterium": "Het health-endpoint geeft status ok terug",
+        "status": "waargenomen",
+        "bewijs": {
+          "aanroep": "GET http://127.0.0.1:3002/health",
+          "antwoord": "200 {\"status\":\"ok\",\"version\":\"1.15.54\"}"
+        }
+      },
+      {
+        "criterium": "Tests dekken het nieuwe gedrag",
+        "status": "niet-waarneembaar"
+      },
+      {
+        "criterium": "Een boodschap toevoegen via het HTTP-kanaal werkt",
+        "status": "gefaald",
+        "bewijs": {
+          "aanroep": "POST http://127.0.0.1:3002/channels/http/inbound {\"from\":\"test\",\"text\":\"voeg melk toe\"}",
+          "antwoord": "500 {\"error\":\"Internal Server Error\"}"
+        }
+      }
+    ]
+  }
+}
