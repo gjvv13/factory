@@ -10,6 +10,7 @@ import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
+import { orkestreerAccepteer } from './commands/orkestreer-accepteer.js';
 import { leesIssue, leesReeks, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
@@ -42,6 +43,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
   factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n|lijst>>  bouw-werker: wachtrij tonen, één item, of een reeks (--reeks 4 of --reeks 126,186)
+  factory orkestreer --soort accepteer --dry  accepteer-wachtrij en acc-preconditie tonen
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
@@ -148,12 +150,20 @@ async function main(argumenten: string[]): Promise<void> {
       });
       const issue = leesIssue(waarden.get('--issue'));
       const reeks = leesReeks(waarden.get('--reeks'));
-      if (leesSoort(waarden.get('--soort')) === 'bouw') {
+      const soort = leesSoort(waarden.get('--soort'));
+      if (soort === 'bouw') {
         await orkestreerBouw({
           dry: schakelaars.has('--dry'),
           eenmalig: schakelaars.has('--eenmalig'),
           ...(issue === undefined ? {} : { issue }),
           ...(reeks === undefined ? {} : { reeks }),
+        });
+        return;
+      }
+      if (soort === 'accepteer') {
+        await orkestreerAccepteer({
+          dry: schakelaars.has('--dry'),
+          ...(issue === undefined ? {} : { issue }),
         });
         return;
       }

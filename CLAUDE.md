@@ -36,7 +36,8 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
 | `factory orkestreer <--installeer\|--verwijder>`      | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                |
 | `factory orkestreer --soort bouw <--dry\|--eenmalig>` | Bouw-werker: wachtrij tonen, of één item bouwen en als PR zonder auto-merge inleveren (#182, #183)        |
-| `factory orkestreer --issue <n>`                      | Deze run op dat item richten i.p.v. op de kop van de rij; werkt op beide soorten (#210)                   |
+| `factory orkestreer --soort accepteer --dry`          | Accepteer-wachtrij (Uitrollen, nog niet geaccepteerd) en acc-preconditie tonen (#177)                     |
+| `factory orkestreer --issue <n>`                      | Deze run op dat item richten i.p.v. op de kop van de rij; werkt op alle soorten (#210)                    |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze

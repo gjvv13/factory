@@ -144,4 +144,4 @@ export declare function leesReeks(waarde: string | undefined): ReeksKeuze | unde
  * de typefout.
  */
 export declare function leesIssue(waarde: string | undefined): number | undefined;
-export declare function leesSoort(waarde: string | undefined): 'refine' | 'bouw';
+export declare function leesSoort(waarde: string | undefined): 'refine' | 'bouw' | 'accepteer';
