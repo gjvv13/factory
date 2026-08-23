@@ -7,6 +7,8 @@ import {
   accPoortVan,
   ACCEPTEER_MARKERING,
   orkestreerAccepteer,
+  versieDekt,
+  verwachteTag,
 } from '../src/commands/orkestreer-accepteer.js';
 import { bordItems } from '../src/board.js';
 import { herstelUitvoerder, herstelAsyncUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -276,5 +278,267 @@ describe('leesSoort accepteert accepteer', () => {
   it('retourneert accepteer voor --soort accepteer', async () => {
     const { leesSoort } = await import('../src/commands/orkestreer-bouw.js');
     expect(leesSoort('accepteer')).toBe('accepteer');
+  });
+});
+
+describe('versieDekt', () => {
+  it('geeft true als draaiend gelijk is aan verwacht', () => {
+    expect(versieDekt('1.15.54', 'v1.15.54')).toBe(true);
+  });
+
+  it('geeft true als draaiend nieuwer is (patch)', () => {
+    expect(versieDekt('1.15.55', 'v1.15.54')).toBe(true);
+  });
+
+  it('geeft true als draaiend nieuwer is (minor)', () => {
+    expect(versieDekt('1.16.0', 'v1.15.54')).toBe(true);
+  });
+
+  it('geeft false als draaiend ouder is', () => {
+    expect(versieDekt('1.15.53', 'v1.15.54')).toBe(false);
+  });
+
+  it('behandelt v-prefix in beide strings', () => {
+    expect(versieDekt('v1.15.54', 'v1.15.54')).toBe(true);
+  });
+});
+
+describe('verwachteTag', () => {
+  beforeEach(() => {
+    herstelUitvoerder();
+  });
+
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('vindt de oudste tag die de merge van een issue bevat', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(({ commando, argumenten }) => {
+        if (commando === 'git' && argumenten[0] === 'log') {
+          return { stdout: 'abc123def' };
+        }
+        if (commando === 'git' && argumenten[0] === 'tag') {
+          return { stdout: 'v1.15.54\nv1.15.55\nv1.16.0' };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(verwachteTag(201, '/pad/naar/app')).toBe('v1.15.54');
+  });
+
+  it('geeft undefined als er geen merge-commit gevonden wordt', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(({ commando }) => {
+        if (commando === 'git') {
+          return { stdout: '' };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(verwachteTag(201, '/pad/naar/app')).toBeUndefined();
+  });
+
+  it('geeft undefined als er geen tag de commit bevat', () => {
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(({ commando, argumenten }) => {
+        if (commando === 'git' && argumenten[0] === 'log') {
+          return { stdout: 'abc123def' };
+        }
+        if (commando === 'git' && argumenten[0] === 'tag') {
+          return { stdout: '' };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(verwachteTag(201, '/pad/naar/app')).toBeUndefined();
+  });
+});
+
+describe('acc-versie-preconditie', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    herstelAsyncUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('meldt dat acc de nieuwe versie dekt als de draaiende versie nieuw genoeg is', async () => {
+    const tmpWortel = path.join(hier, '..', 'test-werkplaats-accepteer-dekt');
+    const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const appDir = path.join(tmpWortel, 'assistant');
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(
+      path.join(appDir, 'factory.json'),
+      JSON.stringify({
+        naam: 'assistant',
+        poorten: { dev: 3001, acc: 3002, prod: 3000 },
+        envRoot: '~/AppEnvs/assistant',
+      }),
+    );
+
+    try {
+      const oorspronkelijkeFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(healthBody()),
+      }) as typeof fetch;
+
+      // Board + git: merge-commit gevonden, tag gevonden, versie dekt.
+      stelUitvoerderIn(
+        maakUitvoerderOpnemer(({ commando, argumenten }) => {
+          if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+            return { stdout: bord() };
+          }
+          if (
+            commando === 'gh' &&
+            argumenten[0] === 'api' &&
+            typeof argumenten[1] === 'string' &&
+            argumenten[1].includes('/comments')
+          ) {
+            return { stdout: '' };
+          }
+          // git log: merge-commit voor issue 201
+          if (commando === 'git' && argumenten[0] === 'log') {
+            return { stdout: 'abc123def456' };
+          }
+          // git tag --contains: de tag die de merge bevat
+          if (commando === 'git' && argumenten[0] === 'tag') {
+            return { stdout: 'v1.15.54' };
+          }
+          return {};
+        }).uitvoerder,
+      );
+
+      await orkestreerAccepteer({ dry: true, werkplaatsWortel: tmpWortel });
+
+      const tekst = uitvoer.join('');
+      expect(tekst).toMatch(/1\.15\.54 ✓/);
+      expect(tekst).toMatch(/verwacht ≥ v1\.15\.54/);
+
+      globalThis.fetch = oorspronkelijkeFetch;
+    } finally {
+      rmSync(tmpWortel, { recursive: true, force: true });
+    }
+  });
+
+  it('meldt dat acc de nieuwe versie nog niet draait als de versie te oud is', async () => {
+    const tmpWortel = path.join(hier, '..', 'test-werkplaats-accepteer-oud');
+    const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const appDir = path.join(tmpWortel, 'assistant');
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(
+      path.join(appDir, 'factory.json'),
+      JSON.stringify({
+        naam: 'assistant',
+        poorten: { dev: 3001, acc: 3002, prod: 3000 },
+        envRoot: '~/AppEnvs/assistant',
+      }),
+    );
+
+    try {
+      const oorspronkelijkeFetch = globalThis.fetch;
+      // Acc draait een oudere versie.
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({ version: '1.15.50', status: 'ok' })),
+      }) as typeof fetch;
+
+      stelUitvoerderIn(
+        maakUitvoerderOpnemer(({ commando, argumenten }) => {
+          if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+            return { stdout: bord() };
+          }
+          if (
+            commando === 'gh' &&
+            argumenten[0] === 'api' &&
+            typeof argumenten[1] === 'string' &&
+            argumenten[1].includes('/comments')
+          ) {
+            return { stdout: '' };
+          }
+          if (commando === 'git' && argumenten[0] === 'log') {
+            return { stdout: 'abc123def456' };
+          }
+          if (commando === 'git' && argumenten[0] === 'tag') {
+            return { stdout: 'v1.15.54' };
+          }
+          return {};
+        }).uitvoerder,
+      );
+
+      await orkestreerAccepteer({ dry: true, werkplaatsWortel: tmpWortel });
+
+      const tekst = uitvoer.join('');
+      expect(tekst).toMatch(/1\.15\.50 ✗/);
+      expect(tekst).toMatch(/verwacht ≥ v1\.15\.54/);
+      expect(tekst).toMatch(/nog niet/);
+
+      globalThis.fetch = oorspronkelijkeFetch;
+    } finally {
+      rmSync(tmpWortel, { recursive: true, force: true });
+    }
+  });
+
+  it('meldt dat acc niet bereikbaar is zonder te accepteren', async () => {
+    const tmpWortel = path.join(hier, '..', 'test-werkplaats-accepteer-onb');
+    const { mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+    const appDir = path.join(tmpWortel, 'assistant');
+    mkdirSync(appDir, { recursive: true });
+    writeFileSync(
+      path.join(appDir, 'factory.json'),
+      JSON.stringify({
+        naam: 'assistant',
+        poorten: { dev: 3001, acc: 3002, prod: 3000 },
+        envRoot: '~/AppEnvs/assistant',
+      }),
+    );
+
+    try {
+      const oorspronkelijkeFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) as typeof fetch;
+
+      stelUitvoerderIn(
+        maakUitvoerderOpnemer(({ commando, argumenten }) => {
+          if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+            return { stdout: bord() };
+          }
+          if (
+            commando === 'gh' &&
+            argumenten[0] === 'api' &&
+            typeof argumenten[1] === 'string' &&
+            argumenten[1].includes('/comments')
+          ) {
+            return { stdout: '' };
+          }
+          return {};
+        }).uitvoerder,
+      );
+
+      await orkestreerAccepteer({ dry: true, werkplaatsWortel: tmpWortel });
+
+      const tekst = uitvoer.join('');
+      expect(tekst).toMatch(/niet bereikbaar/);
+      expect(tekst).toMatch(/nog niet/);
+
+      globalThis.fetch = oorspronkelijkeFetch;
+    } finally {
+      rmSync(tmpWortel, { recursive: true, force: true });
+    }
   });
 });

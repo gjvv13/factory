@@ -36,6 +36,19 @@ export interface AccVersieInfo {
  * Dit is een read-only aanroep: alleen een GET op /health, geen schrijvende actie.
  */
 export declare function accVersie(poort: number): Promise<AccVersieInfo>;
+/**
+ * Zoekt de oudste release-tag die de merge van een issue bevat.
+ *
+ * Strategie: zoek in de git-log van de app-repo naar een merge-commit die
+ * `slice/<issue>-` in het onderwerp heeft, en bepaal met
+ * `git tag --contains <commit> --sort=v:refname` de oudste tag die hem bevat.
+ */
+export declare function verwachteTag(issue: number, appCwd: string): string | undefined;
+/**
+ * Vergelijkt twee versiestrings (met of zonder v-prefix) als semver.
+ * Geeft true als `draaiend` ≥ `verwacht`.
+ */
+export declare function versieDekt(draaiend: string, verwacht: string): boolean;
 export interface AccepteerOpties {
     readonly dry?: boolean;
     /** Richt de run op dit issue in plaats van op de kop van de rij. */

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { bordItems, orkestratorComments, type BacklogItem } from '../board.js';
-import { GebruikersFout, kop, ok, waarschuwing } from '../shell.js';
+import { GebruikersFout, kop, ok, uitvoerVan, waarschuwing } from '../shell.js';
 import { werkplaatsWortel } from '../werkplaats.js';
 import { versieUitHealth } from './promote.js';
 
@@ -109,6 +109,47 @@ export async function accVersie(poort: number): Promise<AccVersieInfo> {
   }
 }
 
+/**
+ * Zoekt de oudste release-tag die de merge van een issue bevat.
+ *
+ * Strategie: zoek in de git-log van de app-repo naar een merge-commit die
+ * `slice/<issue>-` in het onderwerp heeft, en bepaal met
+ * `git tag --contains <commit> --sort=v:refname` de oudste tag die hem bevat.
+ */
+export function verwachteTag(issue: number, appCwd: string): string | undefined {
+  const commitHash = uitvoerVan(
+    'git',
+    ['log', '--all', '--format=%H', `--grep=slice/${String(issue)}-`, '--merges', '-1'],
+    appCwd,
+  );
+  if (commitHash === undefined || commitHash === '') {
+    return undefined;
+  }
+  const tags = uitvoerVan('git', ['tag', '--contains', commitHash, '--sort=v:refname'], appCwd);
+  if (tags === undefined || tags === '') {
+    return undefined;
+  }
+  const eerste = tags.split('\n')[0]?.trim();
+  return eerste === undefined || eerste === '' ? undefined : eerste;
+}
+
+/**
+ * Vergelijkt twee versiestrings (met of zonder v-prefix) als semver.
+ * Geeft true als `draaiend` ≥ `verwacht`.
+ */
+export function versieDekt(draaiend: string, verwacht: string): boolean {
+  const parse = (v: string): [number, number, number] => {
+    const clean = v.replace(/^v/, '');
+    const delen = clean.split('.').map(Number);
+    return [delen[0] ?? 0, delen[1] ?? 0, delen[2] ?? 0];
+  };
+  const [dMaj, dMin, dPat] = parse(draaiend);
+  const [vMaj, vMin, vPat] = parse(verwacht);
+  if (dMaj !== vMaj) return dMaj > vMaj;
+  if (dMin !== vMin) return dMin > vMin;
+  return dPat >= vPat;
+}
+
 export interface AccepteerOpties {
   readonly dry?: boolean;
   /** Richt de run op dit issue in plaats van op de kop van de rij. */
@@ -167,14 +208,33 @@ export async function orkestreerAccepteer(opties: AccepteerOpties = {}): Promise
 
   const info = await accVersie(poort);
 
-  process.stdout.write(
-    `\nZou nu toetsen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
-      `  acc-poort: ${String(info.poort)}\n` +
-      (info.draaiend !== undefined
-        ? `  acc draait: ${info.draaiend}\n`
-        : `  acc draait: niet bereikbaar\n`) +
-      `Er is niets geschreven — niet naar GitHub, niet naar acc.\n`,
-  );
+  // Bepaal de verwachte tag: de oudste release die de merge van dit issue bevat.
+  const appCwd = path.join(wortel, eerste.app);
+  const tag = verwachteTag(eerste.issue, appCwd);
+
+  const regels = [
+    `\nZou nu toetsen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}`,
+    `  acc-poort: ${String(info.poort)}`,
+  ];
+
+  if (info.draaiend !== undefined) {
+    if (tag !== undefined) {
+      const dekt = versieDekt(info.draaiend, tag);
+      regels.push(
+        dekt
+          ? `  acc draait: ${info.draaiend} ✓ (verwacht ≥ ${tag})`
+          : `  acc draait: ${info.draaiend} ✗ (verwacht ≥ ${tag}) — acc draait de nieuwe versie nog niet`,
+      );
+    } else {
+      regels.push(`  acc draait: ${info.draaiend} (verwachte tag niet bepaalbaar)`);
+    }
+  } else {
+    regels.push(`  acc draait: niet bereikbaar — acc draait de nieuwe versie nog niet`);
+  }
+
+  regels.push(`Er is niets geschreven — niet naar GitHub, niet naar acc.`);
+
+  process.stdout.write(regels.join('\n') + '\n');
 }
 
 /**
