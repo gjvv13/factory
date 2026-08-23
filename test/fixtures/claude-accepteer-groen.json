@@ -1,0 +1,31 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "acc-groen-1234-5678-9abc-def012345678",
+  "num_turns": 8,
+  "total_cost_usd": 1.23,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "uitkomst": "klaar",
+    "criteria": [
+      {
+        "criterium": "Het health-endpoint geeft status ok terug",
+        "status": "waargenomen",
+        "bewijs": {
+          "aanroep": "GET http://127.0.0.1:3002/health",
+          "antwoord": "200 {\"status\":\"ok\",\"version\":\"1.15.54\"}"
+        }
+      },
+      {
+        "criterium": "Een boodschap toevoegen via het HTTP-kanaal werkt",
+        "status": "waargenomen",
+        "bewijs": {
+          "aanroep": "POST http://127.0.0.1:3002/channels/http/inbound {\"from\":\"test\",\"text\":\"voeg melk toe\"}",
+          "antwoord": "200 {\"reply\":\"Melk is toegevoegd aan je boodschappenlijst.\"}"
+        }
+      }
+    ]
+  }
+}

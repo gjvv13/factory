@@ -7,12 +7,20 @@ import {
   accPoortVan,
   ACCEPTEER_MARKERING,
   orkestreerAccepteer,
+  verwerkAcceptatie,
   versieDekt,
   verwachteTag,
+  type Accepteeritem,
 } from '../src/commands/orkestreer-accepteer.js';
 import { bordItems } from '../src/board.js';
 import { herstelUitvoerder, herstelAsyncUitvoerder, stelUitvoerderIn } from '../src/shell.js';
-import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
+import {
+  maakUitvoerderOpnemer,
+  zetBoardOmgeving,
+  zetBeideUitvoerdersOp,
+  type ProcesAanroep,
+} from './helpers.js';
+import type { AccepteerUitkomst } from '../src/werker.js';
 
 const hier = path.dirname(fileURLToPath(import.meta.url));
 
@@ -355,6 +363,167 @@ describe('verwachteTag', () => {
     );
 
     expect(verwachteTag(201, '/pad/naar/app')).toBeUndefined();
+  });
+});
+
+// --- verwerkAcceptatie unit-tests (#178) ---
+
+/** Een test-item op Uitrollen. */
+function testItem(overrides?: Partial<Accepteeritem>): Accepteeritem {
+  return {
+    issue: 201,
+    titel: 'Nieuwe intentie: boodschappen toevoegen',
+    app: 'assistant',
+    kolom: 'Uitrollen',
+    aangemaakt: '2026-08-10T00:00:00Z',
+    labels: ['type:task'],
+    ...overrides,
+  };
+}
+
+describe('verwerkAcceptatie', () => {
+  let herstelOmgeving: () => void;
+
+  beforeEach(() => {
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    herstelAsyncUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('plaatst precies één bewijs-comment bij alles-waargenomen', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      kosten: 1.23,
+      beurten: 8,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Health geeft ok',
+            status: 'waargenomen',
+            bewijs: { aanroep: 'GET /health', antwoord: '200 ok' },
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Er is precies één comment geplaatst.
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+
+    // De comment bevat de bewijs-markering.
+    const body = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
+    expect(body).toBeDefined();
+  });
+
+  it('verplaatst het item niet bij alles-waargenomen', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Health geeft ok',
+            status: 'waargenomen',
+            bewijs: { aanroep: 'GET /health', antwoord: '200 ok' },
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Geen kolom-mutatie: het item blijft in Uitrollen.
+    const kolomMutaties = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'api' &&
+        a.argumenten[1] === 'graphql' &&
+        a.argumenten.some((arg) => arg.includes('updateProjectV2ItemFieldValue')),
+    );
+    expect(kolomMutaties).toHaveLength(0);
+  });
+
+  it('plaatst geen bewijs-comment als niet alles waargenomen is', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'klaar',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      verdict: {
+        uitkomst: 'klaar',
+        criteria: [
+          {
+            criterium: 'Health geeft ok',
+            status: 'waargenomen',
+            bewijs: { aanroep: 'GET /health', antwoord: '200 ok' },
+          },
+          {
+            criterium: 'Tests dekken het gedrag',
+            status: 'niet-waarneembaar',
+          },
+        ],
+      },
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Er is een comment geplaatst, maar zonder de bewijs-markering.
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+    const body = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
+    expect(body).toBeUndefined();
+  });
+
+  it('plaatst geen bewijs-comment bij een mislukte run (is_error)', () => {
+    const { aanroepen } = zetBeideUitvoerdersOp();
+    const item = testItem();
+    const uitkomst: AccepteerUitkomst = {
+      afloop: 'mislukt',
+      sessie: 'test-sessie',
+      weigeringen: 0,
+      fout: 'run mislukt: acc niet bereikbaar',
+    };
+
+    verwerkAcceptatie(item, uitkomst, '/tmp/test');
+
+    // Er is een comment geplaatst, maar zonder de bewijs-markering.
+    const comments = aanroepen.filter(
+      (a) => a.commando === 'gh' && a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    expect(comments).toHaveLength(1);
+    const body = comments[0]?.argumenten.find((arg) => arg.includes(ACCEPTEER_MARKERING));
+    expect(body).toBeUndefined();
+
+    // Het item krijgt het escalatie-label.
+    const labels = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'edit' &&
+        a.argumenten.includes('--add-label'),
+    );
+    expect(labels).toHaveLength(1);
   });
 });
 
