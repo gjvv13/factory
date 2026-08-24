@@ -105,6 +105,27 @@ describe('promote', () => {
     expect(aanroepen.some((a) => a.argumenten.includes('seed'))).toBe(true);
   });
 
+  it('sluit de backups-map uit van git clean, op beide paden (#345)', async () => {
+    process.chdir(maakApp());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
+      a.argumenten[0] === 'describe' ? { stdout: 'v0.3.0' } : {},
+    );
+    stelUitvoerderIn(uitvoerder);
+    // Post-swap health faalt: dat triggert het terugrol-pad met zijn eigen git clean.
+    vi.spyOn(shell, 'wachtOpGezond')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce('{"status":"ok"}');
+
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow();
+
+    const cleans = aanroepen.filter((a) => a.commando === 'git' && a.argumenten[0] === 'clean');
+    expect(cleans).toHaveLength(2);
+    for (const clean of cleans) {
+      expect(clean.argumenten).toContain('-e');
+      expect(clean.argumenten).toContain('backups');
+    }
+  });
+
   it('geeft de purge-vlag mee aan beide installs, ook in het terugrol-pad (#87)', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>

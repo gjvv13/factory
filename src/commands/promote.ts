@@ -116,7 +116,20 @@ export async function promote(
   // sleutels) en staat alleen in de werkmap. Zonder deze uitsluiting wist elke
   // promote de secrets, waarna een verse start de omgeving niet meer kan opbouwen.
   git(
-    ['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'],
+    [
+      'clean',
+      '-qfd',
+      '-e',
+      'data',
+      '-e',
+      'logs',
+      '-e',
+      'node_modules',
+      '-e',
+      '*.secrets.env',
+      '-e',
+      'backups',
+    ],
     werkmap,
   );
   ok(uitvoerVan('git', ['describe', '--tags'], werkmap) ?? tag);
@@ -214,7 +227,20 @@ export async function promote(
   waarschuwing(`Terugrollen naar ${vorigeTag}`);
   git(['checkout', '-q', '--detach', vorigeTag], werkmap);
   git(
-    ['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'],
+    [
+      'clean',
+      '-qfd',
+      '-e',
+      'data',
+      '-e',
+      'logs',
+      '-e',
+      'node_modules',
+      '-e',
+      '*.secrets.env',
+      '-e',
+      'backups',
+    ],
     werkmap,
   );
   installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
