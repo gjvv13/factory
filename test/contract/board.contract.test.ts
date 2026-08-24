@@ -16,6 +16,7 @@ import {
   JQ_KINDEREN,
   JQ_OUDER,
   parseKinderenAntwoord,
+  parseOpenKinderen,
   parseOuderAntwoord,
   parseOpzoekAntwoord,
   parseIssuesUitLog,
@@ -74,6 +75,36 @@ describe('alleKinderenDicht — jq-expressie tegen opgenomen respons', () => {
 
     expect(parseKinderenAntwoord(volledig)).toBe(true);
     expect(parseKinderenAntwoord(gedeeltelijk)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// openKinderenAantal: dezelfde jq, andere interpretatie (#348)
+// ---------------------------------------------------------------------------
+
+describe('openKinderenAantal — jq-uitvoer naar aantal open kinderen', () => {
+  it('telt 2 open kinderen bij 1/3', () => {
+    const resultaat = draaiJq(JQ_KINDEREN, 'issue-sub-issues-1-3.json');
+
+    expect(parseOpenKinderen(resultaat)).toBe(2);
+  });
+
+  it('telt 0 open kinderen bij 3/3', () => {
+    const resultaat = draaiJq(JQ_KINDEREN, 'issue-sub-issues-3-3.json');
+
+    expect(parseOpenKinderen(resultaat)).toBe(0);
+  });
+
+  it('telt 0 open kinderen bij 0/0 (geen sub-issues)', () => {
+    expect(parseOpenKinderen('0/0')).toBe(0);
+  });
+
+  it('ketent jq-uitvoer en TypeScript-parse: 1/3 → 2, 3/3 → 0', () => {
+    const gedeeltelijk = draaiJq(JQ_KINDEREN, 'issue-sub-issues-1-3.json');
+    const volledig = draaiJq(JQ_KINDEREN, 'issue-sub-issues-3-3.json');
+
+    expect(parseOpenKinderen(gedeeltelijk)).toBe(2);
+    expect(parseOpenKinderen(volledig)).toBe(0);
   });
 });
 
