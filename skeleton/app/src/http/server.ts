@@ -3,6 +3,7 @@ import type { Application } from '../app.js';
 import { flagRoutes } from './routes/flags.js';
 import { healthRoutes } from './routes/health.js';
 import { inboundRoutes } from './routes/inbound.js';
+import { logRoutes } from './routes/logs.js';
 
 export function buildServer(app: Application): FastifyInstance {
   // Requestlogging volgt het logniveau: 'info' logt elk verzoek,
@@ -11,6 +12,7 @@ export function buildServer(app: Application): FastifyInstance {
 
   server.register(healthRoutes(app));
   server.register(flagRoutes(app));
+  server.register(logRoutes(app));
   server.register(inboundRoutes(app));
 
   server.setNotFoundHandler((request, reply) => {
