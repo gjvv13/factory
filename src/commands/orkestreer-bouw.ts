@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   appOpties,
   bordItems,
   ESCALATIE_LABEL,
   haalLabelWeg,
+  isBacklogRepo,
   kolomVan,
   plaatsComment,
   zetKolom,
@@ -15,19 +17,36 @@ import {
   type Kolom,
 } from '../board.js';
 import {
+  BOUW_LAUNCH_LABEL,
+  kalenderdag,
   leesInstellingen,
+  leesStaat,
   metBoekhouding,
   type RunRegel,
+  schrijfLog,
   standaardPaden,
+  TOKEN_SLEUTEL,
+  vereisToken,
+  zorgVoorEnvBestand,
   type OrkestratorPaden,
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
+import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import {
+  BOUW_NACHT_MINUUT,
+  BOUW_NACHT_UUR,
+  bouwOrkestreerPlist,
+  eigenVersie,
   escalatieComment,
+  geefLockVrij,
+  lockInfo,
+  neemLock,
+  nieuwsteTag,
   vervolgPrompt,
+  vereisNachtModus,
   type AntwoordOpties,
   type Escalatie,
 } from './orkestreer.js';
@@ -238,6 +257,12 @@ export interface BouwOpties {
   readonly dry?: boolean;
   /** Bouwt één item en stopt. */
   readonly eenmalig?: boolean;
+  /** Werkt de bouw-wachtrij af tot het bouw-dagmaximum of tot de rij leeg is (#343). */
+  readonly nacht?: boolean;
+  /** Zet de bouw-LaunchAgent op die `--soort bouw --nacht` elke nacht om 05:30 draait (#343). */
+  readonly installeer?: boolean;
+  /** Haalt die LaunchAgent weer weg (#343). */
+  readonly verwijder?: boolean;
   /** Bouwt een reeks af: een aantal van de kop, of precies deze items (#265). */
   readonly reeks?: ReeksKeuze;
   /**
@@ -253,27 +278,52 @@ export interface BouwOpties {
    * een test hoort prettier, eslint en vitest niet vanuit zichzélf te starten.
    */
   readonly leverIn?: (opties: InleverenOpties) => void;
+  /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
+  readonly nu?: Date;
 }
 
 /**
- * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
- * valt vóórdat er iets gebeurt.
+ * Draait de bouw-taaksoort: wachtrij tonen, één item bouwen, een reeks, of de
+ * onbemande bouw-nacht (#343).
  */
 export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
-  if (opties.dry === true && opties.eenmalig === true) {
-    throw new GebruikersFout('--dry en --eenmalig sluiten elkaar uit; kies er één.');
+  const paden = opties.paden ?? standaardPaden();
+  if (opties.installeer === true) {
+    installeerBouwAgent(paden);
+    return;
   }
-  if (opties.dry !== true && opties.eenmalig !== true && opties.reeks === undefined) {
+  if (opties.verwijder === true) {
+    verwijderBouwAgent(paden);
+    return;
+  }
+
+  const modi = [opties.dry, opties.eenmalig, opties.nacht, opties.reeks !== undefined].filter(
+    (modus) => modus === true,
+  );
+  if (modi.length > 1) {
+    throw new GebruikersFout(
+      '--dry, --eenmalig, --reeks en --nacht sluiten elkaar uit; kies er één.',
+    );
+  }
+  if (modi.length === 0) {
     // Geen stille default naar bouwen: een commando dat zonder vlag een werker met
     // schrijfrechten start is precies de verrassing die deze epic wil vermijden.
     throw new GebruikersFout(
-      'Gebruik: factory orkestreer --soort bouw --dry (tonen), --eenmalig (één item bouwen) of --reeks <n> (een reeks).',
+      'Gebruik: factory orkestreer --soort bouw --dry (tonen), --eenmalig (één item bouwen), --reeks <n> (een reeks) of --nacht (tot het dagmaximum).',
     );
   }
-  if (opties.reeks !== undefined && (opties.dry === true || opties.eenmalig === true)) {
-    throw new GebruikersFout('--dry, --eenmalig en --reeks sluiten elkaar uit; kies er één.');
-  }
   const cwd = process.cwd();
+  const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
+  const instellingen = leesInstellingen(paden);
+
+  if (opties.nacht === true) {
+    if (opties.issue !== undefined) {
+      throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
+    }
+    await draaiNachtBouw(cwd, wortel, paden, opties.nu ?? new Date(Date.now()), opties.leverIn);
+    return;
+  }
+
   const items = bordItems(cwd);
   if (items === undefined) {
     throw new GebruikersFout(
@@ -282,9 +332,6 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         '  (`gh api rate_limit --jq .resources.graphql`).',
     );
   }
-  const wortel = opties.werkplaatsWortel ?? werkplaatsWortel;
-  const paden = opties.paden ?? standaardPaden();
-  const instellingen = leesInstellingen(paden);
   const wachtrij = bouwWachtrij(items);
   const geclaimd = items.filter((item) => item.kolom === GECLAIMD_KOLOM).length;
 
@@ -539,6 +586,8 @@ async function bouwAf(
   leverIn: (opties: InleverenOpties) => void,
   apps: readonly string[] = [],
   reeks?: ReeksContext,
+  env?: NodeJS.ProcessEnv,
+  timeoutMs?: number,
 ): Promise<BouwAfResultaat> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -589,6 +638,8 @@ async function bouwAf(
       budgetUsd,
       model: MODEL,
       effort,
+      ...(env === undefined ? {} : { env }),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
     });
   } catch (fout) {
     ruimBronMapOp(bronWortel);
@@ -615,6 +666,8 @@ async function bouwAf(
         budgetUsd: reviewBudgetUsd,
         model: MODEL,
         effort,
+        ...(env === undefined ? {} : { env }),
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
       });
     } catch (fout) {
       const reden = fout instanceof Error ? fout.message : String(fout);
@@ -1056,6 +1109,174 @@ export function leesIssue(waarde: string | undefined): number | undefined {
     throw new GebruikersFout(`--issue verwacht een issuenummer, geen '${waarde}'.`);
   }
   return nummer;
+}
+
+// --- Bouw-nacht: onbemand bouwen tot het bouw-dagmaximum (#343) -----------------
+
+/**
+ * De bouw-nachtmodus: werkers starten tot het bouw-dagmaximum of tot de rij leeg is.
+ *
+ * Analoog aan `draaiNacht` in `orkestreer.ts`, maar met een eigen teller (`nachtBouw`),
+ * een eigen dagmaximum (`bouwDagmaximum`), en `soort: 'bouw'` / `pot: 'nacht-bouw'`.
+ *
+ * Het gedeelde slot voorkomt dat een refine- en een bouw-nacht tegelijk draaien. Slot
+ * bezet → loggen en overslaan, geen `GebruikersFout` en geen wachten.
+ */
+async function draaiNachtBouw(
+  cwd: string,
+  wortel: string,
+  paden: OrkestratorPaden,
+  nu: Date,
+  leverIn?: (opties: InleverenOpties) => void,
+): Promise<void> {
+  const instellingen = leesInstellingen(paden);
+  const token = vereisToken(instellingen, paden);
+  const draaiOpties = {
+    budgetUsd: instellingen.bouwBudgetPerRun,
+    env: { ...process.env, [TOKEN_SLEUTEL]: token },
+    timeoutMs: instellingen.runTimeoutMs,
+    effort: instellingen.werkerEffort,
+  };
+
+  const versie = eigenVersie();
+  kop(`Bouw-nacht van ${kalenderdag(nu)}`);
+  schrijfLog(
+    paden,
+    `${new Date(nu.getTime()).toISOString()} bouw-nacht gestart (factory ${versie})`,
+  );
+  const alGestart = leesStaat(paden, nu).nachtBouw;
+  if (alGestart >= instellingen.bouwDagmaximum) {
+    ok(
+      `bouw-dagmaximum al bereikt (${String(alGestart)}/${String(instellingen.bouwDagmaximum)}); niets gedaan.`,
+    );
+    return;
+  }
+
+  if (!neemLock()) {
+    // Slot bezet → overslaan met een logregel, geen fout. De refine-nacht draait er
+    // misschien al; twee werkers tegelijk is het probleem.
+    schrijfLog(
+      paden,
+      `${new Date(nu.getTime()).toISOString()} bouw-nacht overgeslagen: slot bezet`,
+    );
+    ok(`slot bezet (${lockInfo()}); bouw-nacht overgeslagen.`);
+    return;
+  }
+  try {
+    const uitkomst = await draaiReeks({
+      paden,
+      nu,
+      soort: 'bouw',
+      pot: 'nacht-bouw',
+      noemer: 'de bouw-nacht',
+      aantal: instellingen.bouwDagmaximum - alGestart,
+      leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
+      branchVan: (item) => bouwBranch(item.issue),
+      werkAf: (item, reeks) =>
+        bouwAf(
+          item,
+          cwd,
+          wortel,
+          instellingen.bouwBudgetPerRun,
+          instellingen.reviewBudgetPerRun,
+          instellingen.werkerEffort,
+          leverIn ?? inleveren,
+          appOpties() ?? [],
+          reeks,
+          draaiOpties.env,
+          draaiOpties.timeoutMs,
+        ),
+      beschrijf: beschrijfBouw,
+      gelukt: (u) => u.bouw.afloop === 'klaar',
+      naElkeRun: (aantal) => {
+        ok(
+          `${String(alGestart + aantal)}/${String(instellingen.bouwDagmaximum)} van de bouw-nacht gedaan.`,
+        );
+      },
+    });
+    if (uitkomst.einde === 'rij-leeg') {
+      ok('bouw-wachtrij leeg; klaar voor de bouw-nacht.');
+    } else if (uitkomst.einde === 'niets-nieuws') {
+      ok('niets nieuws meer in de bouw-wachtrij; klaar voor de bouw-nacht.');
+    }
+  } finally {
+    geefLockVrij();
+  }
+}
+
+/**
+ * Zet de bouw-LaunchAgent op: `factory orkestreer --soort bouw --nacht` om 05:30.
+ *
+ * Analoog aan `installeerAgent` in `orkestreer.ts`, maar met een eigen label
+ * (`nl.factory.orkestreer.bouw`) en een eigen plist. Dezelfde controles: factory-repo,
+ * token, globale bin, en `vereisNachtModus`.
+ */
+function installeerBouwAgent(paden: OrkestratorPaden): void {
+  const cwd = process.cwd();
+  if (!isBacklogRepo(cwd)) {
+    throw new GebruikersFout(
+      'Draai dit in de factory-repo: de globale bin komt uit de release-tags daarvan.',
+    );
+  }
+
+  kop('Instellingen en token');
+  zorgVoorEnvBestand(paden);
+  const instellingen = leesInstellingen(paden);
+  vereisToken(instellingen, paden);
+  ok(
+    `bouw-dagmaximum ${String(instellingen.bouwDagmaximum)}, budget $${String(instellingen.bouwBudgetPerRun)} bouw + $${String(instellingen.reviewBudgetPerRun)} review per run (${paden.envPad}).`,
+  );
+
+  kop('Factory globaal installeren');
+  const tag = nieuwsteTag(cwd);
+  const versie = tag.replace(/^v/, '');
+  const globaal = globaleFactoryVersie();
+  if (globaal !== undefined && minstensVersie(globaal, versie)) {
+    ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
+  } else {
+    run(
+      'npm',
+      ['install', '-g', `https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/${tag}`],
+      { capture: true },
+    );
+    ok(`factory ${versie} globaal geïnstalleerd.`);
+  }
+  const prefix = uitvoerVan('npm', ['prefix', '-g'], cwd) ?? '/usr/local';
+  const bin = path.join(prefix, 'bin', 'factory');
+  // De globale bin moet `--soort bouw --nacht` kennen; `--nacht` in de help is genoeg.
+  vereisNachtModus(bin);
+
+  kop('Bouw-LaunchAgent laden');
+  const pad = paden.bouwAgentPad;
+  mkdirSync(path.dirname(pad), { recursive: true });
+  writeFileSync(
+    pad,
+    bouwOrkestreerPlist({
+      bin,
+      werkmap: os.homedir(),
+      logPad: paden.logPad,
+      factoryRepo: cwd,
+      label: BOUW_LAUNCH_LABEL,
+      uur: BOUW_NACHT_UUR,
+      minuut: BOUW_NACHT_MINUUT,
+      nachtCommando: `"${bin}" orkestreer --soort bouw --nacht`,
+    }),
+  );
+  run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+  run('launchctl', ['load', pad]);
+  schrijfLog(paden, `${new Date(Date.now()).toISOString()} bouw-agent geladen (${tag}, ${bin})`);
+  ok(
+    `geladen; \`factory orkestreer --soort bouw --nacht\` draait elke nacht om ${String(BOUW_NACHT_UUR).padStart(2, '0')}:${String(BOUW_NACHT_MINUUT).padStart(2, '0')} (log: ${paden.logPad}).`,
+  );
+}
+
+/** Haalt de bouw-LaunchAgent weg. Idempotent. */
+function verwijderBouwAgent(paden: OrkestratorPaden): void {
+  kop('Bouw-LaunchAgent verwijderen');
+  const pad = paden.bouwAgentPad;
+  run('launchctl', ['unload', pad], { toleranter: true, capture: true });
+  rmSync(pad, { force: true });
+  ok('verwijderd; er draait geen bouw-nacht meer vanzelf.');
 }
 
 export function leesSoort(waarde: string | undefined): 'refine' | 'bouw' | 'accepteer' {

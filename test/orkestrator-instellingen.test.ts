@@ -62,6 +62,7 @@ describe('orkestrator-instellingen', () => {
       // of, erger, zonder rem draaien.
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 4,
+        bouwDagmaximum: 2,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
@@ -75,6 +76,7 @@ describe('orkestrator-instellingen', () => {
 
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 2,
+        bouwDagmaximum: 2,
         budgetPerRun: 1.5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
@@ -98,6 +100,15 @@ describe('orkestrator-instellingen', () => {
       expect(() => leesInstellingen(paden)).toThrow(/FACTORY_RUN_TIMEOUT_MIN/);
     });
 
+    it('leest een eigen bouw-dagmaximum (#343)', () => {
+      schrijfEnv('FACTORY_BOUW_DAGMAXIMUM=5\n');
+
+      const instellingen = leesInstellingen(paden);
+      expect(instellingen.bouwDagmaximum).toBe(5);
+      // De refine-dagmaximum blijft ongewijzigd.
+      expect(instellingen.dagmaximum).toBe(4);
+    });
+
     it('heeft een ruimer budget voor een bouw-run dan voor een refinement', () => {
       // Bouwen is lezen, schrijven, de poort draaien en op rood opnieuw — meer beurten
       // dan een refinement. Eén rem voor beide zou of te krap of te ruim zijn.
@@ -115,6 +126,7 @@ describe('orkestrator-instellingen', () => {
 
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 4,
+        bouwDagmaximum: 2,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
@@ -171,6 +183,8 @@ describe('orkestrator-instellingen', () => {
       zorgVoorEnvBestand(paden);
       expect(statSync(paden.envPad).mode & 0o777).toBe(0o600);
       expect(readFileSync(paden.envPad, 'utf8')).toContain(TOKEN_SLEUTEL);
+      // Het skelet noemt het bouw-dagmaximum zodat je weet dat de knop bestaat (#343).
+      expect(readFileSync(paden.envPad, 'utf8')).toContain('FACTORY_BOUW_DAGMAXIMUM');
 
       writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-blijft-staan\n`, { mode: 0o600 });
       zorgVoorEnvBestand(paden);
@@ -227,6 +241,34 @@ describe('orkestrator-instellingen', () => {
       const staat = leesStaat(paden, nu);
       expect(staat.gestart).toBe(1);
       expect(staat.interactief).toBe(2);
+    });
+
+    it('houdt de bouw-nacht-teller apart van de refine-nacht-teller (#343)', () => {
+      const nu = new Date('2026-08-24T05:30:00');
+
+      // Drie potten, drie tellers: een bouw-nacht-run verhoogt nachtBouw, niet gestart.
+      expect(boekRun(paden, nu, 'nacht')).toBe(1);
+      expect(boekRun(paden, nu, 'nacht')).toBe(2);
+      expect(boekRun(paden, nu, 'nacht-bouw')).toBe(1);
+      expect(boekRun(paden, nu, 'nacht-bouw')).toBe(2);
+      expect(boekRun(paden, nu, 'interactief')).toBe(1);
+
+      const staat = leesStaat(paden, nu);
+      expect(staat.gestart).toBe(2);
+      expect(staat.nachtBouw).toBe(2);
+      expect(staat.interactief).toBe(1);
+    });
+
+    it('leest een staatbestand zonder nachtBouw zonder klagen (#343)', () => {
+      mkdirSync(path.dirname(paden.staatPad), { recursive: true });
+      copyFileSync(fixture('orkestrator-status.json'), paden.staatPad);
+
+      // De fixture is van vóór #343 en heeft geen `nachtBouw`; dat defaultt naar 0
+      // zonder waarschuwing en zonder de andere tellers te resetten.
+      const staat = leesStaat(paden, new Date('2026-08-19T23:00:00'));
+      expect(staat.gestart).toBe(3);
+      expect(staat.nachtBouw).toBe(0);
+      expect(staat.interactief).toBe(0);
     });
 
     it('leest een staatbestand van vóór de splitsing zonder klagen', () => {

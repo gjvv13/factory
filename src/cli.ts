@@ -42,7 +42,8 @@ const HULP = `factory — pipeline van idee tot productie
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
-  factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n|lijst>>  bouw-werker: wachtrij tonen, één item, of een reeks (--reeks 4 of --reeks 126,186)
+  factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  bouw-werker: wachtrij, één item, reeks, of nacht (tot dagmaximum)
+  factory orkestreer --soort bouw <--installeer|--verwijder>  de bouw-LaunchAgent die --soort bouw --nacht elke nacht om 05:30 draait
   factory orkestreer --soort accepteer --dry  accepteer-wachtrij en acc-preconditie tonen
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
@@ -155,6 +156,9 @@ async function main(argumenten: string[]): Promise<void> {
         await orkestreerBouw({
           dry: schakelaars.has('--dry'),
           eenmalig: schakelaars.has('--eenmalig'),
+          nacht: schakelaars.has('--nacht'),
+          installeer: schakelaars.has('--installeer'),
+          verwijder: schakelaars.has('--verwijder'),
           ...(issue === undefined ? {} : { issue }),
           ...(reeks === undefined ? {} : { reeks }),
         });
