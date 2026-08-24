@@ -60,7 +60,20 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     // `*.secrets.env` wordt uitgesloten: dat bestand hoort niet in git (tokens,
     // sleutels) en staat alleen in de werkmap. Zonder deze uitsluiting wist elke
     // promote de secrets, waarna een verse start de omgeving niet meer kan opbouwen.
-    git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'], werkmap);
+    git([
+        'clean',
+        '-qfd',
+        '-e',
+        'data',
+        '-e',
+        'logs',
+        '-e',
+        'node_modules',
+        '-e',
+        '*.secrets.env',
+        '-e',
+        'backups',
+    ], werkmap);
     ok(uitvoerVan('git', ['describe', '--tags'], werkmap) ?? tag);
     const { commando, basisArgumenten } = pakketbeheerder();
     kop('Afhankelijkheden installeren');
@@ -135,7 +148,20 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     }
     waarschuwing(`Terugrollen naar ${vorigeTag}`);
     git(['checkout', '-q', '--detach', vorigeTag], werkmap);
-    git(['clean', '-qfd', '-e', 'data', '-e', 'logs', '-e', 'node_modules', '-e', '*.secrets.env'], werkmap);
+    git([
+        'clean',
+        '-qfd',
+        '-e',
+        'data',
+        '-e',
+        'logs',
+        '-e',
+        'node_modules',
+        '-e',
+        '*.secrets.env',
+        '-e',
+        'backups',
+    ], werkmap);
     installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
     run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
     herstartOmgeving(ecosystem, pm2Naam);
