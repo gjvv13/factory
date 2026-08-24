@@ -14,6 +14,29 @@ export interface ReeksItem {
   readonly titel: string;
 }
 
+/**
+ * Context die `draaiReeks` aan `werkAf` meegeeft wanneer er gestapeld wordt (#327).
+ *
+ * Stacking is opt-in via `branchVan` op de opzet: zonder die functie geen context, en
+ * dan verandert er niets aan het bestaande gedrag. Met stacking krijgt het tweede item
+ * in dezelfde app de branch van het eerste als `basis`, zodat de PR's conflictvrij
+ * stapelen in git-historie.
+ */
+export interface ReeksContext {
+  /**
+   * De branch waarvan de worktree vertrekt. `undefined` betekent dat dit het eerste
+   * item in deze app is — de aanroeper kiest dan zijn eigen default (doorgaans
+   * `origin/main`).
+   */
+  readonly basis: string | undefined;
+  /** Het issue waarvan de basis-branch afkomstig is, of `undefined` bij het eerste. */
+  readonly basisIssue: number | undefined;
+  /** Positie in de reeks, 1-based, over alle apps heen. */
+  readonly positie: number;
+  /** Het maximumaantal items in deze reeks (`opzet.aantal`). */
+  readonly totaal: number;
+}
+
 export interface ReeksOpzet<T extends ReeksItem, U> {
   readonly paden: OrkestratorPaden;
   readonly nu: Date;
@@ -39,8 +62,16 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
    * board net veranderd, en doorwerken op de oude lijst pakt hetzelfde item nog eens.
    */
   readonly leesRij: () => readonly T[];
+  /**
+   * Leidt de branchnaam af van een item, voor het stapelen van items per app (#327).
+   *
+   * Wanneer gezet houdt de lus per app bij welke branch het laatst succesvol is
+   * afgewerkt, en geeft die als `basis` mee aan `werkAf` via een `ReeksContext`.
+   * Zonder deze functie geen stacking — het bestaande gedrag blijft ongewijzigd.
+   */
+  readonly branchVan?: (item: T) => string;
   /** Werkt één item af. Gooit alleen als de machine zelf stuk is. */
-  readonly werkAf: (item: T) => Promise<U>;
+  readonly werkAf: (item: T, reeks?: ReeksContext) => Promise<U>;
   /** Wat er van deze uitkomst in het runlog komt. */
   readonly beschrijf: (uitkomst: U) => RunRegel;
   /** Of dit als geslaagd telt. Twee niet-geslaagde runs op rij stoppen de reeks. */
@@ -92,6 +123,9 @@ export async function draaiReeks<T extends ReeksItem, U>(
 ): Promise<ReeksUitkomst> {
   const gedaanIssues = new Set<number>();
   const gemeld = new Set<number>();
+  // Per app de laatst succesvol gebouwde branch (#327): het volgende item in dezelfde
+  // app vertrekt hiervan, zodat de branches stapelen in plaats van botsen bij het mergen.
+  const laatstPerApp = new Map<string, { branch: string; issue: number }>();
   let gedaan = 0;
   let geslaagd = 0;
   let kosten = 0;
@@ -128,6 +162,16 @@ export async function draaiReeks<T extends ReeksItem, U>(
     // een throw), en door naar het volgende. Een andere fout is "de machine is stuk" en
     // die gooit wél door — elke volgende run loopt er net zo goed op stuk. De noodstop
     // bij twee mislukkingen op rij hieronder is het vangnet voor "alles strandt".
+    const vorig = opzet.branchVan !== undefined ? laatstPerApp.get(volgende.app) : undefined;
+    const reeksContext: ReeksContext | undefined =
+      opzet.branchVan !== undefined
+        ? {
+            basis: vorig?.branch,
+            basisIssue: vorig?.issue,
+            positie: gedaan + 1,
+            totaal: opzet.aantal,
+          }
+        : undefined;
     let geslaagdeRun = false;
     gedaan += 1;
     try {
@@ -139,7 +183,7 @@ export async function draaiReeks<T extends ReeksItem, U>(
           pot: opzet.pot,
           item: volgende,
         },
-        () => opzet.werkAf(volgende),
+        () => opzet.werkAf(volgende, reeksContext),
         opzet.beschrijf,
       );
       kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
@@ -155,6 +199,15 @@ export async function draaiReeks<T extends ReeksItem, U>(
     if (geslaagdeRun) {
       geslaagd += 1;
       mislukteOpRij = 0;
+      // Alleen na een geslaagde run de branch onthouden: een mislukte bouw levert geen
+      // bruikbare branch op, en het volgende item in dezelfde app vertrekt dan van de
+      // laatst gesláágde branch — niet van de mislukte (#327).
+      if (opzet.branchVan !== undefined) {
+        laatstPerApp.set(volgende.app, {
+          branch: opzet.branchVan(volgende),
+          issue: volgende.issue,
+        });
+      }
     } else {
       mislukteOpRij += 1;
     }

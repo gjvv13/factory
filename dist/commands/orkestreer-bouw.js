@@ -266,7 +266,10 @@ export async function orkestreerBouw(opties = {}) {
             // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
             // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
             leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-            werkAf: (item) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? []),
+            // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
+            // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
+            branchVan: (item) => bouwBranch(item.issue),
+            werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], reeks),
             beschrijf: beschrijfBouw,
             gelukt: (u) => u.bouw.afloop === 'klaar',
         }));
@@ -358,7 +361,7 @@ export function reviewPrompt(item, werkmap, factoryMap, apps = []) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = []) {
+async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -388,7 +391,12 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
         // Via `factory werkplek` en niet met een eigen `git worktree add`: dan geldt hier
         // dezelfde padconventie en dezelfde branchnaam als voor een menselijke sessie, en
         // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
-        werkplek(String(item.issue), { cwd: spiegel });
+        // In een reeks vertrekt de worktree van de basis-branch (#327): dat is de branch
+        // van het vorige item in dezelfde app, of undefined bij het eerste item.
+        werkplek(String(item.issue), {
+            cwd: spiegel,
+            ...(reeks?.basis !== undefined ? { basis: reeks.basis } : {}),
+        });
         uitkomst = await draaiBouwer({
             prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
             werkmap,
@@ -431,14 +439,14 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
             reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
         }
     }
-    verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);
+    verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
     return {
         bouw: uitkomst,
         ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
     };
 }
 /** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
-function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn) {
+function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks) {
     const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
     if (uitkomst.afloop === 'mislukt') {
         // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
@@ -477,6 +485,18 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn) {
             cwd: werkmap,
             geenAutomerge: true,
             titel: `#${String(item.issue)} — ${item.titel}`,
+            // In een reeks de stacking-informatie doorgeven (#327): de positie en de
+            // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
+            ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
+                ? {
+                    reeksInfo: {
+                        positie: reeks.positie,
+                        totaal: reeks.totaal,
+                        basisBranch: reeks.basis,
+                        basisIssue: reeks.basisIssue,
+                    },
+                }
+                : {}),
         });
     }
     catch (fout) {

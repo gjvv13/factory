@@ -1,3 +1,17 @@
+/**
+ * Positie in een bouw-reeks (#327): voegt een vermelding toe aan de PR-body die de
+ * stacking-relatie zichtbaar maakt, zodat een mens 's ochtends de stapel begrijpt.
+ */
+export interface ReeksInfo {
+    /** Positie in de reeks (1-based, over alle apps heen). */
+    readonly positie: number;
+    /** Het maximumaantal items in deze reeks. */
+    readonly totaal: number;
+    /** De branch waarvan dit item vertakt. */
+    readonly basisBranch: string;
+    /** Het issue waarvan de basis-branch afkomstig is. */
+    readonly basisIssue: number;
+}
 export interface InleverenOpties {
     /** Titel voor de PR; zonder dit vult gh de titel uit de commits (`--fill`). */
     readonly titel?: string;
@@ -10,6 +24,8 @@ export interface InleverenOpties {
     readonly geenAutomerge?: boolean;
     /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
     readonly cwd?: string;
+    /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
+    readonly reeksInfo?: ReeksInfo;
 }
 /**
  * Parseert de JSON-uitvoer van `gh pr view --json url,state` tot url + state.
