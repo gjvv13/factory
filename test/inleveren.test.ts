@@ -178,6 +178,47 @@ describe('inleveren', () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
+  it('neemt de reeks-vermelding op in de PR-body wanneer reeksInfo meegegeven is (#327)', () => {
+    process.chdir(maakRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({
+      titel: '#260 — een wijziging',
+      reeksInfo: {
+        positie: 3,
+        totaal: 5,
+        basisBranch: 'slice/250-1',
+        basisIssue: 250,
+      },
+    });
+
+    const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+    expect(prCreate).toBeDefined();
+    const bodyIndex = prCreate!.argumenten.indexOf('--body');
+    expect(bodyIndex).toBeGreaterThan(-1);
+    const body = prCreate!.argumenten[bodyIndex + 1];
+    expect(body).toContain('🔗 Reeks 3/5');
+    expect(body).toContain('vertakt van #250');
+    expect(body).toContain('slice/250-1');
+  });
+
+  it('laat de PR-body ongewijzigd als er geen reeksInfo is', () => {
+    process.chdir(maakRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({ titel: '#99 — gewone wijziging' });
+
+    const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+    expect(prCreate).toBeDefined();
+    const bodyIndex = prCreate!.argumenten.indexOf('--body');
+    expect(bodyIndex).toBeGreaterThan(-1);
+    const body = prCreate!.argumenten[bodyIndex + 1];
+    expect(body).not.toContain('Reeks');
+    expect(body).toContain('Ingeleverd via');
+  });
+
   it('geeft de purge-vlag mee aan de lockfile-install (#87)', () => {
     process.chdir(maakRepo());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);

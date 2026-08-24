@@ -19,6 +19,21 @@ import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './in
 import { verify } from './verify.js';
 import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js';
 
+/**
+ * Positie in een bouw-reeks (#327): voegt een vermelding toe aan de PR-body die de
+ * stacking-relatie zichtbaar maakt, zodat een mens 's ochtends de stapel begrijpt.
+ */
+export interface ReeksInfo {
+  /** Positie in de reeks (1-based, over alle apps heen). */
+  readonly positie: number;
+  /** Het maximumaantal items in deze reeks. */
+  readonly totaal: number;
+  /** De branch waarvan dit item vertakt. */
+  readonly basisBranch: string;
+  /** Het issue waarvan de basis-branch afkomstig is. */
+  readonly basisIssue: number;
+}
+
 export interface InleverenOpties {
   /** Titel voor de PR; zonder dit vult gh de titel uit de commits (`--fill`). */
   readonly titel?: string;
@@ -31,6 +46,8 @@ export interface InleverenOpties {
   readonly geenAutomerge?: boolean;
   /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
   readonly cwd?: string;
+  /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
+  readonly reeksInfo?: ReeksInfo;
 }
 
 /** Committeert een gewijzigd bestand met een korte melding; slaat over als het niet wijzigde. */
@@ -150,10 +167,20 @@ export function inleveren(opties: InleverenOpties = {}): void {
   const config = appDir === undefined ? undefined : leesAppConfig(appDir);
   const lokaal = config?.integratie === 'lokaal';
   kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
+  const reeksVermelding =
+    opties.reeksInfo !== undefined
+      ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}` +
+        ` — vertakt van #${String(opties.reeksInfo.basisIssue)} (${opties.reeksInfo.basisBranch})`
+      : '';
   const titelArgumenten =
     opties.titel === undefined
       ? ['--fill']
-      : ['--title', opties.titel, '--body', 'Ingeleverd via `factory inleveren`.'];
+      : [
+          '--title',
+          opties.titel,
+          '--body',
+          `Ingeleverd via \`factory inleveren\`.${reeksVermelding}`,
+        ];
 
   // Een bestaande PR hergebruiken mag alleen als hij nog open is. Een gemergede of
   // gesloten PR is geen inlevering: het werk zit in geen enkele open PR en bereikt

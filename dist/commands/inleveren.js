@@ -106,9 +106,18 @@ export function inleveren(opties = {}) {
     const config = appDir === undefined ? undefined : leesAppConfig(appDir);
     const lokaal = config?.integratie === 'lokaal';
     kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
+    const reeksVermelding = opties.reeksInfo !== undefined
+        ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}` +
+            ` — vertakt van #${String(opties.reeksInfo.basisIssue)} (${opties.reeksInfo.basisBranch})`
+        : '';
     const titelArgumenten = opties.titel === undefined
         ? ['--fill']
-        : ['--title', opties.titel, '--body', 'Ingeleverd via `factory inleveren`.'];
+        : [
+            '--title',
+            opties.titel,
+            '--body',
+            `Ingeleverd via \`factory inleveren\`.${reeksVermelding}`,
+        ];
     // Een bestaande PR hergebruiken mag alleen als hij nog open is. Een gemergede of
     // gesloten PR is geen inlevering: het werk zit in geen enkele open PR en bereikt
     // main dus niet, terwijl de uitvoer zegt dat het gelukt is (#275).
