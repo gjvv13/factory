@@ -135,12 +135,6 @@ export interface OrkestreerPlistOpzet {
     /** TCC-vrij logpad, hetzelfde bestand waar de runregels in gaan. */
     readonly logPad: string;
     /**
-     * Absoluut pad naar de factory-repo, waar de release-tags staan. De LaunchAgent
-     * haalt hier vóór elke nacht de nieuwste tag op om de globale bin bij te werken
-     * (#237); de run zelf vervangt zijn eigen bin niet terwijl hij draait.
-     */
-    readonly factoryRepo: string;
-    /**
      * Het launchd-label. Refine en bouw hebben elk hun eigen label, zodat beide agents
      * naast elkaar geïnstalleerd kunnen zijn (#343).
      */
@@ -178,8 +172,11 @@ export declare function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string
 /**
  * Het shellscript dat de LaunchAgent draait: eerst bijwerken, dan de nacht starten.
  *
- * Twee dingen zijn bewust zo:
+ * Drie dingen zijn bewust zo:
  *
+ * - **`git ls-remote` in plaats van `git -C`.** De vorige versie deed een `git -C` naar
+ *   de factory-repo onder `~/Documents`, die macOS TCC blokkeert voor
+ *   achtergrondprocessen (#332). `ls-remote` heeft geen lokale repo nodig.
  * - **`exec` als laatste regel.** Zo draait `--nacht` als hetzelfde PID en krijgt
  *   launchd de exitcode; zonder `exec` zou de shell na het kind afsluiten en zou een
  *   afgebroken nacht als een schoon exit terugkomen.
@@ -189,6 +186,9 @@ export declare function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string
  * Het script vermijdt `&` in de tekst: die is XML-speciaal en zou in de plist als
  * `&amp;` moeten, wat de leesbaarheid van de bron en het log kapotmaakt. Vandaar
  * if/then/else in plaats van `&&`/`||`.
+ *
+ * `FACTORY_VERWACHTE_VERSIE` wordt gezet zodra de tag opgehaald is, zodat `draaiNacht`
+ * een mismatch kan detecteren en loggen wanneer het bijwerken faalde.
  */
 export declare function bouwNachtScript(opzet: OrkestreerPlistOpzet): string;
 /**

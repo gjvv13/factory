@@ -1139,6 +1139,13 @@ async function draaiNachtBouw(
   };
 
   const versie = eigenVersie();
+  const verwacht = process.env['FACTORY_VERWACHTE_VERSIE'];
+  if (verwacht !== undefined && verwacht !== versie) {
+    const melding = `factory draait op ${versie}, verwacht ${verwacht}; de zelf-update is mislukt`;
+    waarschuwing(melding);
+    schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} WARNING ${melding}`);
+  }
+
   kop(`Bouw-nacht van ${kalenderdag(nu)}`);
   schrijfLog(
     paden,
@@ -1255,7 +1262,6 @@ function installeerBouwAgent(paden: OrkestratorPaden): void {
       bin,
       werkmap: os.homedir(),
       logPad: paden.logPad,
-      factoryRepo: cwd,
       label: BOUW_LAUNCH_LABEL,
       uur: BOUW_NACHT_UUR,
       minuut: BOUW_NACHT_MINUUT,

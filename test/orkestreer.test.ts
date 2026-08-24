@@ -1606,6 +1606,48 @@ describe('orkestreer --nacht', () => {
     expect(log).toMatch(/nacht gestart \(factory \d+\.\d+\.\d+/);
   });
 
+  it('logt een waarschuwing bij een versie-mismatch met FACTORY_VERWACHTE_VERSIE (#332)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+
+    // Simuleer een mislukte zelf-update: de env var zegt welke versie verwacht werd,
+    // maar de draaiende bin is een andere.
+    const vorige = process.env['FACTORY_VERWACHTE_VERSIE'];
+    process.env['FACTORY_VERWACHTE_VERSIE'] = '99.99.99';
+    try {
+      await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    } finally {
+      if (vorige === undefined) {
+        delete process.env['FACTORY_VERWACHTE_VERSIE'];
+      } else {
+        process.env['FACTORY_VERWACHTE_VERSIE'] = vorige;
+      }
+    }
+
+    // De waarschuwing verschijnt in de uitvoer en in het log.
+    expect(uitvoer.join('')).toContain('de zelf-update is mislukt');
+    const log = readFileSync(paden.logPad, 'utf8');
+    expect(log).toContain('WARNING');
+    expect(log).toContain('verwacht 99.99.99');
+    expect(log).toContain('de zelf-update is mislukt');
+  });
+
+  it('logt geen waarschuwing als FACTORY_VERWACHTE_VERSIE niet gezet is (#332)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+
+    // Zonder de env var (handmatige run, of tag-ophaal mislukt) is er niets te vergelijken.
+    const vorige = process.env['FACTORY_VERWACHTE_VERSIE'];
+    delete process.env['FACTORY_VERWACHTE_VERSIE'];
+    try {
+      await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    } finally {
+      if (vorige !== undefined) {
+        process.env['FACTORY_VERWACHTE_VERSIE'] = vorige;
+      }
+    }
+
+    expect(uitvoer.join('')).not.toContain('de zelf-update is mislukt');
+  });
+
   it('weigert onbemand te draaien zonder token, met het recept erbij', async () => {
     writeFileSync(paden.envPad, 'FACTORY_DAGMAXIMUM=2\n', { mode: 0o600 });
     const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
@@ -1632,7 +1674,6 @@ describe('de LaunchAgent van de orkestrator', () => {
     bin: '/usr/local/bin/factory',
     werkmap: '/Users/gjvv',
     logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
-    factoryRepo: '/Users/gjvv/Documents/Software/factory',
     label: 'nl.factory.orkestreer',
     uur: 4,
     minuut: 0,
@@ -1683,13 +1724,31 @@ describe('de LaunchAgent van de orkestrator', () => {
     expect(execRegel).toMatch(/^exec /);
   });
 
-  it('haalt tags op uit de meegegeven factory-repo', () => {
+  it('haalt tags op via git ls-remote zonder een lokale repo te raken (#332)', () => {
     const script = bouwNachtScript(opzet);
 
-    expect(script).toContain(`git -C "${opzet.factoryRepo}"`);
-    // Twee keer: één keer fetch, één keer tag --list
-    const gitAanroepen = script.match(new RegExp(`git -C "${opzet.factoryRepo}"`, 'g'));
-    expect(gitAanroepen?.length).toBe(2);
+    // De nieuwe aanpak: git ls-remote naar de publieke URL.
+    expect(script).toContain('git ls-remote');
+    expect(script).toContain('https://github.com/gjvv13/factory.git');
+    // Geen git -C: een lokale repo is niet nodig en TCC blokkeert ~/Documents.
+    expect(script).not.toContain('git -C');
+  });
+
+  it('exporteert FACTORY_VERWACHTE_VERSIE vóór de exec (#332)', () => {
+    const script = bouwNachtScript(opzet);
+
+    expect(script).toContain('export FACTORY_VERWACHTE_VERSIE=');
+    // De export staat vóór de exec.
+    const exportIndex = script.indexOf('FACTORY_VERWACHTE_VERSIE');
+    const execIndex = script.indexOf('exec');
+    expect(exportIndex).toBeGreaterThan(-1);
+    expect(execIndex).toBeGreaterThan(exportIndex);
+  });
+
+  it('bevat geen pad onder ~/Documents (#332)', () => {
+    const plist = bouwOrkestreerPlist(opzet);
+
+    expect(plist).not.toContain('Documents');
   });
 });
 
@@ -1698,7 +1757,6 @@ describe('de bouw-LaunchAgent (#343)', () => {
     bin: '/usr/local/bin/factory',
     werkmap: '/Users/gjvv',
     logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
-    factoryRepo: '/Users/gjvv/Documents/Software/factory',
     label: 'nl.factory.orkestreer.bouw',
     uur: 5,
     minuut: 30,
@@ -1734,6 +1792,12 @@ describe('de bouw-LaunchAgent (#343)', () => {
     const regels = script.split('\n');
     const execRegel = regels[regels.length - 1];
     expect(execRegel).toContain('orkestreer --soort bouw --nacht');
+  });
+
+  it('bevat geen pad onder ~/Documents (#332)', () => {
+    const plist = bouwOrkestreerPlist(bouwOpzet);
+
+    expect(plist).not.toContain('Documents');
   });
 });
 
