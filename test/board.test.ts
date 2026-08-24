@@ -9,6 +9,7 @@ import {
   isBacklogRepo,
   issuesUitBereik,
   issueUitBranch,
+  openKinderenAantal,
   ouderVan,
   plaatsComment,
   sluitIssue,
@@ -420,6 +421,24 @@ describe('ouder en kind', () => {
     expect(alleKinderenDicht(91)).toBe(false);
   });
 
+  it('telt het aantal open kinderen van een issue (#348)', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '1/3' })).uitvoerder);
+
+    expect(openKinderenAantal(26)).toBe(2);
+  });
+
+  it('geeft 0 open kinderen voor een issue zonder sub-issues (#348)', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '0/0' })).uitvoerder);
+
+    expect(openKinderenAantal(91)).toBe(0);
+  });
+
+  it('geeft 0 open kinderen als alle sub-issues dicht zijn (#348)', () => {
+    stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ stdout: '3/3' })).uitvoerder);
+
+    expect(openKinderenAantal(97)).toBe(0);
+  });
+
   it('sluit een issue in het backlog-repo', () => {
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
     stelUitvoerderIn(uitvoerder);
@@ -507,6 +526,7 @@ describe('zetItemsUitBereikOpDone', () => {
         return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
       }
       if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '0/0' };
         if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
         return { stdout: boardMetDone };
       }
@@ -540,6 +560,7 @@ describe('zetItemsUitBereikOpDone', () => {
           return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
         }
         if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '0/0' };
           if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
           // Het board bestaat, maar het issue hangt er niet in (of mag niet gelezen worden).
           return {
@@ -575,6 +596,7 @@ describe('zetItemsUitBereikOpDone', () => {
           return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
         }
         if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '0/0' };
           if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
           return { stdout: boardMetDone.replace('Uitrollen', 'Done') };
         }
@@ -594,6 +616,7 @@ describe('zetItemsUitBereikOpDone', () => {
         return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
       }
       if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '0/0' };
         if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
         return { stdout: boardMetDone };
       }
@@ -615,6 +638,72 @@ describe('zetItemsUitBereikOpDone', () => {
       (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close',
     );
     expect(gesloten.map((a) => a.argumenten[2])).toEqual(['185']);
+  });
+
+  it('slaat een issue met open sub-issues over met een waarschuwing (#348)', () => {
+    // Een epic met 1 van 3 kinderen af mag niet gesloten worden: de resterende
+    // slices moeten nog gebouwd worden.
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((a) => {
+        if (a.commando === 'git' && a.argumenten[0] === 'log') {
+          return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+        }
+        if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '1/3' };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [],
+      overgeslagen: [185],
+    });
+  });
+
+  it('sluit een issue zonder sub-issues gewoon (#348)', () => {
+    // Het gangbare geval: een issue dat geen epic is, heeft 0/0 kinderen en wordt
+    // gewoon naar Done gezet en gesloten.
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((a) => {
+        if (a.commando === 'git' && a.argumenten[0] === 'log') {
+          return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+        }
+        if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '0/0' };
+          if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+          return { stdout: boardMetDone };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [185],
+      overgeslagen: [],
+    });
+  });
+
+  it('sluit een issue waarvan alle sub-issues dicht zijn (#348)', () => {
+    // Alle kinderen af: de epic zelf mag nu ook naar Done.
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer((a) => {
+        if (a.commando === 'git' && a.argumenten[0] === 'log') {
+          return { stdout: 'Merge pull request #7 from gjvv13/slice/185-1' };
+        }
+        if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+          if (a.argumenten.some((s) => s.includes('sub_issues_summary'))) return { stdout: '3/3' };
+          if (a.argumenten.includes('.parent_issue_url')) return { stdout: '' };
+          return { stdout: boardMetDone };
+        }
+        return {};
+      }).uitvoerder,
+    );
+
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+      verzet: [185],
+      overgeslagen: [],
+    });
   });
 });
 

@@ -483,6 +483,20 @@ export function parseKinderenAntwoord(ruw: string): boolean {
 }
 
 /**
+ * Parset de ruwe jq-uitvoer van `JQ_KINDEREN` tot het aantal open kinderen.
+ * 0 als er geen kinderen zijn of alle kinderen dicht zijn — in beide gevallen
+ * mag het issue gesloten worden. Geëxporteerd zodat de contract-tests de
+ * interpretatie kunnen vastpinnen.
+ */
+export function parseOpenKinderen(ruw: string): number {
+  const [gedaan, totaal] = ruw.trim().split('/').map(Number);
+  if (totaal === undefined || gedaan === undefined || totaal <= 0) {
+    return 0;
+  }
+  return Math.max(0, totaal - gedaan);
+}
+
+/**
  * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
  * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.
  * False bij een issue zonder kinderen: dan valt er niets af te ronden.
@@ -493,6 +507,19 @@ export function alleKinderenDicht(ouder: number, cwd?: string): boolean {
     return false;
   }
   return parseKinderenAntwoord(ruw);
+}
+
+/**
+ * Het aantal open kinderen van een issue, of 0 als er geen (sub-)issues zijn.
+ * Gebruikt dezelfde jq-expressie als `alleKinderenDicht`, maar onderscheidt
+ * "geen kinderen" (0 → mag dicht) van "open kinderen" (>0 → nog niet sluiten).
+ */
+export function openKinderenAantal(issue: number, cwd?: string): number {
+  const ruw = issueVeld(issue, JQ_KINDEREN, cwd);
+  if (ruw === undefined) {
+    return 0;
+  }
+  return parseOpenKinderen(ruw);
 }
 
 /** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
@@ -881,6 +908,18 @@ export function zetItemsUitBereikOpDone(
   const verzet: number[] = [];
   const overgeslagen: number[] = [];
   for (const issue of issues) {
+    // Guard: sluit een issue met open kinderen niet — het is een epic waar nog
+    // slices openstaan (#348).
+    const aantalOpen = openKinderenAantal(issue, cwd);
+    if (aantalOpen > 0) {
+      waarschuwing(
+        `#${String(issue)} heeft nog ${String(aantalOpen)} open ` +
+          `sub-issue${aantalOpen === 1 ? '' : 's'} — niet naar Done gezet`,
+      );
+      overgeslagen.push(issue);
+      continue;
+    }
+
     const beweging = zetKolomUitkomst(issue, 'Done', cwd);
     if (beweging === 'mislukt') {
       // Niet alleen een ontbrekend token laat een item liggen: een token dat het board niet

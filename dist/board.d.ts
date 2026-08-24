@@ -137,11 +137,24 @@ export declare const JQ_KINDEREN = ".sub_issues_summary | \"\\(.completed)/\\(.t
  */
 export declare function parseKinderenAntwoord(ruw: string): boolean;
 /**
+ * Parset de ruwe jq-uitvoer van `JQ_KINDEREN` tot het aantal open kinderen.
+ * 0 als er geen kinderen zijn of alle kinderen dicht zijn — in beide gevallen
+ * mag het issue gesloten worden. Geëxporteerd zodat de contract-tests de
+ * interpretatie kunnen vastpinnen.
+ */
+export declare function parseOpenKinderen(ruw: string): number;
+/**
  * Of alle slices van een epic dicht zijn. `sub_issues_summary` telt de gesloten
  * kinderen, dus dit is één aanroep in plaats van de kinderen langslopen.
  * False bij een issue zonder kinderen: dan valt er niets af te ronden.
  */
 export declare function alleKinderenDicht(ouder: number, cwd?: string): boolean;
+/**
+ * Het aantal open kinderen van een issue, of 0 als er geen (sub-)issues zijn.
+ * Gebruikt dezelfde jq-expressie als `alleKinderenDicht`, maar onderscheidt
+ * "geen kinderen" (0 → mag dicht) van "open kinderen" (>0 → nog niet sluiten).
+ */
+export declare function openKinderenAantal(issue: number, cwd?: string): number;
 /** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
 export declare function sluitIssue(issue: number, cwd?: string): void;
 /** Eén item op het board, met alles wat een werker nodig heeft om te beginnen. */

@@ -346,7 +346,10 @@ describe('promote', () => {
       if (a.commando === 'git' && a.argumenten[0] === 'log') {
         return { stdout: 'Merge pull request #7 from gjvv13/slice/128-2' };
       }
-      if (a.commando === 'gh' && a.argumenten[0] === 'api') return { stdout: BOARD_ANTWOORD };
+      if (a.commando === 'gh' && a.argumenten[0] === 'api') {
+        if (a.argumenten.some((x) => x.includes('sub_issues_summary'))) return { stdout: '0/0' };
+        return { stdout: BOARD_ANTWOORD };
+      }
       return {};
     });
   }
@@ -363,7 +366,9 @@ describe('promote', () => {
           return { stdout: 'https://api.github.com/repos/gjvv13/factory/issues/26' };
         }
         if (a.argumenten.some((x) => x.includes('sub_issues_summary'))) {
-          return { stdout: voortgang };
+          // Issue 128 is de slice (geen kinderen); de voortgang geldt voor epic 26.
+          const isEpic = a.argumenten.some((x) => x.includes('/issues/26'));
+          return { stdout: isEpic ? voortgang : '0/0' };
         }
         return { stdout: BOARD_ANTWOORD };
       }
