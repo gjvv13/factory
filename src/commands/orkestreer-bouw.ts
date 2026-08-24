@@ -22,7 +22,7 @@ import {
   type OrkestratorPaden,
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
-import { draaiReeks, meldReeks } from '../reeks.js';
+import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import {
@@ -369,7 +369,10 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
         // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
         leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-        werkAf: (item) =>
+        // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
+        // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
+        branchVan: (item) => bouwBranch(item.issue),
+        werkAf: (item, reeks) =>
           bouwAf(
             item,
             cwd,
@@ -379,6 +382,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             instellingen.werkerEffort,
             opties.leverIn ?? inleveren,
             appOpties() ?? [],
+            reeks,
           ),
         beschrijf: beschrijfBouw,
         gelukt: (u) => u.bouw.afloop === 'klaar',
@@ -534,6 +538,7 @@ async function bouwAf(
   effort: string,
   leverIn: (opties: InleverenOpties) => void,
   apps: readonly string[] = [],
+  reeks?: ReeksContext,
 ): Promise<BouwAfResultaat> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -569,7 +574,12 @@ async function bouwAf(
     // Via `factory werkplek` en niet met een eigen `git worktree add`: dan geldt hier
     // dezelfde padconventie en dezelfde branchnaam als voor een menselijke sessie, en
     // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
-    werkplek(String(item.issue), { cwd: spiegel });
+    // In een reeks vertrekt de worktree van de basis-branch (#327): dat is de branch
+    // van het vorige item in dezelfde app, of undefined bij het eerste item.
+    werkplek(String(item.issue), {
+      cwd: spiegel,
+      ...(reeks?.basis !== undefined ? { basis: reeks.basis } : {}),
+    });
 
     uitkomst = await draaiBouwer({
       prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
@@ -613,7 +623,7 @@ async function bouwAf(
     }
   }
 
-  verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn);
+  verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
   return {
     bouw: uitkomst,
     ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
@@ -628,6 +638,7 @@ function verwerkBouw(
   cwd: string,
   wortel: string,
   leverIn: (opties: InleverenOpties) => void,
+  reeks?: ReeksContext,
 ): void {
   const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
@@ -692,6 +703,18 @@ function verwerkBouw(
       cwd: werkmap,
       geenAutomerge: true,
       titel: `#${String(item.issue)} — ${item.titel}`,
+      // In een reeks de stacking-informatie doorgeven (#327): de positie en de
+      // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
+      ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
+        ? {
+            reeksInfo: {
+              positie: reeks.positie,
+              totaal: reeks.totaal,
+              basisBranch: reeks.basis,
+              basisIssue: reeks.basisIssue,
+            },
+          }
+        : {}),
     });
   } catch (fout) {
     // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
