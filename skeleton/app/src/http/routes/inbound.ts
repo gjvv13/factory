@@ -21,6 +21,9 @@ export function inboundRoutes(app: Application): FastifyPluginCallback {
     server.post('/channels/http/inbound', (request, reply) => {
       const body = inboundBodySchema.safeParse(request.body);
       if (!body.success) {
+        // Een geweigerd inbound-verzoek is een operationeel signaal: log het als
+        // warn zodat het in de logbuffer (GET /admin/logs) zichtbaar wordt.
+        app.logger.warn({ fouten: body.error.issues }, 'Ongeldig inbound-verzoek geweigerd');
         return reply.code(400).send({ error: 'Ongeldig bericht: from en text zijn verplicht' });
       }
       const replies = app.messageService.handle({
