@@ -355,6 +355,12 @@ async function draaiNacht(cwd, wortel, paden, nu) {
         effort: instellingen.werkerEffort,
     };
     const versie = eigenVersie();
+    const verwacht = process.env['FACTORY_VERWACHTE_VERSIE'];
+    if (verwacht !== undefined && verwacht !== versie) {
+        const melding = `factory draait op ${versie}, verwacht ${verwacht}; de zelf-update is mislukt`;
+        waarschuwing(melding);
+        schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} WARNING ${melding}`);
+    }
     kop(`Nacht van ${kalenderdag(nu)}`);
     schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} nacht gestart (factory ${versie})`);
     const gestart = leesStaat(paden, nu).gestart;
@@ -838,11 +844,16 @@ export function bouwOrkestreerPlist(opzet) {
 </plist>
 `;
 }
+/** De publieke URL waarop `git ls-remote` de tags ophaalt — geen lokale repo nodig (#332). */
+const FACTORY_REMOTE = `https://github.com/${EIGENAAR}/factory.git`;
 /**
  * Het shellscript dat de LaunchAgent draait: eerst bijwerken, dan de nacht starten.
  *
- * Twee dingen zijn bewust zo:
+ * Drie dingen zijn bewust zo:
  *
+ * - **`git ls-remote` in plaats van `git -C`.** De vorige versie deed een `git -C` naar
+ *   de factory-repo onder `~/Documents`, die macOS TCC blokkeert voor
+ *   achtergrondprocessen (#332). `ls-remote` heeft geen lokale repo nodig.
  * - **`exec` als laatste regel.** Zo draait `--nacht` als hetzelfde PID en krijgt
  *   launchd de exitcode; zonder `exec` zou de shell na het kind afsluiten en zou een
  *   afgebroken nacht als een schoon exit terugkomen.
@@ -852,12 +863,15 @@ export function bouwOrkestreerPlist(opzet) {
  * Het script vermijdt `&` in de tekst: die is XML-speciaal en zou in de plist als
  * `&amp;` moeten, wat de leesbaarheid van de bron en het log kapotmaakt. Vandaar
  * if/then/else in plaats van `&&`/`||`.
+ *
+ * `FACTORY_VERWACHTE_VERSIE` wordt gezet zodra de tag opgehaald is, zodat `draaiNacht`
+ * een mismatch kan detecteren en loggen wanneer het bijwerken faalde.
  */
 export function bouwNachtScript(opzet) {
     return [
-        `git -C "${opzet.factoryRepo}" fetch --tags --force origin 2>/dev/null || true`,
-        `TAG=$(git -C "${opzet.factoryRepo}" tag --list 'v*' --sort=-v:refname | head -1)`,
+        `TAG=$(git ls-remote --tags --refs --sort=-v:refname "${FACTORY_REMOTE}" "v*" | head -1 | sed "s|.*refs/tags/||")`,
         'if [ -n "$TAG" ]; then',
+        '  export FACTORY_VERWACHTE_VERSIE="${TAG#v}"',
         `  if npm install -g "https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/$TAG" >/dev/null 2>/dev/null; then`,
         '    echo "==> factory bijgewerkt naar $TAG"',
         '  else',
@@ -944,7 +958,6 @@ function installeerAgent(paden) {
         bin,
         werkmap: os.homedir(),
         logPad: paden.logPad,
-        factoryRepo: cwd,
         label: LAUNCH_LABEL,
         uur: NACHT_UUR,
         minuut: 0,

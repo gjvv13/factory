@@ -804,6 +804,12 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
         effort: instellingen.werkerEffort,
     };
     const versie = eigenVersie();
+    const verwacht = process.env['FACTORY_VERWACHTE_VERSIE'];
+    if (verwacht !== undefined && verwacht !== versie) {
+        const melding = `factory draait op ${versie}, verwacht ${verwacht}; de zelf-update is mislukt`;
+        waarschuwing(melding);
+        schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} WARNING ${melding}`);
+    }
     kop(`Bouw-nacht van ${kalenderdag(nu)}`);
     schrijfLog(paden, `${new Date(nu.getTime()).toISOString()} bouw-nacht gestart (factory ${versie})`);
     const alGestart = leesStaat(paden, nu).nachtBouw;
@@ -885,7 +891,6 @@ function installeerBouwAgent(paden) {
         bin,
         werkmap: os.homedir(),
         logPad: paden.logPad,
-        factoryRepo: cwd,
         label: BOUW_LAUNCH_LABEL,
         uur: BOUW_NACHT_UUR,
         minuut: BOUW_NACHT_MINUUT,
