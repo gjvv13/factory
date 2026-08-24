@@ -1,12 +1,4 @@
-import {
-  closeSync,
-  mkdirSync,
-  mkdtempSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +19,7 @@ import {
   type BouwAfResultaat,
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
+import * as orkestreerModule from '../src/commands/orkestreer.js';
 import { bordItems } from '../src/board.js';
 import {
   leesStaat,
@@ -997,9 +990,6 @@ describe('orkestreer --soort bouw --eenmalig', () => {
 });
 
 describe('orkestreer --soort bouw --nacht', () => {
-  // Hetzelfde slot als de refine-nacht: één gedeeld bestand voorkomt dat een refine- en
-  // een bouw-nacht tegelijk draaien.
-  const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
   const NU = new Date('2026-08-19T05:30:00');
   let herstelOmgeving: () => void;
   let uitvoer: string[];
@@ -1024,13 +1014,11 @@ describe('orkestreer --soort bouw --nacht', () => {
       mode: 0o600,
     });
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
-    rmSync(LOCK_PAD, { force: true });
   });
 
   afterEach(() => {
     rmSync(wortel, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
-    rmSync(LOCK_PAD, { force: true });
     herstelOmgeving();
     herstelUitvoerder();
     herstelAsyncUitvoerder();
@@ -1038,8 +1026,13 @@ describe('orkestreer --soort bouw --nacht', () => {
   });
 
   it('slaat over als het slot al bezet is, zonder te bouwen of te gooien (#343)', async () => {
-    // Een draaiende refine-nacht (of een andere run) houdt het gedeelde slot vast.
-    closeSync(openSync(LOCK_PAD, 'wx'));
+    // Het slot ligt op een vast pad (`os.tmpdir()/factory-orkestreer.lock`) dat door alle
+    // testbestanden gedeeld wordt; vitest draait die parallel op één filesystem. Een echt
+    // lock-bestand hier zou dus racen met de refine-nacht-tests. We stubben daarom `neemLock`
+    // zelf op false — dat ís precies het "slot bezet"-signaal dat `draaiNachtBouw` afvangt —
+    // en raken het echte slot niet aan.
+    vi.spyOn(orkestreerModule, 'neemLock').mockReturnValue(false);
+    vi.spyOn(orkestreerModule, 'lockInfo').mockReturnValue('pid 4242 leeft nog');
     const { aanroepen } = zetBeideUitvoerdersOp(({ commando, argumenten }) =>
       commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql'
         ? { stdout: bord() }
@@ -1056,8 +1049,6 @@ describe('orkestreer --soort bouw --nacht', () => {
     expect(uitvoer.join('')).toMatch(/slot bezet.*bouw-nacht overgeslagen/);
     // En er start geen enkele bouw-run: `draaiReeks` wordt niet bereikt, dus geen `claude`.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
-    // Het slot blijft van de houder — de bouw-nacht raakt het niet aan.
-    expect(readFileSync(LOCK_PAD, 'utf8')).toBe('');
   });
 });
 
