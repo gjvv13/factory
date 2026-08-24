@@ -3,7 +3,8 @@ import { systemClock, type Clock } from './core/clock.js';
 import { createCommandRouter, type Command, type CommandRouter } from './core/command-router.js';
 import { createHelpCommand, helloCommand, pingCommand, versionCommand } from './core/commands.js';
 import { createContactRepository, type ContactRepository } from './core/contacts.js';
-import { createLogger, type Logger } from './core/logger.js';
+import { LogBuffer } from './core/log-buffer.js';
+import { createBufferedLogger, createLogger, type Logger } from './core/logger.js';
 import { createMessageLogRepository, type MessageLogRepository } from './core/message-log.js';
 import { createMessageService, type MessageService } from './core/message-service.js';
 import { openDatabase, runMigrations, type Db } from './db/client.js';
@@ -14,6 +15,7 @@ export interface Application {
   readonly db: Db;
   readonly clock: Clock;
   readonly logger: Logger;
+  readonly logBuffer: LogBuffer;
   readonly flags: FlagService;
   readonly contacts: ContactRepository;
   readonly messageLog: MessageLogRepository;
@@ -36,9 +38,11 @@ export interface ApplicationOptions {
  */
 export function createApplication(config: Config, options: ApplicationOptions = {}): Application {
   const clock = options.clock ?? systemClock;
-  const logger =
+  const logBuffer = new LogBuffer(clock);
+  const innerLogger =
     options.logger ??
     createLogger(config.logLevel, { environment: config.environment, version: config.version });
+  const logger = createBufferedLogger(innerLogger, logBuffer);
 
   const handle = openDatabase(config.databaseFile);
   if (options.migrate !== false) {
@@ -77,6 +81,7 @@ export function createApplication(config: Config, options: ApplicationOptions = 
     db: handle.db,
     clock,
     logger,
+    logBuffer,
     flags,
     contacts,
     messageLog,
