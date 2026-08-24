@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,10 +19,12 @@ import {
   type BouwAfResultaat,
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
+import * as orkestreerModule from '../src/commands/orkestreer.js';
 import { bordItems } from '../src/board.js';
 import {
   leesStaat,
   standaardPaden,
+  TOKEN_SLEUTEL,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
 import { herstelAsyncUitvoerder, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -984,6 +986,69 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     // zijn. Er is een `rmSync` op het bron-pad, dat attesteert de cleanup. Belangrijker:
     // de run gooit niet — de opruiming verhindert geen voortgang.
     expect(geleverd).toEqual([]);
+  });
+});
+
+describe('orkestreer --soort bouw --nacht', () => {
+  const NU = new Date('2026-08-19T05:30:00');
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+  let wortel: string;
+  let home: string;
+  let paden: OrkestratorPaden;
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-nacht-'));
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-nacht-home-'));
+    paden = standaardPaden(home);
+    // Een geldig token en een bouw-dagmaximum > 0: zonder token gooit `vereisToken` vóór
+    // het slot, en een bereikt dagmaximum keert al eerder terug — dan raken we het
+    // slot-pad niet.
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-nacht\nFACTORY_BOUW_DAGMAXIMUM=2\n`, {
+      mode: 0o600,
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    rmSync(wortel, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    herstelOmgeving();
+    herstelUitvoerder();
+    herstelAsyncUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('slaat over als het slot al bezet is, zonder te bouwen of te gooien (#343)', async () => {
+    // Het slot ligt op een vast pad (`os.tmpdir()/factory-orkestreer.lock`) dat door alle
+    // testbestanden gedeeld wordt; vitest draait die parallel op één filesystem. Een echt
+    // lock-bestand hier zou dus racen met de refine-nacht-tests. We stubben daarom `neemLock`
+    // zelf op false — dat ís precies het "slot bezet"-signaal dat `draaiNachtBouw` afvangt —
+    // en raken het echte slot niet aan.
+    vi.spyOn(orkestreerModule, 'neemLock').mockReturnValue(false);
+    vi.spyOn(orkestreerModule, 'lockInfo').mockReturnValue('pid 4242 leeft nog');
+    const { aanroepen } = zetBeideUitvoerdersOp(({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql'
+        ? { stdout: bord() }
+        : {},
+    );
+
+    // Slot bezet is geen fout: de bouw-nacht keert stil terug, hij wacht niet en gooit
+    // niet. Zou de early-return een throw worden, dan valt deze assertie om.
+    await expect(
+      orkestreerBouw({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU }),
+    ).resolves.toBeUndefined();
+
+    // De melding legt uit waaróm er niets gebeurde.
+    expect(uitvoer.join('')).toMatch(/slot bezet.*bouw-nacht overgeslagen/);
+    // En er start geen enkele bouw-run: `draaiReeks` wordt niet bereikt, dus geen `claude`.
+    expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
   });
 });
 

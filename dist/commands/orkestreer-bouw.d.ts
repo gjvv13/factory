@@ -69,6 +69,12 @@ export interface BouwOpties {
     readonly dry?: boolean;
     /** Bouwt één item en stopt. */
     readonly eenmalig?: boolean;
+    /** Werkt de bouw-wachtrij af tot het bouw-dagmaximum of tot de rij leeg is (#343). */
+    readonly nacht?: boolean;
+    /** Zet de bouw-LaunchAgent op die `--soort bouw --nacht` elke nacht om 05:30 draait (#343). */
+    readonly installeer?: boolean;
+    /** Haalt die LaunchAgent weer weg (#343). */
+    readonly verwijder?: boolean;
     /** Bouwt een reeks af: een aantal van de kop, of precies deze items (#265). */
     readonly reeks?: ReeksKeuze;
     /**
@@ -84,10 +90,12 @@ export interface BouwOpties {
      * een test hoort prettier, eslint en vitest niet vanuit zichzélf te starten.
      */
     readonly leverIn?: (opties: InleverenOpties) => void;
+    /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
+    readonly nu?: Date;
 }
 /**
- * Draait de bouw-taaksoort. In deze slice bestaat alleen `--dry`: alles wat er te zien
- * valt vóórdat er iets gebeurt.
+ * Draait de bouw-taaksoort: wachtrij tonen, één item bouwen, een reeks, of de
+ * onbemande bouw-nacht (#343).
  */
 export declare function orkestreerBouw(opties?: BouwOpties): Promise<void>;
 /**

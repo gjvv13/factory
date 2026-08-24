@@ -750,10 +750,11 @@ describe('orkestreer status', () => {
     vi.restoreAllMocks();
   });
 
-  it('toont de twee dagtellers van vandaag (#264)', () => {
+  it('toont de drie dagtellers van vandaag (#264, #343)', () => {
     zetBeideUitvoerdersOp(statusBepaler);
     const nu = new Date(Date.now());
     boekRun(statusPaden, nu, 'nacht');
+    boekRun(statusPaden, nu, 'nacht-bouw');
     boekRun(statusPaden, nu, 'interactief');
     boekRun(statusPaden, nu, 'interactief');
 
@@ -761,7 +762,8 @@ describe('orkestreer status', () => {
 
     // Zonder deze regels zie je de nachtpot pas leeg als de nacht meldt dat hij niets doet.
     const tekst = uitvoer.join('');
-    expect(tekst).toMatch(/nacht:\s+1\/4/);
+    expect(tekst).toMatch(/nacht refine:\s+1\/4/);
+    expect(tekst).toMatch(/nacht bouw:\s+1\/2/);
     expect(tekst).toMatch(/zelf gestart:\s+2/);
   });
 
@@ -1631,6 +1633,10 @@ describe('de LaunchAgent van de orkestrator', () => {
     werkmap: '/Users/gjvv',
     logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
     factoryRepo: '/Users/gjvv/Documents/Software/factory',
+    label: 'nl.factory.orkestreer',
+    uur: 4,
+    minuut: 0,
+    nachtCommando: '"/usr/local/bin/factory" orkestreer --nacht',
   };
 
   it('draait --nacht één keer per nacht, buiten ~/Documents', () => {
@@ -1684,6 +1690,50 @@ describe('de LaunchAgent van de orkestrator', () => {
     // Twee keer: één keer fetch, één keer tag --list
     const gitAanroepen = script.match(new RegExp(`git -C "${opzet.factoryRepo}"`, 'g'));
     expect(gitAanroepen?.length).toBe(2);
+  });
+});
+
+describe('de bouw-LaunchAgent (#343)', () => {
+  const bouwOpzet = {
+    bin: '/usr/local/bin/factory',
+    werkmap: '/Users/gjvv',
+    logPad: '/Users/gjvv/Library/Logs/nl.factory.orkestreer.log',
+    factoryRepo: '/Users/gjvv/Documents/Software/factory',
+    label: 'nl.factory.orkestreer.bouw',
+    uur: 5,
+    minuut: 30,
+    nachtCommando: '"/usr/local/bin/factory" orkestreer --soort bouw --nacht',
+  };
+
+  it('heeft een eigen label, draait om 05:30 en roept --soort bouw --nacht aan', () => {
+    const plist = bouwOrkestreerPlist(bouwOpzet);
+
+    expect(plist).toContain('<key>Label</key><string>nl.factory.orkestreer.bouw</string>');
+    expect(plist).toContain('orkestreer --soort bouw --nacht');
+    expect(plist).toContain('<key>Hour</key><integer>5</integer>');
+    expect(plist).toContain('<key>Minute</key><integer>30</integer>');
+  });
+
+  it('start niet meteen bij het laden en draagt de token niet mee', () => {
+    const plist = bouwOrkestreerPlist(bouwOpzet);
+
+    expect(plist).not.toContain('RunAtLoad');
+    expect(plist).not.toContain(TOKEN_SLEUTEL);
+  });
+
+  it('werkt de globale bin bij vóór het bouw-nacht-commando (#237)', () => {
+    const script = bouwNachtScript(bouwOpzet);
+
+    // De install-stap staat vóór de exec.
+    const installIndex = script.indexOf('npm install -g');
+    const execIndex = script.indexOf('exec');
+    expect(installIndex).toBeGreaterThan(-1);
+    expect(execIndex).toBeGreaterThan(installIndex);
+
+    // De exec draait het bouw-nacht-commando.
+    const regels = script.split('\n');
+    const execRegel = regels[regels.length - 1];
+    expect(execRegel).toContain('orkestreer --soort bouw --nacht');
   });
 });
 

@@ -67,7 +67,7 @@ function pidLeeft(pid) {
  * - `lockInfo` geeft na een gefaalde poging de pad- en pid-informatie terug voor de
  *   foutmelding.
  */
-function neemLock() {
+export function neemLock() {
     try {
         const stat = statSync(LOCK_PAD);
         const pid = leesPid(LOCK_PAD);
@@ -97,7 +97,7 @@ function neemLock() {
     }
 }
 /** Leest het pid uit het huidige slotbestand, voor de foutmelding. */
-function lockInfo() {
+export function lockInfo() {
     const pid = leesPid(LOCK_PAD);
     if (pid !== undefined) {
         const leeftTekst = pidLeeft(pid) ? 'leeft nog' : 'dood';
@@ -105,7 +105,7 @@ function lockInfo() {
     }
     return LOCK_PAD;
 }
-function geefLockVrij() {
+export function geefLockVrij() {
     try {
         rmSync(LOCK_PAD);
     }
@@ -637,9 +637,10 @@ export function orkestreerStatus(cwd, opties = {}) {
     // zien als de nacht meldt dat hij niets doet.
     const paden = opties.paden ?? standaardPaden();
     const staat = leesStaat(paden, new Date(Date.now()));
-    const dagmaximum = leesInstellingen(paden).dagmaximum;
+    const instellingen = leesInstellingen(paden);
     kop('Vandaag');
-    process.stdout.write(`  nacht:       ${String(staat.gestart)}/${String(dagmaximum)}\n` +
+    process.stdout.write(`  nacht refine: ${String(staat.gestart)}/${String(instellingen.dagmaximum)}\n` +
+        `  nacht bouw:   ${String(staat.nachtBouw)}/${String(instellingen.bouwDagmaximum)}\n` +
         `  zelf gestart: ${String(staat.interactief)} (geen maximum; het aantal geef je mee bij het starten)\n`);
     kop(`Technisch uitgewerkt, wacht op jouw akkoord (${String(wachtOpAkkoord.length)})`);
     toonLijst(wachtOpAkkoord);
@@ -783,8 +784,11 @@ export function vervolgPrompt(escalatie, tekst) {
         'escaleer je opnieuw in plaats van hem zelf op te lossen.');
 }
 // --- De LaunchAgent: één keer per nacht, zonder dat ik een terminal open ------
-/** Het uur waarop de nacht draait — 04:00, zoals #104 het schetste. */
+/** Het uur waarop de refine-nacht draait — 04:00, zoals #104 het schetste. */
 const NACHT_UUR = 4;
+/** Het uur waarop de bouw-nacht draait — 05:30, ná de refine-nacht (#343). */
+export const BOUW_NACHT_UUR = 5;
+export const BOUW_NACHT_MINUUT = 30;
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
  *
@@ -816,7 +820,7 @@ export function bouwOrkestreerPlist(opzet) {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>${LAUNCH_LABEL}</string>
+  <key>Label</key><string>${opzet.label}</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
@@ -825,7 +829,7 @@ export function bouwOrkestreerPlist(opzet) {
   </array>
   <key>WorkingDirectory</key><string>${opzet.werkmap}</string>
   <key>StartCalendarInterval</key>
-  <dict><key>Hour</key><integer>${String(NACHT_UUR)}</integer><key>Minute</key><integer>0</integer></dict>
+  <dict><key>Hour</key><integer>${String(opzet.uur)}</integer><key>Minute</key><integer>${String(opzet.minuut)}</integer></dict>
   <key>EnvironmentVariables</key>
   <dict><key>PATH</key><string>${pad}</string></dict>
   <key>StandardOutPath</key><string>${opzet.logPad}</string>
@@ -862,7 +866,7 @@ export function bouwNachtScript(opzet) {
         'else',
         '  echo "WARNING kon de nieuwste tag niet ophalen; nacht draait op de huidige versie"',
         'fi',
-        `exec "${opzet.bin}" orkestreer --nacht`,
+        `exec ${opzet.nachtCommando}`,
     ].join('\n');
 }
 /**
@@ -890,7 +894,7 @@ export function eigenVersie() {
  * de laatste release", en main's versie kan tijdelijk achterlopen terwijl de
  * release-PR nog in de lucht is (dezelfde reden als in `release.yml`, zie #132).
  */
-function nieuwsteTag(cwd) {
+export function nieuwsteTag(cwd) {
     run('git', ['fetch', '--tags', '--force', 'origin'], { cwd, capture: true, toleranter: true });
     const tags = uitvoerVan('git', ['tag', '--list', 'v*', '--sort=-v:refname'], cwd);
     const tag = tags?.split('\n')[0]?.trim();
@@ -936,7 +940,16 @@ function installeerAgent(paden) {
     kop('LaunchAgent laden');
     const pad = paden.agentPad;
     mkdirSync(path.dirname(pad), { recursive: true });
-    writeFileSync(pad, bouwOrkestreerPlist({ bin, werkmap: os.homedir(), logPad: paden.logPad, factoryRepo: cwd }));
+    writeFileSync(pad, bouwOrkestreerPlist({
+        bin,
+        werkmap: os.homedir(),
+        logPad: paden.logPad,
+        factoryRepo: cwd,
+        label: LAUNCH_LABEL,
+        uur: NACHT_UUR,
+        minuut: 0,
+        nachtCommando: `"${bin}" orkestreer --nacht`,
+    }));
     run('launchctl', ['unload', pad], { toleranter: true, capture: true });
     run('launchctl', ['load', pad]);
     schrijfLog(paden, `${new Date(Date.now()).toISOString()} agent geladen (${tag}, ${bin})`);
@@ -951,7 +964,7 @@ function installeerAgent(paden) {
  * log dat je pas dagen later leest. Dit is precies het soort stille misstand als het
  * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
  */
-function vereisNachtModus(bin) {
+export function vereisNachtModus(bin) {
     const hulp = uitvoerVan(bin, ['help']) ?? '';
     if (hulp.includes('--nacht')) {
         return;
