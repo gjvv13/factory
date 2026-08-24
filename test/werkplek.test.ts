@@ -163,6 +163,63 @@ describe('werkplek', () => {
     }).toThrow(new RegExp(`slice/173-1 is al uitgecheckt in ${werkplekPad(repo, 173)}`));
   });
 
+  it('vertakt van de opgegeven basis-branch in plaats van origin/main', () => {
+    const repo = maakRepo();
+    // De basis-branch moet "bestaan": rev-parse op de basis moet een sha teruggeven.
+    const bepaal: UitkomstBepaler = ({ argumenten }) =>
+      argumenten[0] === 'rev-parse' && argumenten.includes('slice/260-1')
+        ? { stdout: 'abc123' }
+        : {};
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metWortel(repo, bepaal));
+    stelUitvoerderIn(uitvoerder);
+
+    werkplek('102', { basis: 'slice/260-1' });
+
+    // De worktree moet vertakken van de opgegeven basis, niet van origin/main.
+    expect(argsVan(aanroepen, 'worktree')).toContainEqual([
+      'worktree',
+      'add',
+      '-q',
+      '-b',
+      'slice/102-1',
+      werkplekPad(repo, 102),
+      'slice/260-1',
+    ]);
+    // De branchnaam is onafhankelijk van de basis: altijd slice/<issue>-1.
+    expect(uitvoer.join('')).toContain('slice/102-1');
+    expect(uitvoer.join('')).toContain('slice/260-1');
+  });
+
+  it('vertakt van origin/main als er geen basis is opgegeven', () => {
+    const repo = maakRepo();
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metWortel(repo));
+    stelUitvoerderIn(uitvoerder);
+
+    werkplek('173');
+
+    // Zonder basis: het bestaande gedrag, origin/main.
+    expect(argsVan(aanroepen, 'worktree')).toContainEqual([
+      'worktree',
+      'add',
+      '-q',
+      '-b',
+      'slice/173-1',
+      werkplekPad(repo, 173),
+      'origin/main',
+    ]);
+  });
+
+  it('faalt met een duidelijke fout als de basis-branch niet bestaat', () => {
+    const repo = maakRepo();
+    // rev-parse op de basis levert niets op: de branch bestaat niet.
+    const { uitvoerder } = maakUitvoerderOpnemer(metWortel(repo));
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => {
+      werkplek('102', { basis: 'slice/niet-bestaand' });
+    }).toThrow(/Basis-branch 'slice\/niet-bestaand' bestaat niet/);
+  });
+
   it('weigert een issuenummer dat er geen is', () => {
     maakRepo();
     stelUitvoerderIn(maakUitvoerderOpnemer().uitvoerder);

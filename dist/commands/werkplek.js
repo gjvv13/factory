@@ -56,6 +56,16 @@ function branchBestaat(repoDir, branch) {
     const sha = uitvoerVan('git', ['rev-parse', '-q', '--verify', `refs/heads/${branch}`], repoDir);
     return sha !== undefined && sha !== '';
 }
+/**
+ * Of een willekeurige ref bestaat: een lokale branch, een remote-tracking branch of een
+ * tag. Breder dan `branchBestaat`, dat alleen lokale branches toetst. Nodig voor de
+ * `basis`-parameter (#327): die kan `origin/main` zijn (remote-tracking) of
+ * `slice/260-1` (lokale branch).
+ */
+function refBestaat(repoDir, ref) {
+    const sha = uitvoerVan('git', ['rev-parse', '-q', '--verify', ref], repoDir);
+    return sha !== undefined && sha !== '';
+}
 /** Het pad van de worktree waar deze branch al is uitgecheckt, of undefined. */
 function elders(repoDir, branch) {
     const lijst = uitvoerVan('git', ['worktree', 'list', '--porcelain'], repoDir) ?? '';
@@ -102,6 +112,12 @@ export function werkplek(issueArgument, opties = {}) {
     // Vers ophalen: een worktree van een verouderde main levert een branch die pas bij
     // het inleveren conflicteert, en dat is het duurste moment om erachter te komen.
     runMetHerhaling('git', ['fetch', '-q', 'origin'], { cwd: repoDir }, { wat: 'git fetch' });
+    const startpunt = opties.basis ?? 'origin/main';
+    // Een basis die niet bestaat is een harde fout vóór de worktree-aanroep: dan is de
+    // melding helder in plaats van een git-interne fout over een onbekende rev.
+    if (opties.basis !== undefined && !refBestaat(repoDir, opties.basis)) {
+        throw new GebruikersFout(`Basis-branch '${opties.basis}' bestaat niet. Fetch opnieuw, of controleer de naam.`);
+    }
     // `worktree remove` haalt de map weg maar laat de branch staan. Bij een tweede
     // `werkplek` op hetzelfde issue bestaat de branch dus al, en dan is `-b` een harde
     // git-fout ("a branch named … already exists"). Hervat 'm in plaats daarvan: er kan
@@ -111,8 +127,8 @@ export function werkplek(issueArgument, opties = {}) {
         ok(`${pad} op bestaande branch ${branch}`);
     }
     else {
-        git(['worktree', 'add', '-q', '-b', branch, pad, 'origin/main'], repoDir);
-        ok(`${pad} op ${branch} (van origin/main)`);
+        git(['worktree', 'add', '-q', '-b', branch, pad, startpunt], repoDir);
+        ok(`${pad} op ${branch} (van ${startpunt})`);
     }
     process.stdout.write(`${pad}\n`);
 }

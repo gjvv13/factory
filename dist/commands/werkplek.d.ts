@@ -37,6 +37,12 @@ export interface WerkplekOpties {
     readonly cwd?: string;
     /** Ruimt de werkplek op in plaats van hem te maken. */
     readonly op?: boolean;
+    /**
+     * De branch waarvan de worktree vertrekt (#327). Zonder dit `origin/main`; met een
+     * waarde wordt de worktree van die branch afgetakt. In een bouw-reeks is dit de
+     * branch van het vorige item in dezelfde app, zodat de PR's conflictvrij stapelen.
+     */
+    readonly basis?: string;
 }
 /**
  * Maakt (of hervindt) de werkplek voor een issue en print het pad. Idempotent: een
