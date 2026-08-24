@@ -5,6 +5,28 @@ export interface ReeksItem {
     readonly app: string;
     readonly titel: string;
 }
+/**
+ * Context die `draaiReeks` aan `werkAf` meegeeft wanneer er gestapeld wordt (#327).
+ *
+ * Stacking is opt-in via `branchVan` op de opzet: zonder die functie geen context, en
+ * dan verandert er niets aan het bestaande gedrag. Met stacking krijgt het tweede item
+ * in dezelfde app de branch van het eerste als `basis`, zodat de PR's conflictvrij
+ * stapelen in git-historie.
+ */
+export interface ReeksContext {
+    /**
+     * De branch waarvan de worktree vertrekt. `undefined` betekent dat dit het eerste
+     * item in deze app is — de aanroeper kiest dan zijn eigen default (doorgaans
+     * `origin/main`).
+     */
+    readonly basis: string | undefined;
+    /** Het issue waarvan de basis-branch afkomstig is, of `undefined` bij het eerste. */
+    readonly basisIssue: number | undefined;
+    /** Positie in de reeks, 1-based, over alle apps heen. */
+    readonly positie: number;
+    /** Het maximumaantal items in deze reeks (`opzet.aantal`). */
+    readonly totaal: number;
+}
 export interface ReeksOpzet<T extends ReeksItem, U> {
     readonly paden: OrkestratorPaden;
     readonly nu: Date;
@@ -30,8 +52,16 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
      * board net veranderd, en doorwerken op de oude lijst pakt hetzelfde item nog eens.
      */
     readonly leesRij: () => readonly T[];
+    /**
+     * Leidt de branchnaam af van een item, voor het stapelen van items per app (#327).
+     *
+     * Wanneer gezet houdt de lus per app bij welke branch het laatst succesvol is
+     * afgewerkt, en geeft die als `basis` mee aan `werkAf` via een `ReeksContext`.
+     * Zonder deze functie geen stacking — het bestaande gedrag blijft ongewijzigd.
+     */
+    readonly branchVan?: (item: T) => string;
     /** Werkt één item af. Gooit alleen als de machine zelf stuk is. */
-    readonly werkAf: (item: T) => Promise<U>;
+    readonly werkAf: (item: T, reeks?: ReeksContext) => Promise<U>;
     /** Wat er van deze uitkomst in het runlog komt. */
     readonly beschrijf: (uitkomst: U) => RunRegel;
     /** Of dit als geslaagd telt. Twee niet-geslaagde runs op rij stoppen de reeks. */

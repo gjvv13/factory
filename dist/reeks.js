@@ -24,6 +24,9 @@ import { GebruikersFout, ok, waarschuwing } from './shell.js';
 export async function draaiReeks(opzet) {
     const gedaanIssues = new Set();
     const gemeld = new Set();
+    // Per app de laatst succesvol gebouwde branch (#327): het volgende item in dezelfde
+    // app vertrekt hiervan, zodat de branches stapelen in plaats van botsen bij het mergen.
+    const laatstPerApp = new Map();
     let gedaan = 0;
     let geslaagd = 0;
     let kosten = 0;
@@ -55,6 +58,15 @@ export async function draaiReeks(opzet) {
         // een throw), en door naar het volgende. Een andere fout is "de machine is stuk" en
         // die gooit wél door — elke volgende run loopt er net zo goed op stuk. De noodstop
         // bij twee mislukkingen op rij hieronder is het vangnet voor "alles strandt".
+        const vorig = opzet.branchVan !== undefined ? laatstPerApp.get(volgende.app) : undefined;
+        const reeksContext = opzet.branchVan !== undefined
+            ? {
+                basis: vorig?.branch,
+                basisIssue: vorig?.issue,
+                positie: gedaan + 1,
+                totaal: opzet.aantal,
+            }
+            : undefined;
         let geslaagdeRun = false;
         gedaan += 1;
         try {
@@ -64,7 +76,7 @@ export async function draaiReeks(opzet) {
                 soort: opzet.soort,
                 pot: opzet.pot,
                 item: volgende,
-            }, () => opzet.werkAf(volgende), opzet.beschrijf);
+            }, () => opzet.werkAf(volgende, reeksContext), opzet.beschrijf);
             kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
             geslaagdeRun = opzet.gelukt(uitkomst);
         }
@@ -77,6 +89,15 @@ export async function draaiReeks(opzet) {
         if (geslaagdeRun) {
             geslaagd += 1;
             mislukteOpRij = 0;
+            // Alleen na een geslaagde run de branch onthouden: een mislukte bouw levert geen
+            // bruikbare branch op, en het volgende item in dezelfde app vertrekt dan van de
+            // laatst gesláágde branch — niet van de mislukte (#327).
+            if (opzet.branchVan !== undefined) {
+                laatstPerApp.set(volgende.app, {
+                    branch: opzet.branchVan(volgende),
+                    issue: volgende.issue,
+                });
+            }
         }
         else {
             mislukteOpRij += 1;
