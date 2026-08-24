@@ -507,6 +507,120 @@ describe('inleveren', () => {
     expect(regels.join('')).toContain('kon #58 niet op het board');
   });
 
+  describe('basislijn committen vóór de schoon-check', () => {
+    it('committeert een vuile dekking-basislijn en gaat door met verify', () => {
+      const repo = maakRepo();
+      writeFileSync(path.join(repo, 'dekking-basislijn.json'), '{}');
+      process.chdir(repo);
+
+      // Stateful: de globale schoon-check ziet de basislijn als vuil zolang hij
+      // niet gecommit is. Zonder de pre-check-commit zou inleveren hier falen.
+      let basislijnGecommit = false;
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'commit' &&
+          aanroep.argumenten[3] === 'verhoog dekking-basislijn'
+        ) {
+          basislijnGecommit = true;
+          return {};
+        }
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'status' &&
+          aanroep.argumenten[2] === 'dekking-basislijn.json'
+        ) {
+          return { stdout: ' M dekking-basislijn.json' };
+        }
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'status' &&
+          aanroep.argumenten.length === 2
+        ) {
+          return basislijnGecommit ? { stdout: '' } : { stdout: ' M dekking-basislijn.json' };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(argsVan(aanroepen, 'git')).toContainEqual(['add', 'dekking-basislijn.json']);
+      expect(argsVan(aanroepen, 'git')).toContainEqual([
+        'commit',
+        '-q',
+        '-m',
+        'verhoog dekking-basislijn',
+      ]);
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('slaat over als de basislijn niet vuil is', () => {
+      const repo = maakRepo();
+      writeFileSync(path.join(repo, 'dekking-basislijn.json'), '{}');
+      process.chdir(repo);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Geen commit voor de basislijn: de gelukkig-bepaler geeft lege stdout
+      // voor elke git-status, dus commitAlsGewijzigd slaat terecht over.
+      const basislijnCommits = argsVan(aanroepen, 'git').filter(
+        (a) => a[0] === 'commit' && a[3] === 'verhoog dekking-basislijn',
+      );
+      expect(basislijnCommits).toHaveLength(0);
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('slaat over als dekking-basislijn.json niet bestaat', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Geen git-status voor de basislijn: existsSync sloeg al over.
+      const basislijnChecks = aanroepen.filter(
+        (a) => a.commando === 'git' && a.argumenten[2] === 'dekking-basislijn.json',
+      );
+      expect(basislijnChecks).toHaveLength(0);
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('laat de schoon-check falen bij een ander vuil bestand', () => {
+      const repo = maakRepo();
+      writeFileSync(path.join(repo, 'dekking-basislijn.json'), '{}');
+      process.chdir(repo);
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        // Basislijn is schoon.
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'status' &&
+          aanroep.argumenten[2] === 'dekking-basislijn.json'
+        ) {
+          return { stdout: '' };
+        }
+        // Globale schoon-check: een ander bestand is vuil.
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'status' &&
+          aanroep.argumenten.length === 2
+        ) {
+          return { stdout: ' M app/src/foo.ts' };
+        }
+        return gelukkig(aanroep, index);
+      };
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/niet schoon/);
+      expect(verify).not.toHaveBeenCalled();
+    });
+  });
+
   describe('conflict met main', () => {
     /** Zoals git het meldt: tree-oid, botsende bestanden, lege regel, dan de meldingen. */
     const CONFLICT_UITVOER = ['92d6da3', 'src/cli.ts', 'README.md', '', 'CONFLICT (content)'].join(

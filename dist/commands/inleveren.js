@@ -58,6 +58,9 @@ export function inleveren(opties = {}) {
     if (branch === undefined || branch === 'main') {
         throw new GebruikersFout(`Inleveren doe je vanaf een slice-branch, niet vanaf '${branch ?? '?'}'.`);
     }
+    // Een eerdere verify-run (bijv. van de bouw-werker) kan de dekkings-basislijn
+    // hebben verhoogd zonder te committen; breng dat mee vóór de schoon-check.
+    commitAlsGewijzigd(repoDir, BASISLIJN_BESTAND, 'verhoog dekking-basislijn');
     if (uitvoerVan('git', ['status', '--porcelain'], repoDir) !== '') {
         git(['status', '--short'], repoDir);
         throw new GebruikersFout('Werkmap is niet schoon. Commit je wijzigingen eerst.');
