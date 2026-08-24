@@ -2,6 +2,21 @@ import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
 import { type ReeksKeuze } from './orkestreer-bouw.js';
 import { type WerkerBasis } from '../werker.js';
+/**
+ * Probeert het slot te nemen. Schrijft het eigen pid in het slotbestand.
+ *
+ * - Bestaat er een slot met een pid dat nog leeft, dan wordt het nooit opgeruimd — ook
+ *   niet als het ouder is dan `LOCK_VERVALT_MS`. Een levend pid weegt zwaarder dan de
+ *   leeftijd, want precies dat scenario (een lange run) was het probleem.
+ * - Bevat het slot geen pid (oudere versie) of is het pid dood, dan geldt de bestaande
+ *   leeftijdsgrens: ouder dan `LOCK_VERVALT_MS` = opruimen.
+ * - `lockInfo` geeft na een gefaalde poging de pad- en pid-informatie terug voor de
+ *   foutmelding.
+ */
+export declare function neemLock(): boolean;
+/** Leest het pid uit het huidige slotbestand, voor de foutmelding. */
+export declare function lockInfo(): string;
+export declare function geefLockVrij(): void;
 export interface OrkestreerOpties {
     /** Toont de wachtrij en wat er zou gebeuren, en schrijft niets. */
     readonly dry?: boolean;
@@ -109,6 +124,9 @@ export interface AntwoordOpties {
 export declare function orkestreerAntwoord(issueArgument: string | undefined, tekst: string | undefined, opties?: AntwoordOpties, cwd?: string): Promise<void>;
 /** De prompt waarmee de sessie hervat wordt: jouw antwoord, en verder niets nieuws. */
 export declare function vervolgPrompt(escalatie: Escalatie, tekst: string): string;
+/** Het uur waarop de bouw-nacht draait — 05:30, ná de refine-nacht (#343). */
+export declare const BOUW_NACHT_UUR = 5;
+export declare const BOUW_NACHT_MINUUT = 30;
 export interface OrkestreerPlistOpzet {
     /** Absoluut pad naar de globaal geïnstalleerde factory-bin (buiten ~/Documents). */
     readonly bin: string;
@@ -122,6 +140,17 @@ export interface OrkestreerPlistOpzet {
      * (#237); de run zelf vervangt zijn eigen bin niet terwijl hij draait.
      */
     readonly factoryRepo: string;
+    /**
+     * Het launchd-label. Refine en bouw hebben elk hun eigen label, zodat beide agents
+     * naast elkaar geïnstalleerd kunnen zijn (#343).
+     */
+    readonly label: string;
+    /** Het uur van `StartCalendarInterval`. */
+    readonly uur: number;
+    /** De minuut van `StartCalendarInterval`. */
+    readonly minuut: number;
+    /** Het `exec`-commando waarmee de nacht start. */
+    readonly nachtCommando: string;
 }
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
@@ -170,4 +199,22 @@ export declare function bouwNachtScript(opzet: OrkestreerPlistOpzet): string;
  * Een onleesbare versie is geen reden om de nacht over te slaan; vandaar 'onbekend'.
  */
 export declare function eigenVersie(): string;
+/**
+ * De nieuwste release-tag van de factory, waaruit de globale bin geïnstalleerd wordt.
+ *
+ * De tag en niet `package.json` op main: de tag is de bron van waarheid over "wat is
+ * de laatste release", en main's versie kan tijdelijk achterlopen terwijl de
+ * release-PR nog in de lucht is (dezelfde reden als in `release.yml`, zie #132).
+ */
+export declare function nieuwsteTag(cwd: string): string;
+/**
+ * Weigert een agent te plannen op een bin die `--nacht` niet kent.
+ *
+ * De globale bin komt uit de nieuwste **tag**, en die loopt per definitie achter op de
+ * branch waarin `--nacht` net gebouwd is: installeer je voordat deze slice gereleased
+ * is, dan staat er een agent klaar die om 04:00 afketst op "Onbekend commando" — in een
+ * log dat je pas dagen later leest. Dit is precies het soort stille misstand als het
+ * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
+ */
+export declare function vereisNachtModus(bin: string): void;
 export {};

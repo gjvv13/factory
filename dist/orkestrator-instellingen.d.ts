@@ -27,20 +27,26 @@ export interface OrkestratorPaden {
     readonly staatPad: string;
     /** Eén regel per run: issue, uitkomst, kosten, beurten. */
     readonly logPad: string;
-    /** De LaunchAgent-plist die de nacht aftrapt. */
+    /** De LaunchAgent-plist die de refine-nacht aftrapt. */
     readonly agentPad: string;
+    /** De LaunchAgent-plist die de bouw-nacht aftrapt (#343). */
+    readonly bouwAgentPad: string;
 }
 /**
  * De echte paden. `home` is er zodat een test met een tijdelijke map kan werken in
  * plaats van in de home-map te schrijven; in productie staat hij altijd op `os.homedir()`.
  */
 export declare function standaardPaden(home?: string): OrkestratorPaden;
-/** Het launchd-label van de nachtelijke agent; ook de basis van zijn plist-naam. */
+/** Het launchd-label van de refine-nacht-agent; ook de basis van zijn plist-naam. */
 export declare const LAUNCH_LABEL = "nl.factory.orkestreer";
+/** Het launchd-label van de bouw-nacht-agent (#343). */
+export declare const BOUW_LAUNCH_LABEL = "nl.factory.orkestreer.bouw";
 /** De omgevingsvariabele waarmee de `claude`-CLI zich onbemand aanmeldt. */
 export declare const TOKEN_SLEUTEL = "CLAUDE_CODE_OAUTH_TOKEN";
 export interface Instellingen {
     readonly dagmaximum: number;
+    /** Dagmaximum voor bouw-nacht-runs (#343). */
+    readonly bouwDagmaximum: number;
     readonly budgetPerRun: number;
     readonly bouwBudgetPerRun: number;
     /** Kostenrem voor een review-run (#184). */
@@ -76,11 +82,12 @@ export declare function zorgVoorEnvBestand(paden: OrkestratorPaden): void;
 declare const staatSchema: z.ZodObject<{
     dag: z.ZodString;
     gestart: z.ZodNumber;
+    nachtBouw: z.ZodDefault<z.ZodNumber>;
     interactief: z.ZodDefault<z.ZodNumber>;
     laatsteRun: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 /** Uit welke pot een run geboekt wordt. */
-export type RunPot = 'nacht' | 'interactief';
+export type RunPot = 'nacht' | 'nacht-bouw' | 'interactief';
 export type OrkestratorStaat = z.infer<typeof staatSchema>;
 /**
  * De kalenderdag in lokale tijd, als `YYYY-MM-DD`.

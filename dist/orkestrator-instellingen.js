@@ -21,15 +21,20 @@ export function standaardPaden(home) {
         staatPad: path.join(wortel, 'Library', 'Application Support', 'factory', 'orkestrator.json'),
         logPad: path.join(wortel, 'Library', 'Logs', 'nl.factory.orkestreer.log'),
         agentPad: path.join(wortel, 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`),
+        bouwAgentPad: path.join(wortel, 'Library', 'LaunchAgents', `${BOUW_LAUNCH_LABEL}.plist`),
     };
 }
-/** Het launchd-label van de nachtelijke agent; ook de basis van zijn plist-naam. */
+/** Het launchd-label van de refine-nacht-agent; ook de basis van zijn plist-naam. */
 export const LAUNCH_LABEL = 'nl.factory.orkestreer';
+/** Het launchd-label van de bouw-nacht-agent (#343). */
+export const BOUW_LAUNCH_LABEL = 'nl.factory.orkestreer.bouw';
 /** De omgevingsvariabele waarmee de `claude`-CLI zich onbemand aanmeldt. */
 export const TOKEN_SLEUTEL = 'CLAUDE_CODE_OAUTH_TOKEN';
 const instellingenSchema = z.object({
-    /** Hoeveel werkers er per kalenderdag mogen starten. Default 4, zie #104. */
+    /** Hoeveel refine-werkers er per kalenderdag mogen starten. Default 4, zie #104. */
     FACTORY_DAGMAXIMUM: z.coerce.number().int().min(1).max(50).default(4),
+    /** Hoeveel bouw-werkers er per nacht mogen starten (#343). Default 2. */
+    FACTORY_BOUW_DAGMAXIMUM: z.coerce.number().int().min(1).max(50).default(2),
     /** Harde kostenrem per run, als `--max-budget-usd`. Default 5. */
     FACTORY_BUDGET_USD: z.coerce.number().positive().max(100).default(5),
     /**
@@ -94,6 +99,7 @@ export function leesInstellingen(paden) {
     if (!existsSync(paden.envPad)) {
         return {
             dagmaximum: 4,
+            bouwDagmaximum: 2,
             budgetPerRun: 5,
             bouwBudgetPerRun: 10,
             reviewBudgetPerRun: 3,
@@ -112,6 +118,7 @@ export function leesInstellingen(paden) {
     const token = gelezen.data[TOKEN_SLEUTEL];
     return {
         dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
+        bouwDagmaximum: gelezen.data.FACTORY_BOUW_DAGMAXIMUM,
         budgetPerRun: gelezen.data.FACTORY_BUDGET_USD,
         bouwBudgetPerRun: gelezen.data.FACTORY_BOUW_BUDGET_USD,
         reviewBudgetPerRun: gelezen.data.FACTORY_REVIEW_BUDGET_USD,
@@ -163,6 +170,7 @@ export function zorgVoorEnvBestand(paden) {
         '# Dit bestand hoort rechten 600 te hebben: er staat een token in.\n' +
         `${TOKEN_SLEUTEL}=\n` +
         'FACTORY_DAGMAXIMUM=4\n' +
+        'FACTORY_BOUW_DAGMAXIMUM=2\n' +
         'FACTORY_BUDGET_USD=5\n' +
         'FACTORY_WERKER_EFFORT=medium\n', { mode: 0o600 });
 }
@@ -171,6 +179,11 @@ const staatSchema = z.object({
     dag: z.string().min(1),
     /** Runs die de LaunchAgent vannacht gestart heeft; hierop staat het dagmaximum. */
     gestart: z.number().int().nonnegative(),
+    /**
+     * Bouw-nacht-runs vandaag (#343). Eigen pot, eigen dagmaximum, los van de refine-nacht.
+     * `.default(0)` zodat een staatbestand van vóór deze uitbreiding gewoon leesbaar blijft.
+     */
+    nachtBouw: z.number().int().nonnegative().default(0),
     /**
      * Runs die je zelf gestart hebt vandaag. Een eigen teller, zodat een middag
      * experimenteren de nacht niet leegtrekt (#264). Hier staat geen maximum op: het
@@ -203,7 +216,7 @@ export function kalenderdag(nu) {
 export function leesStaat(paden, nu) {
     const vandaag = kalenderdag(nu);
     if (!existsSync(paden.staatPad)) {
-        return { dag: vandaag, gestart: 0, interactief: 0 };
+        return { dag: vandaag, gestart: 0, nachtBouw: 0, interactief: 0 };
     }
     let gelezen;
     try {
@@ -211,16 +224,18 @@ export function leesStaat(paden, nu) {
     }
     catch {
         waarschuwing(`${paden.staatPad} is niet te lezen; de dagteller begint vandaag opnieuw.`);
-        return { dag: vandaag, gestart: 0, interactief: 0 };
+        return { dag: vandaag, gestart: 0, nachtBouw: 0, interactief: 0 };
     }
     const staat = staatSchema.safeParse(gelezen);
     if (!staat.success) {
         waarschuwing(`${paden.staatPad} wijkt af; de dagteller begint vandaag opnieuw.`);
-        return { dag: vandaag, gestart: 0, interactief: 0 };
+        return { dag: vandaag, gestart: 0, nachtBouw: 0, interactief: 0 };
     }
     // Een andere dag betekent een schone lei — daarom staat de dag in het bestand en
     // niet alleen een teller.
-    return staat.data.dag === vandaag ? staat.data : { dag: vandaag, gestart: 0, interactief: 0 };
+    return staat.data.dag === vandaag
+        ? staat.data
+        : { dag: vandaag, gestart: 0, nachtBouw: 0, interactief: 0 };
 }
 /**
  * Boekt één gestarte run en levert de nieuwe stand.
@@ -232,10 +247,15 @@ export function leesStaat(paden, nu) {
 export function boekRun(paden, nu, pot) {
     const staat = leesStaat(paden, nu);
     const gestart = pot === 'nacht' ? staat.gestart + 1 : staat.gestart;
+    const nachtBouw = pot === 'nacht-bouw' ? staat.nachtBouw + 1 : staat.nachtBouw;
     const interactief = pot === 'interactief' ? staat.interactief + 1 : staat.interactief;
     mkdirSync(path.dirname(paden.staatPad), { recursive: true });
-    writeFileSync(paden.staatPad, `${JSON.stringify({ dag: kalenderdag(nu), gestart, interactief, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`);
-    return pot === 'nacht' ? gestart : interactief;
+    writeFileSync(paden.staatPad, `${JSON.stringify({ dag: kalenderdag(nu), gestart, nachtBouw, interactief, laatsteRun: new Date(nu.getTime()).toISOString() }, null, 2)}\n`);
+    if (pot === 'nacht')
+        return gestart;
+    if (pot === 'nacht-bouw')
+        return nachtBouw;
+    return interactief;
 }
 /**
  * Eén regel in het runlog: wat er met welk issue gebeurde, en wat het kostte.
