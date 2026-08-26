@@ -19,6 +19,7 @@ import { sync } from './commands/sync.js';
 import { werkplek } from './commands/werkplek.js';
 import { terugrol } from './commands/terugrol.js';
 import { verify } from './commands/verify.js';
+import { splits } from './splits.js';
 import { toonMigratieStatus } from './migratie.js';
 import { leesArgumenten } from './argumenten.js';
 import { fout, GebruikersFout } from './shell.js';
@@ -48,6 +49,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
+  factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
@@ -203,6 +205,11 @@ async function main(argumenten) {
         case 'sync': {
             const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--check'] });
             sync({ check: schakelaars.has('--check') });
+            return;
+        }
+        case 'splits': {
+            const { positioneel } = leesArgumenten(rest);
+            splits(positioneel[0]);
             return;
         }
         case 'board': {
