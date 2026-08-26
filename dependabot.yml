@@ -1,0 +1,23 @@
+# Dependabot version-updates voor factory-applicaties.
+# Dit bestand wordt door `factory sync` naar .github/dependabot.yml gekopieerd.
+#
+# Prerequisite per repo: zet "Dependabot security updates" aan in de
+# GitHub-repo-instellingen (Settings → Code security → Dependabot security
+# updates). Security-updates staan los van version-updates en vereisen die
+# instelling eenmalig.
+#
+# Alleen npm, niet github-actions: app-workflows worden via `factory sync`
+# beheerd. Een actions-bump in een app zou bij de volgende sync overschreven
+# worden.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      patch-en-minor:
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
