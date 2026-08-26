@@ -33,7 +33,7 @@ import {
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
-import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
+import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import {
   BOUW_NACHT_MINUUT,
@@ -432,7 +432,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             reeks,
           ),
         beschrijf: beschrijfBouw,
-        gelukt: (u) => u.bouw.afloop === 'klaar',
+        beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
       }),
     );
     return;
@@ -576,7 +576,7 @@ export function reviewPrompt(
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-async function bouwAf(
+export async function bouwAf(
   item: Bouwitem,
   cwd: string,
   wortel: string,
@@ -643,6 +643,20 @@ async function bouwAf(
     });
   } catch (fout) {
     ruimBronMapOp(bronWortel);
+    if (fout instanceof OmgevingsFout) {
+      // De omgeving is stuk — geen repo, onleesbare package.json, worktree kon niet
+      // aangemaakt worden. Escaleren in plaats van als kale mislukking boeken, zodat
+      // de noodstop in de nachtreeks niet afgaat op iets waar de code niets mee te
+      // maken heeft (#383).
+      escaleerOmgevingsfout(item, cwd, werkmap, fout, 'de bouw-run kon niet starten');
+      return {
+        bouw: {
+          afloop: 'escalatie',
+          sessie: '',
+          weigeringen: 0,
+        },
+      };
+    }
     terug();
     throw fout;
   }
@@ -676,14 +690,31 @@ async function bouwAf(
     }
   }
 
-  verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
+  const inleverOmgevingsfout = verwerkBouw(
+    item,
+    uitkomst,
+    reviewUitkomst,
+    cwd,
+    wortel,
+    leverIn,
+    reeks,
+  );
   return {
-    bouw: uitkomst,
+    // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
+    // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
+    // run als 'gelukt' tellen en de noodstop-teller in de nachtreeks resetten (#383).
+    bouw: inleverOmgevingsfout ? { ...uitkomst, afloop: 'escalatie' } : uitkomst,
     ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
   };
 }
 
-/** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
+/**
+ * Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt.
+ *
+ * Retourneert `true` als het inleveren op een `OmgevingsFout` stuitte: dan is het item
+ * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
+ * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
+ */
 function verwerkBouw(
   item: Bouwitem,
   uitkomst: BouwUitkomst,
@@ -692,7 +723,7 @@ function verwerkBouw(
   wortel: string,
   leverIn: (opties: InleverenOpties) => void,
   reeks?: ReeksContext,
-): void {
+): boolean {
   const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
   if (uitkomst.afloop === 'mislukt') {
@@ -705,7 +736,7 @@ function verwerkBouw(
       cwd,
     );
     waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
-    return;
+    return false;
   }
 
   const verdict = uitkomst.verdict;
@@ -726,28 +757,22 @@ function verwerkBouw(
       cwd,
     );
     ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
-    return;
+    return false;
   }
 
   if (verdict?.uitkomst !== 'klaar') {
     blokkeer(item, cwd);
     waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
-    return;
+    return false;
   }
 
   // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
   // schuiven (#128) en de werkplek opruimen. Zonder auto-merge, want deze werker mag
   // code voorstellen en niet landen.
-  plaatsComment(
-    item.issue,
-    `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
-      `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
-      verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-      `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
-    cwd,
-  );
-
-  // Inleveren. Mislukt dat, dan gaan de bevindingen naar het issue (#184).
+  //
+  // De "Gebouwd door"-comment (met "de PR staat open") komt pas ná een geslaagd
+  // inleveren: stuit `leverIn` op een omgevingsfout, dan is er géén PR en zou die comment
+  // liegen (#383).
   const reviewComment = maakReviewComment(reviewUitkomst);
   try {
     // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
@@ -770,6 +795,12 @@ function verwerkBouw(
         : {}),
     });
   } catch (fout) {
+    if (fout instanceof OmgevingsFout) {
+      // De poort kon niet draaien door een omgevingsprobleem — geen inhoudelijke fout.
+      // Escaleren zodat de noodstop niet afgaat (#383).
+      escaleerOmgevingsfout(item, cwd, werkmap, fout, 'de kwaliteitspoort kon niet draaien');
+      return true;
+    }
     // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
     // niet. Gooi daarna alsnog door — de bouw-run hoort rood te worden.
     if (reviewComment !== undefined) {
@@ -777,6 +808,16 @@ function verwerkBouw(
     }
     throw fout;
   }
+
+  // Inleveren geslaagd: nu pas melden dat er gebouwd is en dat de PR openstaat.
+  plaatsComment(
+    item.issue,
+    `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
+      `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
+      verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+      `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
+    cwd,
+  );
 
   // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
   if (reviewComment !== undefined) {
@@ -788,12 +829,41 @@ function verwerkBouw(
   }
 
   ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
+  return false;
 }
 
 /** Zet een item stil: terug in de bouw-wachtrij, met het label dat het overslaat. */
 function blokkeer(item: Bouwitem, cwd: string): void {
   zetKolom(item.issue, BOUW_KOLOM, cwd);
   zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+}
+
+/**
+ * Escaleert een item wegens een omgevingsfout (geen inhoudelijke fout): terug in de rij
+ * met het escalatie-label en een comment die de fase, de fout en het pad noemt, plus de
+ * orkestrator-marker zodat de escalatie in beide fasen (setup én inleveren) identiek te
+ * herkennen en te hervatten is (#383). Eén plek, zodat de twee catch-paden niet uit
+ * elkaar lopen.
+ */
+function escaleerOmgevingsfout(
+  item: Bouwitem,
+  cwd: string,
+  werkmap: string,
+  fout: OmgevingsFout,
+  fase: string,
+): void {
+  blokkeer(item, cwd);
+  plaatsComment(
+    item.issue,
+    `**Omgevingsfout.** ${fase}.\n\n` +
+      `Fout: ${fout.message}\n` +
+      `Pad: ${werkmap}\n\n` +
+      `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.\n\n` +
+      `<sub></sub>\n` +
+      `<!-- orkestrator: sessie= werkmap=${werkmap} -->`,
+    cwd,
+  );
+  waarschuwing(`#${String(item.issue)} omgevingsfout: ${fout.message}`);
 }
 
 /**
@@ -1194,7 +1264,7 @@ async function draaiNachtBouw(
           draaiOpties.timeoutMs,
         ),
       beschrijf: beschrijfBouw,
-      gelukt: (u) => u.bouw.afloop === 'klaar',
+      beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
       naElkeRun: (aantal) => {
         ok(
           `${String(alGestart + aantal)}/${String(instellingen.bouwDagmaximum)} van de bouw-nacht gedaan.`,

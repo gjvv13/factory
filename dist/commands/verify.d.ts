@@ -12,6 +12,7 @@ interface Stap {
  * e2e-tests heeft) en in een applicatie (die ze wel heeft).
  */
 export declare const STAPPEN: readonly Stap[];
+export declare function beschikbareScripts(repoDir: string): Set<string>;
 /**
  * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
  * gemergede cijfer (de echte gecombineerde dekking); ontbreekt dat, dan valt hij terug op

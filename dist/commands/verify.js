@@ -6,7 +6,7 @@ import { beoordeelRatchet, leesBasislijn, schrijfBasislijn, BASISLIJN_BESTAND, }
 import { leesDekkingsConfig } from '../dekking-config.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
 import { toetsFlagVerloop } from '../flag-verloop.js';
-import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
+import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout, OmgevingsFout, } from '../shell.js';
 /**
  * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
  * wordt overgeslagen, zodat dezelfde poort werkt in de factory (die geen
@@ -45,14 +45,14 @@ export const STAPPEN = [
     },
     { script: 'build', titel: 'Build', snel: true, preCommit: false },
 ];
-function beschikbareScripts(repoDir) {
+export function beschikbareScripts(repoDir) {
     const bestand = path.join(repoDir, 'package.json');
     let inhoud;
     try {
         inhoud = JSON.parse(readFileSync(bestand, 'utf8'));
     }
     catch {
-        throw new GebruikersFout(`Kon ${bestand} niet lezen. Draait dit in een repo?`);
+        throw new OmgevingsFout(`Kon ${bestand} niet lezen. Draait dit in een repo?`);
     }
     const scripts = typeof inhoud === 'object' && inhoud !== null && 'scripts' in inhoud
         ? inhoud.scripts

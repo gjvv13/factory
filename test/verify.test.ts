@@ -2,8 +2,14 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { beoordeelDekking, STAPPEN, telKwetsbaarheden, verify } from '../src/commands/verify.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import {
+  beoordeelDekking,
+  beschikbareScripts,
+  STAPPEN,
+  telKwetsbaarheden,
+  verify,
+} from '../src/commands/verify.js';
+import { herstelUitvoerder, OmgevingsFout, stelUitvoerderIn } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
 /**
@@ -193,5 +199,12 @@ describe('verify — cwd (#379)', () => {
     expect(() => {
       verify({ cwd: tmpDir });
     }).toThrow(tmpDir);
+  });
+});
+
+describe('beschikbareScripts — OmgevingsFout (#383)', () => {
+  it('gooit OmgevingsFout bij een onbestaande map, niet GebruikersFout', () => {
+    const onbestaand = path.join(tmpdir(), 'bestaat-niet-' + String(Date.now()));
+    expect(() => beschikbareScripts(onbestaand)).toThrow(OmgevingsFout);
   });
 });

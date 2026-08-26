@@ -15,7 +15,15 @@ import { leesDekkingsConfig } from '../dekking-config.js';
 import type { DekkingsConfig } from '../dekking-config.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
 import { toetsFlagVerloop } from '../flag-verloop.js';
-import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout } from '../shell.js';
+import {
+  draaiScript,
+  kop,
+  ok,
+  run,
+  waarschuwing,
+  GebruikersFout,
+  OmgevingsFout,
+} from '../shell.js';
 
 interface Stap {
   readonly script: string;
@@ -65,13 +73,13 @@ export const STAPPEN: readonly Stap[] = [
   { script: 'build', titel: 'Build', snel: true, preCommit: false },
 ];
 
-function beschikbareScripts(repoDir: string): Set<string> {
+export function beschikbareScripts(repoDir: string): Set<string> {
   const bestand = path.join(repoDir, 'package.json');
   let inhoud: unknown;
   try {
     inhoud = JSON.parse(readFileSync(bestand, 'utf8'));
   } catch {
-    throw new GebruikersFout(`Kon ${bestand} niet lezen. Draait dit in een repo?`);
+    throw new OmgevingsFout(`Kon ${bestand} niet lezen. Draait dit in een repo?`);
   }
   const scripts =
     typeof inhoud === 'object' && inhoud !== null && 'scripts' in inhoud

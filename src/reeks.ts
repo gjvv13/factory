@@ -5,7 +5,7 @@ import {
   type RunRegel,
   type WerkerSoort,
 } from './orkestrator-instellingen.js';
-import { GebruikersFout, ok, waarschuwing } from './shell.js';
+import { GebruikersFout, OmgevingsFout, ok, waarschuwing } from './shell.js';
 
 /** Het minimum dat de lus van een item moet weten. */
 export interface ReeksItem {
@@ -74,8 +74,17 @@ export interface ReeksOpzet<T extends ReeksItem, U> {
   readonly werkAf: (item: T, reeks?: ReeksContext) => Promise<U>;
   /** Wat er van deze uitkomst in het runlog komt. */
   readonly beschrijf: (uitkomst: U) => RunRegel;
-  /** Of dit als geslaagd telt. Twee niet-geslaagde runs op rij stoppen de reeks. */
-  readonly gelukt: (uitkomst: U) => boolean;
+  /**
+   * Beoordeelt de uitkomst van één run voor de noodstop-telling:
+   * - `'gelukt'` → `mislukteOpRij = 0`
+   * - `'escalatie'` → `mislukteOpRij` ongewijzigd (telt niet mee)
+   * - `'mislukt'` → `mislukteOpRij += 1`
+   *
+   * Escalaties zijn gewoon werk (#383): twee escalaties op rij betekenen niet dat de
+   * machine stuk is, alleen dat de items vragen hebben. De noodstop is er voor "alles
+   * strandt", niet voor "alles escaleert".
+   */
+  readonly beoordeel: (uitkomst: U) => 'gelukt' | 'escalatie' | 'mislukt';
   /**
    * Hoe deze reeks heet in meldingen: `vannacht` of `deze reeks`. De nacht houdt zo
    * zijn eigen woorden — "overgeslagen voor vannacht" is de melding uit #202 en die
@@ -112,11 +121,12 @@ export interface ReeksUitkomst {
  * andere kolom of draagt een escalatie-label. Doorwerken op de oude lijst zou hetzelfde
  * item een tweede keer oppakken, en dat is twee keer betalen voor één uitwerking.
  *
- * **Twee mislukte runs op rij stoppen de reeks; één niet.** Eén escalatie is gewoon
- * werk. Twee achter elkaar betekent dat de machine zelf stuk is, en dan is doorgaan
- * geld weggooien. Dit is een noodstop, niet het lus-filter: dat blijft een *filter*,
- * zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in plaats van
- * de hele reeks te kosten.
+ * **Twee mislukte runs op rij stoppen de reeks; escalaties tellen niet mee (#383).**
+ * Een escalatie is gewoon werk: het item heeft een vraag, niet een kapotte machine.
+ * Twee *mislukkingen* achter elkaar betekent dat de machine zelf stuk is, en dan is
+ * doorgaan geld weggooien. Dit is een noodstop, niet het lus-filter: dat blijft een
+ * *filter*, zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in
+ * plaats van de hele reeks te kosten.
  */
 export async function draaiReeks<T extends ReeksItem, U>(
   opzet: ReeksOpzet<T, U>,
@@ -172,7 +182,7 @@ export async function draaiReeks<T extends ReeksItem, U>(
             totaal: opzet.aantal,
           }
         : undefined;
-    let geslaagdeRun = false;
+    let oordeel: 'gelukt' | 'escalatie' | 'mislukt' = 'mislukt';
     gedaan += 1;
     try {
       const { uitkomst } = await metBoekhouding(
@@ -187,16 +197,23 @@ export async function draaiReeks<T extends ReeksItem, U>(
         opzet.beschrijf,
       );
       kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
-      geslaagdeRun = opzet.gelukt(uitkomst);
+      oordeel = opzet.beoordeel(uitkomst);
     } catch (fout) {
       if (!(fout instanceof GebruikersFout)) {
         throw fout;
+      }
+      // Een geworpen OmgevingsFout is geen mislukking maar een escalatie: de omgeving is
+      // stuk, niet de code. Zo telt hij niet mee voor de noodstop — gelijk aan een
+      // uitkomst die `beoordeel` als 'escalatie' bestempelt (#383). Een gewone
+      // GebruikersFout houdt de default 'mislukt'.
+      if (fout instanceof OmgevingsFout) {
+        oordeel = 'escalatie';
       }
       waarschuwing(
         `#${String(volgende.issue)} kon niet landen: ${fout.message.split('\n')[0] ?? ''}`,
       );
     }
-    if (geslaagdeRun) {
+    if (oordeel === 'gelukt') {
       geslaagd += 1;
       mislukteOpRij = 0;
       // Alleen na een geslaagde run de branch onthouden: een mislukte bouw levert geen
@@ -208,9 +225,11 @@ export async function draaiReeks<T extends ReeksItem, U>(
           issue: volgende.issue,
         });
       }
-    } else {
+    } else if (oordeel === 'mislukt') {
       mislukteOpRij += 1;
     }
+    // oordeel === 'escalatie': mislukteOpRij blijft staan — een escalatie is gewoon
+    // werk, niet een teken dat de machine stuk is (#383).
     opzet.naElkeRun?.(gedaan);
     if (mislukteOpRij >= 2) {
       // Niet stil stoppen: dit is een andere uitkomst dan "de rij is leeg", en het

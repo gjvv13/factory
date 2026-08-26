@@ -7,6 +7,15 @@ export declare function fout(tekst: string): void;
 export declare class GebruikersFout extends Error {
     constructor(message: string);
 }
+/**
+ * De omgeving is stuk: geen repo, geen worktree, onleesbare package.json — de run
+ * kwam niet toe aan het beoordelen van de code. Een subklasse van `GebruikersFout`,
+ * zodat bestaande catch-blokken hem automatisch vangen, maar de reeks hem apart kan
+ * herkennen als een escalatie in plaats van een echte mislukking (#383).
+ */
+export declare class OmgevingsFout extends GebruikersFout {
+    constructor(message: string);
+}
 export interface RunOptions {
     readonly cwd?: string;
     readonly env?: NodeJS.ProcessEnv;
