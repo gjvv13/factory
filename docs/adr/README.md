@@ -28,7 +28,7 @@ Er is bewust geen CLI-commando: de handeling is een bestand kopiëren en invulle
 | [001](001-versie-uit-git-tag.md)                            | Versie afleiden uit de nieuwste git-tag             |
 | [002](002-applescript-ipv-eventkit.md)                      | Apple-herinneringen via AppleScript i.p.v. EventKit |
 | [003](003-e2e-sluit-unit-contract-uit-bij-dekking-merge.md) | Dekking-merge meet elke testsoort apart             |
-| [004](004-fluffychat-ipv-element-x.md)                      | FluffyChat als Matrix-client i.p.v. Element X       |
+| [004](004-matrix-client-voor-het-gezin.md)                  | Matrix-client vrij; homeserver dwingt niets af      |
 | [005](005-serieel-stapelen-bouw-reeks.md)                   | Slices serieel stapelen in een bouw-reeks           |
 | [006](006-child-issues-voor-multi-slice.md)                 | Sub-issues als model voor meerdere slices           |
 | [007](007-bouw-nacht.md)                                    | Onbemand bouwen 's nachts                           |
