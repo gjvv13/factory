@@ -61,6 +61,9 @@ jq-expressies van `alleKinderenDicht` en `ouderVan`, de GraphQL-parse van
 (`skills/coding-guidelines/SKILL.md`) — de niet-afdwingbare helft van de regels,
 die Claude Code in een applicatie zelf laadt zodra er code ontstaat.
 
+**Platformbeslissingen** (`docs/adr/`): korte Architecture Decision Records per
+richtingbepalende keuze, met context, alternatieven en bewijsplaatsen.
+
 **Het skeleton** (`skeleton/`): het startpunt van een nieuwe applicatie, met een
 werkende backend, drie omgevingen en een compleet testfundament. Placeholders
 (`{{APP_NAAM}}`, `{{PORT_DEV}}`, …) worden door `factory nieuw` ingevuld.
