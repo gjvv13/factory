@@ -52,7 +52,7 @@ export function release(soortArgument: string | undefined): void {
   }
 
   kop('Kwaliteitspoort voor de release');
-  verify();
+  verify({ cwd: repoDir });
 
   kop(`Versie verhogen (${soort})`);
   const { commando, basisArgumenten } = pakketbeheerder();

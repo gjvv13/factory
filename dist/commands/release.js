@@ -34,7 +34,7 @@ export function release(soortArgument) {
         throw new GebruikersFout('Werkmap is niet schoon. Commit of stash je wijzigingen eerst.');
     }
     kop('Kwaliteitspoort voor de release');
-    verify();
+    verify({ cwd: repoDir });
     kop(`Versie verhogen (${soort})`);
     const { commando, basisArgumenten } = pakketbeheerder();
     run(commando, [...basisArgumenten, 'version', soort, '--no-git-tag-version'], { cwd: repoDir });

@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { beoordeelDekking, STAPPEN, telKwetsbaarheden, verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -136,5 +139,59 @@ describe('telKwetsbaarheden', () => {
       aantal: 3,
       perNiveau: { moderate: 2, high: 1 },
     });
+  });
+});
+
+describe('verify — cwd (#379)', () => {
+  let origineleCwd: string;
+
+  afterEach(() => {
+    process.chdir(origineleCwd);
+  });
+
+  it('gebruikt opties.cwd in plaats van process.cwd() voor het lezen van package.json en het draaien van scripts', () => {
+    // Maak een tmp-map met een minimale package.json die de scripts bevat die
+    // verify verwacht. Zet process.cwd() op een map zónder package.json — als
+    // verify de meegegeven cwd correct doorgeeft, vindt hij package.json in de
+    // tmp-map; valt hij terug op process.cwd(), dan breekt hij.
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'verify-cwd-'));
+    writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({
+        scripts: { lint: 'echo ok', typecheck: 'echo ok', 'test:unit': 'echo ok' },
+      }),
+    );
+
+    origineleCwd = process.cwd();
+    // Een map zonder package.json: de repo-wortel van os is veilig genoeg.
+    process.chdir(tmpdir());
+
+    const cwds: string[] = [];
+    stelUitvoerderIn((_commando, _argumenten, options): ProcesUitkomst => {
+      if (options.cwd !== undefined) cwds.push(options.cwd);
+      return { code: 0, stdout: '' };
+    });
+
+    verify({ cwd: tmpDir, snel: true });
+
+    // Alle draaiScript-aanroepen moeten de meegegeven cwd gebruiken, niet process.cwd().
+    expect(cwds.length).toBeGreaterThan(0);
+    for (const cwd of cwds) {
+      expect(cwd).toBe(tmpDir);
+    }
+  });
+
+  it('toont de meegegeven cwd in de foutmelding als package.json niet bestaat', () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'verify-cwd-fout-'));
+    // Geen package.json in tmpDir.
+
+    origineleCwd = process.cwd();
+    process.chdir(tmpdir());
+
+    stelUitvoerderIn((): ProcesUitkomst => ({ code: 0, stdout: '' }));
+
+    expect(() => {
+      verify({ cwd: tmpDir });
+    }).toThrow(tmpDir);
   });
 });

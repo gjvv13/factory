@@ -158,7 +158,7 @@ export function inleveren(opties: InleverenOpties = {}): void {
   );
 
   kop('Kwaliteitspoort');
-  verify();
+  verify({ cwd: repoDir });
   // De volledige verify kan de dekkings-basislijn hebben verhoogd; commit die mee,
   // zodat de branch schoon blijft en de verhoogde lat met de PR meereist.
   commitAlsGewijzigd(repoDir, BASISLIJN_BESTAND, 'verhoog dekking-basislijn');

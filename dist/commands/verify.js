@@ -223,7 +223,7 @@ function toetsAfhankelijkheden(repoDir, config) {
     waarschuwing(`${melding} — draai \`pnpm audit\` voor de details.`);
 }
 export function verify(opties = {}) {
-    const repoDir = process.cwd();
+    const repoDir = opties.cwd ?? process.cwd();
     const aanwezig = beschikbareScripts(repoDir);
     const start = Date.now();
     // Coverage draait alleen bij een volledige poort; --snel en --pre-commit slaan
