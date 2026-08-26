@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   beschrijfBouw,
+  bouwAf,
   bouwBranch,
   bouwPrompt,
   bouwWachtrij,
@@ -20,6 +21,7 @@ import {
   type Bouwitem,
 } from '../src/commands/orkestreer-bouw.js';
 import * as orkestreerModule from '../src/commands/orkestreer.js';
+import * as werkplaatsModule from '../src/werkplaats.js';
 import { bordItems } from '../src/board.js';
 import {
   leesStaat,
@@ -994,24 +996,63 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(geleverd).toEqual([]);
   });
 
-  it('vangt een OmgevingsFout uit leverIn als escalatie op, niet als mislukking (#383)', async () => {
+  it('boekt een OmgevingsFout uit leverIn als escalatie in de uitkomst én op het board (#383)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
+      machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
+    );
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+    };
+
+    // leverIn gooit een OmgevingsFout: de poort kon niet draaien door een
+    // omgevingsprobleem, niet door inhoudelijk rode tests. De bouw zélf slaagde ('klaar').
+    const resultaat = await bouwAf(item, wortel, wortel, 5, 3, 'medium', () => {
+      throw new OmgevingsFout('Kon package.json niet lezen');
+    });
+
+    // Cruciaal: de uitkomst draagt 'escalatie', niet 'klaar'. Anders telt `beoordeel` de
+    // run als 'gelukt' en reset de noodstop-teller in de nachtreeks (#383) — precies de
+    // bug die de review vond, die deze test rood zou maken.
+    expect(resultaat.bouw.afloop).toBe('escalatie');
+    // En het item is op het board geëscaleerd met een comment die de reden noemt (er
+    // staat óók een eerdere "Gebouwd door"-comment, dus zoek de omgevingsfout-comment).
+    const heeftOmgevingsfoutComment = aanroepen.some(
+      (a) =>
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'comment' &&
+        a.argumenten.join(' ').includes('Omgevingsfout bij het inleveren'),
+    );
+    expect(heeftOmgevingsfoutComment).toBe(true);
+  });
+
+  it('boekt een OmgevingsFout in de setup-fase als escalatie in de uitkomst (#383)', async () => {
     zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+    };
 
-    // leverIn gooit een OmgevingsFout — de poort kon niet draaien door een
-    // omgevingsprobleem, niet door inhoudelijk rode tests.
-    await expect(
-      orkestreerBouw({
-        eenmalig: true,
-        werkplaatsWortel: wortel,
-        paden,
-        leverIn: () => {
-          throw new OmgevingsFout('Kon package.json niet lezen');
-        },
-      }),
-    ).resolves.toBeUndefined();
+    // De omgeving is al vóór de werker-run stuk: versWerkplaats gooit een OmgevingsFout
+    // (geen repo, worktree kon niet aangemaakt worden). leverIn mag dan niet bereikt worden.
+    vi.spyOn(werkplaatsModule, 'versWerkplaats').mockImplementation(() => {
+      throw new OmgevingsFout('Geen repo gevonden');
+    });
 
-    // Het item is geblokkeerd (escalatie-label) en er staat een comment met de reden.
-    // Cruciaal: er wordt niet doorgegooid — een gewone GebruikersFout zou wél gooien.
+    const resultaat = await bouwAf(item, wortel, wortel, 5, 3, 'medium', () => {
+      throw new Error('leverIn mag in de setup-fase niet bereikt worden');
+    });
+
+    // De setup-catch geeft een synthetisch resultaat met afloop 'escalatie' terug.
+    expect(resultaat.bouw.afloop).toBe('escalatie');
   });
 
   it('gooit een gewone GebruikersFout uit leverIn wél door (#383)', async () => {

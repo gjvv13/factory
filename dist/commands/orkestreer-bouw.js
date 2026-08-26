@@ -376,7 +376,7 @@ export function reviewPrompt(item, werkmap, factoryMap, apps = []) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs) {
+export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -479,13 +479,22 @@ async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, lev
             reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
         }
     }
-    verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
+    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
     return {
-        bouw: uitkomst,
+        // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
+        // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
+        // run als 'gelukt' tellen en de noodstop-teller in de nachtreeks resetten (#383).
+        bouw: inleverOmgevingsfout ? { ...uitkomst, afloop: 'escalatie' } : uitkomst,
         ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
     };
 }
-/** Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt. */
+/**
+ * Vertaalt de uitkomst van de bouw-werker naar wat er op GitHub gebeurt.
+ *
+ * Retourneert `true` als het inleveren op een `OmgevingsFout` stuitte: dan is het item
+ * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
+ * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
+ */
 function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks) {
     const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
     if (uitkomst.afloop === 'mislukt') {
@@ -494,7 +503,7 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
         blokkeer(item, cwd);
         plaatsComment(item.issue, `**Bouw-run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot}`, cwd);
         waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
-        return;
+        return false;
     }
     const verdict = uitkomst.verdict;
     const werkmap = bouwWerkplek(item.app, item.issue, wortel);
@@ -502,12 +511,12 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
         blokkeer(item, cwd);
         plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', item.app), cwd);
         ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
-        return;
+        return false;
     }
     if (verdict?.uitkomst !== 'klaar') {
         blokkeer(item, cwd);
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
-        return;
+        return false;
     }
     // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
     // schuiven (#128) en de werkplek opruimen. Zonder auto-merge, want deze werker mag
@@ -549,7 +558,7 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
                 `Pad: ${werkmap}\n\n` +
                 `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.`, cwd);
             waarschuwing(`#${String(item.issue)} omgevingsfout bij inleveren: ${fout.message}`);
-            return;
+            return true;
         }
         // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
         // niet. Gooi daarna alsnog door — de bouw-run hoort rood te worden.
@@ -567,6 +576,7 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
         }
     }
     ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
+    return false;
 }
 /** Zet een item stil: terug in de bouw-wachtrij, met het label dat het overslaat. */
 function blokkeer(item, cwd) {

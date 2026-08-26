@@ -1,5 +1,6 @@
 import { type BacklogItem } from '../board.js';
 import { type RunRegel, type OrkestratorPaden } from '../orkestrator-instellingen.js';
+import { type ReeksContext } from '../reeks.js';
 import { type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import { type AntwoordOpties, type Escalatie } from './orkestreer.js';
 import { type InleverenOpties } from './inleveren.js';
@@ -117,6 +118,14 @@ export declare function beschrijfBouw(resultaat: BouwAfResultaat): RunRegel;
 export declare function bouwPrompt(item: Bouwitem, werkmap: string, factoryMap: string, bronMappen?: readonly string[], apps?: readonly string[]): string;
 /** De prompt voor de review-werker: het sjabloon met dezelfde feiten als de bouwer. */
 export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
+/**
+ * Bouwt één item af: claimen, worktree maken, werker draaien, inleveren of escaleren.
+ *
+ * De claim gaat vóór alles wat geld kost: een tweede werker of een `/bouw`-sessie in de
+ * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
+ * er één weg moet.
+ */
+export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => void, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number): Promise<BouwAfResultaat>;
 /**
  * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
  * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in
