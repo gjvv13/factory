@@ -15,7 +15,15 @@ import { leesDekkingsConfig } from '../dekking-config.js';
 import type { DekkingsConfig } from '../dekking-config.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
 import { toetsFlagVerloop } from '../flag-verloop.js';
-import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout, OmgevingsFout } from '../shell.js';
+import {
+  draaiScript,
+  kop,
+  ok,
+  run,
+  waarschuwing,
+  GebruikersFout,
+  OmgevingsFout,
+} from '../shell.js';
 
 interface Stap {
   readonly script: string;

@@ -15,11 +15,12 @@ import { GebruikersFout, ok, waarschuwing } from './shell.js';
  * andere kolom of draagt een escalatie-label. Doorwerken op de oude lijst zou hetzelfde
  * item een tweede keer oppakken, en dat is twee keer betalen voor één uitwerking.
  *
- * **Twee mislukte runs op rij stoppen de reeks; één niet.** Eén escalatie is gewoon
- * werk. Twee achter elkaar betekent dat de machine zelf stuk is, en dan is doorgaan
- * geld weggooien. Dit is een noodstop, niet het lus-filter: dat blijft een *filter*,
- * zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in plaats van
- * de hele reeks te kosten.
+ * **Twee mislukte runs op rij stoppen de reeks; escalaties tellen niet mee (#383).**
+ * Een escalatie is gewoon werk: het item heeft een vraag, niet een kapotte machine.
+ * Twee *mislukkingen* achter elkaar betekent dat de machine zelf stuk is, en dan is
+ * doorgaan geld weggooien. Dit is een noodstop, niet het lus-filter: dat blijft een
+ * *filter*, zodat een item dat na zijn run nog in de rij staat wordt overgeslagen in
+ * plaats van de hele reeks te kosten.
  */
 export async function draaiReeks(opzet) {
     const gedaanIssues = new Set();
@@ -67,7 +68,7 @@ export async function draaiReeks(opzet) {
                 totaal: opzet.aantal,
             }
             : undefined;
-        let geslaagdeRun = false;
+        let oordeel = 'mislukt';
         gedaan += 1;
         try {
             const { uitkomst } = await metBoekhouding({
@@ -78,7 +79,7 @@ export async function draaiReeks(opzet) {
                 item: volgende,
             }, () => opzet.werkAf(volgende, reeksContext), opzet.beschrijf);
             kosten += opzet.beschrijf(uitkomst).kosten ?? 0;
-            geslaagdeRun = opzet.gelukt(uitkomst);
+            oordeel = opzet.beoordeel(uitkomst);
         }
         catch (fout) {
             if (!(fout instanceof GebruikersFout)) {
@@ -86,7 +87,7 @@ export async function draaiReeks(opzet) {
             }
             waarschuwing(`#${String(volgende.issue)} kon niet landen: ${fout.message.split('\n')[0] ?? ''}`);
         }
-        if (geslaagdeRun) {
+        if (oordeel === 'gelukt') {
             geslaagd += 1;
             mislukteOpRij = 0;
             // Alleen na een geslaagde run de branch onthouden: een mislukte bouw levert geen
@@ -99,9 +100,11 @@ export async function draaiReeks(opzet) {
                 });
             }
         }
-        else {
+        else if (oordeel === 'mislukt') {
             mislukteOpRij += 1;
         }
+        // oordeel === 'escalatie': mislukteOpRij blijft staan — een escalatie is gewoon
+        // werk, niet een teken dat de machine stuk is (#383).
         opzet.naElkeRun?.(gedaan);
         if (mislukteOpRij >= 2) {
             // Niet stil stoppen: dit is een andere uitkomst dan "de rij is leeg", en het

@@ -252,7 +252,7 @@ export async function orkestreer(opties = {}) {
                     effort: instellingen.werkerEffort,
                 }, appOpties() ?? []),
                 beschrijf: beschrijfRun,
-                gelukt: (u) => u.afloop === 'klaar',
+                beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
             }));
         }
         finally {
@@ -388,7 +388,7 @@ async function draaiNacht(cwd, wortel, paden, nu) {
             leesRij: () => bouwWachtrij(cwd),
             werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties, appOpties() ?? []),
             beschrijf: beschrijfRun,
-            gelukt: (u) => u.afloop === 'klaar',
+            beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
             naElkeRun: (aantal) => {
                 ok(`${String(alGestart + aantal)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
             },

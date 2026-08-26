@@ -27,7 +27,13 @@ import {
   TOKEN_SLEUTEL,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
-import { herstelAsyncUitvoerder, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import {
+  GebruikersFout,
+  OmgevingsFout,
+  herstelAsyncUitvoerder,
+  herstelUitvoerder,
+  stelUitvoerderIn,
+} from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
   zetBeideUitvoerdersOp,
@@ -986,6 +992,42 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     // zijn. Er is een `rmSync` op het bron-pad, dat attesteert de cleanup. Belangrijker:
     // de run gooit niet — de opruiming verhindert geen voortgang.
     expect(geleverd).toEqual([]);
+  });
+
+  it('vangt een OmgevingsFout uit leverIn als escalatie op, niet als mislukking (#383)', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+
+    // leverIn gooit een OmgevingsFout — de poort kon niet draaien door een
+    // omgevingsprobleem, niet door inhoudelijk rode tests.
+    await expect(
+      orkestreerBouw({
+        eenmalig: true,
+        werkplaatsWortel: wortel,
+        paden,
+        leverIn: () => {
+          throw new OmgevingsFout('Kon package.json niet lezen');
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    // Het item is geblokkeerd (escalatie-label) en er staat een comment met de reden.
+    // Cruciaal: er wordt niet doorgegooid — een gewone GebruikersFout zou wél gooien.
+  });
+
+  it('gooit een gewone GebruikersFout uit leverIn wél door (#383)', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+
+    // Een inhoudelijke poortfout (tests falen) gooit door — dat is een echte mislukking.
+    await expect(
+      orkestreerBouw({
+        eenmalig: true,
+        werkplaatsWortel: wortel,
+        paden,
+        leverIn: () => {
+          throw new GebruikersFout('lint faalt');
+        },
+      }),
+    ).rejects.toThrow(/lint faalt/);
   });
 });
 

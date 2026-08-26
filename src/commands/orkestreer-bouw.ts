@@ -432,7 +432,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             reeks,
           ),
         beschrijf: beschrijfBouw,
-        beoordeel: (u) => u.bouw.afloop,
+        beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
       }),
     );
     return;
@@ -1234,7 +1234,7 @@ async function draaiNachtBouw(
           draaiOpties.timeoutMs,
         ),
       beschrijf: beschrijfBouw,
-      gelukt: (u) => u.bouw.afloop === 'klaar',
+      beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
       naElkeRun: (aantal) => {
         ok(
           `${String(alGestart + aantal)}/${String(instellingen.bouwDagmaximum)} van de bouw-nacht gedaan.`,

@@ -383,7 +383,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
               appOpties() ?? [],
             ),
           beschrijf: beschrijfRun,
-          beoordeel: (u) => u.afloop,
+          beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
         }),
       );
     } finally {
@@ -551,7 +551,7 @@ async function draaiNacht(
       leesRij: () => bouwWachtrij(cwd),
       werkAf: (item) => werkAf(item, cwd, wortel, draaiOpties, appOpties() ?? []),
       beschrijf: beschrijfRun,
-      gelukt: (u) => u.afloop === 'klaar',
+      beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
       naElkeRun: (aantal) => {
         ok(`${String(alGestart + aantal)}/${String(instellingen.dagmaximum)} van vannacht gedaan.`);
       },
