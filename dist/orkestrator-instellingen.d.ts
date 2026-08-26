@@ -59,6 +59,10 @@ export interface Instellingen {
     readonly werkerEffort: 'low' | 'medium' | 'high';
     /** Undefined als er (nog) geen token in het bestand staat. */
     readonly token?: string;
+    /** Het endpoint waarnaar de ochtendmelding gaat (#401). */
+    readonly notifyUrl?: string;
+    /** Bearer-token voor het notify-endpoint (#401). */
+    readonly notifyToken?: string;
 }
 /**
  * Leest de instellingen, of levert de standaardwaarden als er nog geen bestand is.

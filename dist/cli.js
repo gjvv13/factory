@@ -64,13 +64,14 @@ async function main(argumenten) {
         }
         case 'inleveren': {
             const { schakelaars, waarden } = leesArgumenten(rest, {
-                schakelaars: ['--geen-automerge'],
+                schakelaars: ['--geen-automerge', '--fastlane'],
                 waarden: ['--titel'],
             });
             const titel = waarden.get('--titel');
             inleveren({
                 ...(titel === undefined ? {} : { titel }),
                 geenAutomerge: schakelaars.has('--geen-automerge'),
+                fastlane: schakelaars.has('--fastlane'),
             });
             return;
         }
