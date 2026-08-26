@@ -648,18 +648,7 @@ export async function bouwAf(
       // aangemaakt worden. Escaleren in plaats van als kale mislukking boeken, zodat
       // de noodstop in de nachtreeks niet afgaat op iets waar de code niets mee te
       // maken heeft (#383).
-      blokkeer(item, cwd);
-      plaatsComment(
-        item.issue,
-        `**Omgevingsfout.** De bouw-run kon niet starten.\n\n` +
-          `Fout: ${fout.message}\n` +
-          `Pad: ${werkmap}\n\n` +
-          `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.\n\n` +
-          `<sub></sub>\n` +
-          `<!-- orkestrator: sessie= werkmap=${werkmap} -->`,
-        cwd,
-      );
-      waarschuwing(`#${String(item.issue)} omgevingsfout: ${fout.message}`);
+      escaleerOmgevingsfout(item, cwd, werkmap, fout, 'de bouw-run kon niet starten');
       return {
         bouw: {
           afloop: 'escalatie',
@@ -780,16 +769,10 @@ function verwerkBouw(
   // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
   // schuiven (#128) en de werkplek opruimen. Zonder auto-merge, want deze werker mag
   // code voorstellen en niet landen.
-  plaatsComment(
-    item.issue,
-    `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
-      `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
-      verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-      `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
-    cwd,
-  );
-
-  // Inleveren. Mislukt dat, dan gaan de bevindingen naar het issue (#184).
+  //
+  // De "Gebouwd door"-comment (met "de PR staat open") komt pas ná een geslaagd
+  // inleveren: stuit `leverIn` op een omgevingsfout, dan is er géén PR en zou die comment
+  // liegen (#383).
   const reviewComment = maakReviewComment(reviewUitkomst);
   try {
     // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
@@ -815,16 +798,7 @@ function verwerkBouw(
     if (fout instanceof OmgevingsFout) {
       // De poort kon niet draaien door een omgevingsprobleem — geen inhoudelijke fout.
       // Escaleren zodat de noodstop niet afgaat (#383).
-      blokkeer(item, cwd);
-      plaatsComment(
-        item.issue,
-        `**Omgevingsfout bij het inleveren.** De kwaliteitspoort kon niet draaien.\n\n` +
-          `Fout: ${fout.message}\n` +
-          `Pad: ${werkmap}\n\n` +
-          `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.`,
-        cwd,
-      );
-      waarschuwing(`#${String(item.issue)} omgevingsfout bij inleveren: ${fout.message}`);
+      escaleerOmgevingsfout(item, cwd, werkmap, fout, 'de kwaliteitspoort kon niet draaien');
       return true;
     }
     // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
@@ -834,6 +808,16 @@ function verwerkBouw(
     }
     throw fout;
   }
+
+  // Inleveren geslaagd: nu pas melden dat er gebouwd is en dat de PR openstaat.
+  plaatsComment(
+    item.issue,
+    `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
+      `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
+      verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+      `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`,
+    cwd,
+  );
 
   // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
   if (reviewComment !== undefined) {
@@ -852,6 +836,34 @@ function verwerkBouw(
 function blokkeer(item: Bouwitem, cwd: string): void {
   zetKolom(item.issue, BOUW_KOLOM, cwd);
   zetLabel(item.issue, ESCALATIE_LABEL, cwd);
+}
+
+/**
+ * Escaleert een item wegens een omgevingsfout (geen inhoudelijke fout): terug in de rij
+ * met het escalatie-label en een comment die de fase, de fout en het pad noemt, plus de
+ * orkestrator-marker zodat de escalatie in beide fasen (setup én inleveren) identiek te
+ * herkennen en te hervatten is (#383). Eén plek, zodat de twee catch-paden niet uit
+ * elkaar lopen.
+ */
+function escaleerOmgevingsfout(
+  item: Bouwitem,
+  cwd: string,
+  werkmap: string,
+  fout: OmgevingsFout,
+  fase: string,
+): void {
+  blokkeer(item, cwd);
+  plaatsComment(
+    item.issue,
+    `**Omgevingsfout.** ${fase}.\n\n` +
+      `Fout: ${fout.message}\n` +
+      `Pad: ${werkmap}\n\n` +
+      `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.\n\n` +
+      `<sub></sub>\n` +
+      `<!-- orkestrator: sessie= werkmap=${werkmap} -->`,
+    cwd,
+  );
+  waarschuwing(`#${String(item.issue)} omgevingsfout: ${fout.message}`);
 }
 
 /**

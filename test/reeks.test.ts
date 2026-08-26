@@ -4,7 +4,12 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { draaiReeks, type ReeksContext, type ReeksItem } from '../src/reeks.js';
 import { standaardPaden, type OrkestratorPaden } from '../src/orkestrator-instellingen.js';
-import { GebruikersFout, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import {
+  GebruikersFout,
+  OmgevingsFout,
+  herstelUitvoerder,
+  stelUitvoerderIn,
+} from '../src/shell.js';
 import { maakUitvoerderOpnemer } from './helpers.js';
 
 /** Een minimale rij van drie items die niet slinkt: de lus stopt op het aantal, niet op de rij. */
@@ -345,5 +350,31 @@ describe('draaiReeks — escalaties tellen niet mee voor de noodstop (#383)', ()
     expect(gezien).toEqual([1, 2, 3]);
     expect(uitkomst.einde).toBe('aantal');
     expect(uitkomst.geslaagd).toBe(1);
+  });
+
+  it('een geworpen OmgevingsFout telt als escalatie, niet als mislukking (#383)', async () => {
+    const gezien: number[] = [];
+    const uitkomst = await draaiReeks({
+      paden,
+      nu: new Date('2026-08-26T04:00:00'),
+      soort: 'bouw' as const,
+      pot: 'interactief' as const,
+      noemer: 'deze reeks',
+      aantal: 3,
+      leesRij: () => vasteRij(),
+      werkAf: (item: ReeksItem) => {
+        gezien.push(item.issue);
+        // De omgeving is stuk vóór de run — een OmgevingsFout, geen inhoudelijke fout.
+        if (item.issue <= 2) throw new OmgevingsFout('Kon package.json niet lezen');
+        return Promise.resolve({ afloop: 'klaar' });
+      },
+      beschrijf: (u: { afloop: string }) => ({ uitkomst: u.afloop, kosten: 0 }),
+      beoordeel: (u: { afloop: string }) => u.afloop as 'gelukt' | 'escalatie' | 'mislukt',
+    });
+
+    // Twee geworpen OmgevingsFouten op rij stoppen de reeks NIET: het zijn escalaties,
+    // geen mislukkingen. Zonder de fix zou de noodstop na #2 afgaan (einde 'twee-mislukt').
+    expect(gezien).toEqual([1, 2, 3]);
+    expect(uitkomst.einde).toBe('aantal');
   });
 });

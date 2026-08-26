@@ -5,7 +5,7 @@ import {
   type RunRegel,
   type WerkerSoort,
 } from './orkestrator-instellingen.js';
-import { GebruikersFout, ok, waarschuwing } from './shell.js';
+import { GebruikersFout, OmgevingsFout, ok, waarschuwing } from './shell.js';
 
 /** Het minimum dat de lus van een item moet weten. */
 export interface ReeksItem {
@@ -201,6 +201,13 @@ export async function draaiReeks<T extends ReeksItem, U>(
     } catch (fout) {
       if (!(fout instanceof GebruikersFout)) {
         throw fout;
+      }
+      // Een geworpen OmgevingsFout is geen mislukking maar een escalatie: de omgeving is
+      // stuk, niet de code. Zo telt hij niet mee voor de noodstop — gelijk aan een
+      // uitkomst die `beoordeel` als 'escalatie' bestempelt (#383). Een gewone
+      // GebruikersFout houdt de default 'mislukt'.
+      if (fout instanceof OmgevingsFout) {
+        oordeel = 'escalatie';
       }
       waarschuwing(
         `#${String(volgende.issue)} kon niet landen: ${fout.message.split('\n')[0] ?? ''}`,

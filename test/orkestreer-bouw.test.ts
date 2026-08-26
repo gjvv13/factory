@@ -1025,9 +1025,17 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       (a) =>
         a.argumenten[0] === 'issue' &&
         a.argumenten[1] === 'comment' &&
-        a.argumenten.join(' ').includes('Omgevingsfout bij het inleveren'),
+        a.argumenten.join(' ').includes('de kwaliteitspoort kon niet draaien'),
     );
     expect(heeftOmgevingsfoutComment).toBe(true);
+    // De "Gebouwd door"-comment mag NIET geplaatst zijn: er is geen PR (#383).
+    const heeftGebouwdComment = aanroepen.some(
+      (a) =>
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'comment' &&
+        a.argumenten.join(' ').includes('Gebouwd door een onbemande werker'),
+    );
+    expect(heeftGebouwdComment).toBe(false);
   });
 
   it('boekt een OmgevingsFout in de setup-fase als escalatie in de uitkomst (#383)', async () => {
