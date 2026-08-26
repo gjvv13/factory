@@ -1,7 +1,14 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
-import { claudeCommandsDir, hooksDir, skillsDir, workflowsDir } from '../paths.js';
+import {
+  claudeCommandsDir,
+  factoryPakketDir,
+  hooksDir,
+  skillsDir,
+  syncBestanden,
+  workflowsDir,
+} from '../paths.js';
 import { GebruikersFout, git, kop, ok, waarschuwing } from '../shell.js';
 
 /** Of de app-versie gelijk is aan de factory, ervan afwijkt, of overbodig is. */
@@ -85,6 +92,17 @@ export function syncVerschillen(appDir: string, negeer: readonly string[] = []):
       verschillen.push({ pad, status: 'overbodig' });
     }
   }
+
+  // Losse bestandskopieën: 1:1-bestanden zonder overbodig-vraag.
+  for (const { bron, doel } of syncBestanden) {
+    if (genegeerd(doel)) continue;
+    const bronPad = path.join(factoryPakketDir, bron);
+    const doelPad = path.join(appDir, doel);
+    const gelijk =
+      existsSync(doelPad) && readFileSync(bronPad, 'utf8') === readFileSync(doelPad, 'utf8');
+    verschillen.push({ pad: doel, status: gelijk ? 'gelijk' : 'afwijkend' });
+  }
+
   return verschillen;
 }
 
@@ -101,6 +119,13 @@ export function syncNaarApp(appDir: string): string[] {
       if (kopieerAlsAnders(path.join(bronDir, rel), path.join(appDir, doelBasis, rel))) {
         bijgewerkt.push(path.join(doelBasis, rel));
       }
+    }
+  }
+
+  // Losse bestandskopieën.
+  for (const { bron, doel } of syncBestanden) {
+    if (kopieerAlsAnders(path.join(factoryPakketDir, bron), path.join(appDir, doel))) {
+      bijgewerkt.push(doel);
     }
   }
 
