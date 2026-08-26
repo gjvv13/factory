@@ -21,6 +21,7 @@ import {
   parseOpzoekAntwoord,
   parseIssuesUitLog,
 } from '../../src/board.js';
+import { parseAppAntwoord } from '../../src/splits.js';
 
 const FIXTURES = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -247,5 +248,22 @@ describe('issuesUitBereik — trailer-parse tegen opgenomen %B-uitvoer', () => {
     const nummers = parseIssuesUitLog(log);
 
     expect(nummers).toEqual([108, 112, 121, 122, 132]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseAppAntwoord: GraphQL-parse voor het App-veld (#378)
+// ---------------------------------------------------------------------------
+
+describe('parseAppAntwoord — GraphQL-parse tegen opgenomen respons', () => {
+  it('leest de app-naam uit een geldige respons', () => {
+    const ruw = leesFixture('graphql-app.json');
+    const app = parseAppAntwoord(ruw);
+
+    expect(app).toBe('assistant');
+  });
+
+  it('geeft undefined bij ongeldige JSON', () => {
+    expect(parseAppAntwoord('geen json')).toBeUndefined();
   });
 });
