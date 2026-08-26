@@ -383,7 +383,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
               appOpties() ?? [],
             ),
           beschrijf: beschrijfRun,
-          gelukt: (u) => u.afloop === 'klaar',
+          beoordeel: (u) => u.afloop,
         }),
       );
     } finally {

@@ -33,7 +33,7 @@ import {
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
-import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
+import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import {
   BOUW_NACHT_MINUUT,
@@ -432,7 +432,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             reeks,
           ),
         beschrijf: beschrijfBouw,
-        gelukt: (u) => u.bouw.afloop === 'klaar',
+        beoordeel: (u) => u.bouw.afloop,
       }),
     );
     return;
@@ -643,6 +643,31 @@ async function bouwAf(
     });
   } catch (fout) {
     ruimBronMapOp(bronWortel);
+    if (fout instanceof OmgevingsFout) {
+      // De omgeving is stuk — geen repo, onleesbare package.json, worktree kon niet
+      // aangemaakt worden. Escaleren in plaats van als kale mislukking boeken, zodat
+      // de noodstop in de nachtreeks niet afgaat op iets waar de code niets mee te
+      // maken heeft (#383).
+      blokkeer(item, cwd);
+      plaatsComment(
+        item.issue,
+        `**Omgevingsfout.** De bouw-run kon niet starten.\n\n` +
+          `Fout: ${fout.message}\n` +
+          `Pad: ${werkmap}\n\n` +
+          `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.\n\n` +
+          `<sub></sub>\n` +
+          `<!-- orkestrator: sessie= werkmap=${werkmap} -->`,
+        cwd,
+      );
+      waarschuwing(`#${String(item.issue)} omgevingsfout: ${fout.message}`);
+      return {
+        bouw: {
+          afloop: 'escalatie',
+          sessie: '',
+          weigeringen: 0,
+        },
+      };
+    }
     terug();
     throw fout;
   }
@@ -770,6 +795,21 @@ function verwerkBouw(
         : {}),
     });
   } catch (fout) {
+    if (fout instanceof OmgevingsFout) {
+      // De poort kon niet draaien door een omgevingsprobleem — geen inhoudelijke fout.
+      // Escaleren zodat de noodstop niet afgaat (#383).
+      blokkeer(item, cwd);
+      plaatsComment(
+        item.issue,
+        `**Omgevingsfout bij het inleveren.** De kwaliteitspoort kon niet draaien.\n\n` +
+          `Fout: ${fout.message}\n` +
+          `Pad: ${werkmap}\n\n` +
+          `Controleer de werkplaats en probeer opnieuw, of haal het escalatie-label eraf.`,
+        cwd,
+      );
+      waarschuwing(`#${String(item.issue)} omgevingsfout bij inleveren: ${fout.message}`);
+      return;
+    }
     // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
     // niet. Gooi daarna alsnog door — de bouw-run hoort rood te worden.
     if (reviewComment !== undefined) {
