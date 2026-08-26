@@ -195,6 +195,31 @@
             },
             {
               "status": {
+                "name": "Klaar voor Bouwen"
+              },
+              "app": {
+                "name": "factory"
+              },
+              "content": {
+                "number": 301,
+                "title": "Snelle bugfix voor de CLI",
+                "state": "OPEN",
+                "createdAt": "2026-08-08T00:00:00Z",
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "type:task"
+                    },
+                    {
+                      "name": "fastlane"
+                    }
+                  ]
+                },
+                "parent": null
+              }
+            },
+            {
+              "status": {
                 "name": "Bouwen"
               },
               "app": {

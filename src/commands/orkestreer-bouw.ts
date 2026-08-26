@@ -192,6 +192,7 @@ export function kiesItem(
   alles: readonly BacklogItem[],
   issue: number | undefined,
   cwd: string,
+  reden: (item: BacklogItem) => BuitenDeRij | undefined = redenBuitenDeRij,
 ): Bouwitem | undefined {
   if (issue === undefined) {
     return wachtrij[0];
@@ -202,9 +203,9 @@ export function kiesItem(
   }
   const inLezing = alles.find((item) => item.issue === issue);
   if (inLezing !== undefined) {
-    const reden = redenBuitenDeRij(inLezing);
+    const uitkomst = reden(inLezing);
     throw new GebruikersFout(
-      `#${String(issue)} staat niet in de bouw-wachtrij: ${reden?.zin ?? 'onbekende reden'}.`,
+      `#${String(issue)} staat niet in de bouw-wachtrij: ${uitkomst?.zin ?? 'onbekende reden'}.`,
     );
   }
   // Niet in de lezing: `bordItems` laat gesloten items en items zonder Status-waarde
@@ -259,6 +260,11 @@ export interface BouwOpties {
   readonly eenmalig?: boolean;
   /** Werkt de bouw-wachtrij af tot het bouw-dagmaximum of tot de rij leeg is (#343). */
   readonly nacht?: boolean;
+  /**
+   * De baan: `'fastlane'` selecteert de fastlane-wachtrij (bugs + gelabelde tasks,
+   * geen child-slices), `'gewoon'` of `undefined` de normale bouw-wachtrij (#400).
+   */
+  readonly baan?: BouwBaan;
   /** Zet de bouw-LaunchAgent op die `--soort bouw --nacht` elke nacht om 05:30 draait (#343). */
   readonly installeer?: boolean;
   /** Haalt die LaunchAgent weer weg (#343). */
@@ -320,6 +326,11 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
     if (opties.issue !== undefined) {
       throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
     }
+    if (opties.baan !== undefined) {
+      // --nacht draait beide banen met onafhankelijke caps; een enkele baan kiezen kan
+      // met --eenmalig of --dry (#400).
+      throw new GebruikersFout('--baan en --nacht gaan niet samen; --nacht draait beide banen.');
+    }
     await draaiNachtBouw(cwd, wortel, paden, opties.nu ?? new Date(Date.now()), opties.leverIn);
     return;
   }
@@ -332,10 +343,13 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         '  (`gh api rate_limit --jq .resources.graphql`).',
     );
   }
-  const wachtrij = bouwWachtrij(items);
+  const isFastlane = opties.baan === 'fastlane';
+  const wachtrij = isFastlane ? fastlaneWachtrij(items) : bouwWachtrij(items);
+  const redenFunctie = isFastlane ? redenBuitenFastlane : redenBuitenDeRij;
   const geclaimd = items.filter((item) => item.kolom === GECLAIMD_KOLOM).length;
+  const baanNaam = isFastlane ? 'Fastlane' : 'Bouw';
 
-  kop(`Bouw-wachtrij: ${BOUW_KOLOM}`);
+  kop(`${baanNaam}-wachtrij: ${BOUW_KOLOM}`);
   if (wachtrij.length === 0 && opties.issue === undefined) {
     ok('niets te bouwen');
     return;
@@ -353,7 +367,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
     ok(`${String(geclaimd)} item(s) staan op ${GECLAIMD_KOLOM} en zijn dus geclaimd.`);
   }
 
-  const eerste = kiesItem(wachtrij, items, opties.issue, cwd);
+  const eerste = kiesItem(wachtrij, items, opties.issue, cwd, redenFunctie);
   if (eerste === undefined) {
     return;
   }
@@ -411,11 +425,12 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         ...(lijst === undefined ? {} : { lijst }),
         reden: (issue) => {
           const item = items.find((kandidaat) => kandidaat.issue === issue);
-          return item === undefined ? undefined : redenBuitenDeRij(item)?.zin;
+          return item === undefined ? undefined : redenFunctie(item)?.zin;
         },
         // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
         // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
-        leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
+        leesRij: () =>
+          isFastlane ? fastlaneWachtrij(bordItems(cwd) ?? []) : bouwWachtrij(bordItems(cwd) ?? []),
         // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
         // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
         branchVan: (item) => bouwBranch(item.issue),
@@ -445,7 +460,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
       paden,
       nu: new Date(Date.now()),
       soort: 'bouw',
-      // Er is nog geen onbemande bouw-nacht; wie dit start is een mens (#265).
+      // Wie dit start is een mens; de pot is interactief (#265).
       pot: 'interactief',
       item: eerste,
     },
@@ -1221,10 +1236,16 @@ async function draaiNachtBouw(
     paden,
     `${new Date(nu.getTime()).toISOString()} bouw-nacht gestart (factory ${versie})`,
   );
-  const alGestart = leesStaat(paden, nu).nachtBouw;
-  if (alGestart >= instellingen.bouwDagmaximum) {
+  const staat = leesStaat(paden, nu);
+  const bouwAlGestart = staat.nachtBouw;
+  const fastlaneAlGestart = staat.nachtFastlane;
+  const bouwKlaar = bouwAlGestart >= instellingen.bouwDagmaximum;
+  const fastlaneKlaar =
+    instellingen.fastlaneCap === 0 || fastlaneAlGestart >= instellingen.fastlaneCap;
+  if (bouwKlaar && fastlaneKlaar) {
     ok(
-      `bouw-dagmaximum al bereikt (${String(alGestart)}/${String(instellingen.bouwDagmaximum)}); niets gedaan.`,
+      `beide caps bereikt (bouw ${String(bouwAlGestart)}/${String(instellingen.bouwDagmaximum)}, ` +
+        `fastlane ${String(fastlaneAlGestart)}/${String(instellingen.fastlaneCap)}); niets gedaan.`,
     );
     return;
   }
@@ -1240,41 +1261,86 @@ async function draaiNachtBouw(
     return;
   }
   try {
-    const uitkomst = await draaiReeks({
-      paden,
-      nu,
-      soort: 'bouw',
-      pot: 'nacht-bouw',
-      noemer: 'de bouw-nacht',
-      aantal: instellingen.bouwDagmaximum - alGestart,
-      leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-      branchVan: (item) => bouwBranch(item.issue),
-      werkAf: (item, reeks) =>
-        bouwAf(
-          item,
-          cwd,
-          wortel,
-          instellingen.bouwBudgetPerRun,
-          instellingen.reviewBudgetPerRun,
-          instellingen.werkerEffort,
-          leverIn ?? inleveren,
-          appOpties() ?? [],
-          reeks,
-          draaiOpties.env,
-          draaiOpties.timeoutMs,
-        ),
-      beschrijf: beschrijfBouw,
-      beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
-      naElkeRun: (aantal) => {
-        ok(
-          `${String(alGestart + aantal)}/${String(instellingen.bouwDagmaximum)} van de bouw-nacht gedaan.`,
-        );
-      },
-    });
-    if (uitkomst.einde === 'rij-leeg') {
-      ok('bouw-wachtrij leeg; klaar voor de bouw-nacht.');
-    } else if (uitkomst.einde === 'niets-nieuws') {
-      ok('niets nieuws meer in de bouw-wachtrij; klaar voor de bouw-nacht.');
+    // Gewone bouw-baan (#343).
+    if (!bouwKlaar) {
+      kop('Gewone bouw-baan');
+      const uitkomst = await draaiReeks({
+        paden,
+        nu,
+        soort: 'bouw',
+        pot: 'nacht-bouw',
+        noemer: 'de bouw-nacht',
+        aantal: instellingen.bouwDagmaximum - bouwAlGestart,
+        leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
+        branchVan: (item) => bouwBranch(item.issue),
+        werkAf: (item, reeks) =>
+          bouwAf(
+            item,
+            cwd,
+            wortel,
+            instellingen.bouwBudgetPerRun,
+            instellingen.reviewBudgetPerRun,
+            instellingen.werkerEffort,
+            leverIn ?? inleveren,
+            appOpties() ?? [],
+            reeks,
+            draaiOpties.env,
+            draaiOpties.timeoutMs,
+          ),
+        beschrijf: beschrijfBouw,
+        beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
+        naElkeRun: (aantal) => {
+          ok(
+            `${String(bouwAlGestart + aantal)}/${String(instellingen.bouwDagmaximum)} van de bouw-nacht gedaan.`,
+          );
+        },
+      });
+      if (uitkomst.einde === 'rij-leeg') {
+        ok('bouw-wachtrij leeg.');
+      } else if (uitkomst.einde === 'niets-nieuws') {
+        ok('niets nieuws meer in de bouw-wachtrij.');
+      }
+    }
+
+    // Fastlane-baan (#400): eigen cap, eigen teller.
+    if (!fastlaneKlaar) {
+      kop('Fastlane-baan');
+      const flUitkomst = await draaiReeks({
+        paden,
+        nu,
+        soort: 'bouw',
+        pot: 'nacht-fastlane',
+        noemer: 'de fastlane-nacht',
+        aantal: instellingen.fastlaneCap - fastlaneAlGestart,
+        leesRij: () => fastlaneWachtrij(bordItems(cwd) ?? []),
+        branchVan: (item) => bouwBranch(item.issue),
+        werkAf: (item, reeks) =>
+          bouwAf(
+            item,
+            cwd,
+            wortel,
+            instellingen.bouwBudgetPerRun,
+            instellingen.reviewBudgetPerRun,
+            instellingen.werkerEffort,
+            leverIn ?? inleveren,
+            appOpties() ?? [],
+            reeks,
+            draaiOpties.env,
+            draaiOpties.timeoutMs,
+          ),
+        beschrijf: beschrijfBouw,
+        beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
+        naElkeRun: (aantal) => {
+          ok(
+            `${String(fastlaneAlGestart + aantal)}/${String(instellingen.fastlaneCap)} van de fastlane-nacht gedaan.`,
+          );
+        },
+      });
+      if (flUitkomst.einde === 'rij-leeg') {
+        ok('fastlane-wachtrij leeg.');
+      } else if (flUitkomst.einde === 'niets-nieuws') {
+        ok('niets nieuws meer in de fastlane-wachtrij.');
+      }
     }
   } finally {
     geefLockVrij();
@@ -1353,6 +1419,92 @@ function verwijderBouwAgent(paden: OrkestratorPaden): void {
   run('launchctl', ['unload', pad], { toleranter: true, capture: true });
   rmSync(pad, { force: true });
   ok('verwijderd; er draait geen bouw-nacht meer vanzelf.');
+}
+
+/** De baan waarbinnen een bouw-run draait: gewoon of fastlane (#400). */
+export type BouwBaan = 'gewoon' | 'fastlane';
+
+/** Het label dat een `type:task` als fastlane markeert; alleen de mens zet dit. */
+export const FASTLANE_LABEL = 'fastlane';
+
+/**
+ * Leest `--baan`: `gewoon` (default) of `fastlane`. Elke andere waarde is een fout;
+ * zonder waarde blijft het de gewone baan.
+ */
+export function leesBaan(waarde: string | undefined): BouwBaan | undefined {
+  if (waarde === undefined) return undefined;
+  if (waarde === 'fastlane') return 'fastlane';
+  if (waarde === 'gewoon') return 'gewoon';
+  throw new GebruikersFout(`Onbekende --baan '${waarde}'. Kies: gewoon (default) of fastlane.`);
+}
+
+/**
+ * Waarom een item niet in de fastlane-wachtrij staat.
+ *
+ * `type:bug` kwalificeert automatisch; `type:task` alleen mét het `fastlane`-label
+ * (dat alleen de mens zet). Child-slices (items met een ouder) zijn uitgesloten —
+ * die blijven in de geordende gewone baan (ADR 005, #397).
+ */
+export function redenBuitenFastlane(item: BacklogItem): BuitenDeRij | undefined {
+  if (item.kolom !== BOUW_KOLOM) {
+    return {
+      grond: 'kolom',
+      zin: `het staat op ${item.kolom}, niet op ${BOUW_KOLOM}`,
+    };
+  }
+  if (item.labels.includes(ESCALATIE_LABEL)) {
+    return {
+      grond: 'escalatie',
+      zin: `het draagt het label ${ESCALATIE_LABEL} — haal dat er eerst af`,
+    };
+  }
+  if (item.app === undefined || item.app === '') {
+    return { grond: 'geen-app', zin: 'het heeft geen App-veld, dus geen code om te lezen' };
+  }
+  // Child-slices (sub-issues van een epic) zijn uitgesloten: die horen in de
+  // geordende gewone baan (#397, ADR 005).
+  if (item.ouder !== undefined) {
+    return {
+      grond: 'soort',
+      zin: `het is een child-slice (onder #${String(item.ouder)}) — die blijven in de gewone baan`,
+    };
+  }
+  // type:bug kwalificeert zonder extra label.
+  if (item.labels.includes('type:bug')) {
+    return undefined;
+  }
+  // type:task alleen mét het fastlane-label.
+  if (item.labels.includes('type:task') && item.labels.includes(FASTLANE_LABEL)) {
+    return undefined;
+  }
+  return {
+    grond: 'soort',
+    zin: item.labels.includes('type:task')
+      ? `het is een type:task zonder het label ${FASTLANE_LABEL}`
+      : `het draagt geen van de labels type:bug of type:task`,
+  };
+}
+
+/**
+ * De fastlane-wachtrij: items die snel door de bouw mogen (#400).
+ *
+ * Zelfde vorm als `bouwWachtrij`, maar met een smal filter: alleen bugs en
+ * gelabelde tasks, geen child-slices. Één functie zodat `--dry`, `--eenmalig`
+ * en `--nacht` er dezelfde rij uit trekken.
+ */
+export function fastlaneWachtrij(items: readonly BacklogItem[]): Bouwitem[] {
+  const bruikbaar: Bouwitem[] = [];
+  for (const item of items) {
+    const reden = redenBuitenFastlane(item);
+    if (reden !== undefined) {
+      if (reden.grond === 'geen-app') {
+        waarschuwing(`#${String(item.issue)} heeft geen App-veld — overgeslagen.`);
+      }
+      continue;
+    }
+    bruikbaar.push({ ...item, app: item.app ?? '' });
+  }
+  return bruikbaar;
 }
 
 export function leesSoort(waarde: string | undefined): 'refine' | 'bouw' | 'accepteer' {

@@ -63,6 +63,7 @@ describe('orkestrator-instellingen', () => {
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 4,
         bouwDagmaximum: 2,
+        fastlaneCap: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
@@ -77,6 +78,7 @@ describe('orkestrator-instellingen', () => {
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 2,
         bouwDagmaximum: 2,
+        fastlaneCap: 4,
         budgetPerRun: 1.5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,
@@ -127,6 +129,7 @@ describe('orkestrator-instellingen', () => {
       expect(leesInstellingen(paden)).toEqual({
         dagmaximum: 4,
         bouwDagmaximum: 2,
+        fastlaneCap: 4,
         budgetPerRun: 5,
         bouwBudgetPerRun: 10,
         reviewBudgetPerRun: 3,

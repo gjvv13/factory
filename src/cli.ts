@@ -11,7 +11,13 @@ import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
 import { orkestreerAccepteer } from './commands/orkestreer-accepteer.js';
-import { leesIssue, leesReeks, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
+import {
+  leesBaan,
+  leesIssue,
+  leesReeks,
+  leesSoort,
+  orkestreerBouw,
+} from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
@@ -44,6 +50,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
   factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  bouw-werker: wachtrij, één item, reeks, of nacht (tot dagmaximum)
+  factory orkestreer --soort bouw --baan fastlane <--dry|--eenmalig>  de fastlane-wachtrij (bugs + gelabelde tasks, geen child-slices)
   factory orkestreer --soort bouw <--installeer|--verwijder>  de bouw-LaunchAgent die --soort bouw --nacht elke nacht om 05:30 draait
   factory orkestreer --soort accepteer --dry  accepteer-wachtrij en acc-preconditie tonen
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
@@ -149,11 +156,12 @@ async function main(argumenten: string[]): Promise<void> {
     case 'orkestreer': {
       const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
         schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
-        waarden: ['--soort', '--issue', '--reeks'],
+        waarden: ['--soort', '--issue', '--reeks', '--baan'],
       });
       const issue = leesIssue(waarden.get('--issue'));
       const reeks = leesReeks(waarden.get('--reeks'));
       const soort = leesSoort(waarden.get('--soort'));
+      const baan = leesBaan(waarden.get('--baan'));
       if (soort === 'bouw') {
         await orkestreerBouw({
           dry: schakelaars.has('--dry'),
@@ -163,6 +171,7 @@ async function main(argumenten: string[]): Promise<void> {
           verwijder: schakelaars.has('--verwijder'),
           ...(issue === undefined ? {} : { issue }),
           ...(reeks === undefined ? {} : { reeks }),
+          ...(baan === undefined ? {} : { baan }),
         });
         return;
       }

@@ -58,7 +58,7 @@ export declare function redenBuitenDeRij(item: BacklogItem): BuitenDeRij | undef
  * filtert de rij die de filters al gemaakt hebben; hij bouwt geen tweede rij, dus hij
  * kan een item dat niet mag ook niet laten bouwen.
  */
-export declare function kiesItem(wachtrij: readonly Bouwitem[], alles: readonly BacklogItem[], issue: number | undefined, cwd: string): Bouwitem | undefined;
+export declare function kiesItem(wachtrij: readonly Bouwitem[], alles: readonly BacklogItem[], issue: number | undefined, cwd: string, reden?: (item: BacklogItem) => BuitenDeRij | undefined): Bouwitem | undefined;
 /**
  * Leest de `bron:<app>`-labels van een item, ontdubbeld (#238).
  *
@@ -72,6 +72,11 @@ export interface BouwOpties {
     readonly eenmalig?: boolean;
     /** Werkt de bouw-wachtrij af tot het bouw-dagmaximum of tot de rij leeg is (#343). */
     readonly nacht?: boolean;
+    /**
+     * De baan: `'fastlane'` selecteert de fastlane-wachtrij (bugs + gelabelde tasks,
+     * geen child-slices), `'gewoon'` of `undefined` de normale bouw-wachtrij (#400).
+     */
+    readonly baan?: BouwBaan;
     /** Zet de bouw-LaunchAgent op die `--soort bouw --nacht` elke nacht om 05:30 draait (#343). */
     readonly installeer?: boolean;
     /** Haalt die LaunchAgent weer weg (#343). */
@@ -161,4 +166,29 @@ export declare function leesReeks(waarde: string | undefined): ReeksKeuze | unde
  * de typefout.
  */
 export declare function leesIssue(waarde: string | undefined): number | undefined;
+/** De baan waarbinnen een bouw-run draait: gewoon of fastlane (#400). */
+export type BouwBaan = 'gewoon' | 'fastlane';
+/** Het label dat een `type:task` als fastlane markeert; alleen de mens zet dit. */
+export declare const FASTLANE_LABEL = "fastlane";
+/**
+ * Leest `--baan`: `gewoon` (default) of `fastlane`. Elke andere waarde is een fout;
+ * zonder waarde blijft het de gewone baan.
+ */
+export declare function leesBaan(waarde: string | undefined): BouwBaan | undefined;
+/**
+ * Waarom een item niet in de fastlane-wachtrij staat.
+ *
+ * `type:bug` kwalificeert automatisch; `type:task` alleen mét het `fastlane`-label
+ * (dat alleen de mens zet). Child-slices (items met een ouder) zijn uitgesloten —
+ * die blijven in de geordende gewone baan (ADR 005, #397).
+ */
+export declare function redenBuitenFastlane(item: BacklogItem): BuitenDeRij | undefined;
+/**
+ * De fastlane-wachtrij: items die snel door de bouw mogen (#400).
+ *
+ * Zelfde vorm als `bouwWachtrij`, maar met een smal filter: alleen bugs en
+ * gelabelde tasks, geen child-slices. Één functie zodat `--dry`, `--eenmalig`
+ * en `--nacht` er dezelfde rij uit trekken.
+ */
+export declare function fastlaneWachtrij(items: readonly BacklogItem[]): Bouwitem[];
 export declare function leesSoort(waarde: string | undefined): 'refine' | 'bouw' | 'accepteer';
