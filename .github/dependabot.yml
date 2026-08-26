@@ -1,0 +1,31 @@
+# Dependabot version-updates voor de factory zelf.
+#
+# Twee ecosystemen: npm (de eigen dependencies) en github-actions (de action-
+# versies in workflows/). Apps krijgen alleen npm — hun workflows komen via
+# `factory sync` en een actions-bump zou bij de volgende sync overschreven worden.
+#
+# Prerequisite: zet "Dependabot security updates" aan in de repo-instellingen
+# (Settings → Code security → Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      patch-en-minor:
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      patch-en-minor:
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5

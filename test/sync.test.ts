@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +25,7 @@ function schrijfAppConfig(appDir: string, extra: Record<string, unknown> = {}): 
 
 const BOUW = path.join('.claude', 'commands', 'bouw.md');
 const OVERBODIG = path.join('.claude', 'commands', 'oud-commando.md');
+const DEPENDABOT = path.join('.github', 'dependabot.yml');
 
 describe('sync', () => {
   let aanroepen: ProcesAanroep[];
@@ -171,5 +172,54 @@ describe('sync', () => {
     } finally {
       process.chdir(oorspronkelijk);
     }
+  });
+
+  // --- Bestandsniveau-kopieën (syncBestanden) ---
+
+  it('kopieert dependabot.yml als losse bestandskopie naar .github/dependabot.yml', () => {
+    const app = maakAppMap();
+
+    const bijgewerkt = syncNaarApp(app);
+
+    expect(existsSync(path.join(app, DEPENDABOT))).toBe(true);
+    expect(bijgewerkt).toContain(DEPENDABOT);
+    // Inhoud is identiek aan de bron in de factory-pakketwortel.
+    const bronInhoud = readFileSync(
+      path.join(
+        path.resolve(path.dirname(new URL(import.meta.url).pathname), '..'),
+        'dependabot.yml',
+      ),
+      'utf8',
+    );
+    expect(readFileSync(path.join(app, DEPENDABOT), 'utf8')).toBe(bronInhoud);
+  });
+
+  it('kopieert een bestandskopie niet opnieuw als die al gelijk staat', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+
+    const tweede = syncNaarApp(app);
+
+    expect(tweede).not.toContain(DEPENDABOT);
+  });
+
+  it('signaleert drift op een bestandskopie', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    writeFileSync(path.join(app, DEPENDABOT), 'lokaal gewijzigd');
+
+    const perPad = new Map(syncVerschillen(app).map((v) => [v.pad, v.status]));
+
+    expect(perPad.get(DEPENDABOT)).toBe('afwijkend');
+  });
+
+  it('respecteert de negeerlijst bij een bestandskopie', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    writeFileSync(path.join(app, DEPENDABOT), 'lokaal gewijzigd');
+
+    const verschillen = syncVerschillen(app, [DEPENDABOT]);
+
+    expect(verschillen.some((v) => v.pad === DEPENDABOT)).toBe(false);
   });
 });

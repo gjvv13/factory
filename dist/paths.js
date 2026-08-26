@@ -12,4 +12,13 @@ export const claudeCommandsDir = path.join(factoryPakketDir, 'claude-commands');
 export const hooksDir = path.join(factoryPakketDir, 'hooks');
 export const workflowsDir = path.join(factoryPakketDir, 'workflows');
 export const skillsDir = path.join(factoryPakketDir, 'skills');
+/**
+ * Bestanden die `factory sync` als losse 1:1-kopie naar een app zet, naast de
+ * directory-spiegels. Bron is relatief aan de factory-pakketwortel, doel is
+ * relatief aan de app-map. Een directory-mapping `github/` → `.github/` zou
+ * de `overbodig`-detectie breken door overlap met `workflows/` → `.github/workflows/`.
+ */
+export const syncBestanden = [
+    { bron: 'dependabot.yml', doel: path.join('.github', 'dependabot.yml') },
+];
 //# sourceMappingURL=paths.js.map

@@ -1,0 +1,16 @@
+# Dependabot version-updates — door `factory sync` onderhouden.
+#
+# Prerequisite: zet "Dependabot security updates" aan in de repo-instellingen
+# (Settings → Code security → Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    groups:
+      patch-en-minor:
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 5
