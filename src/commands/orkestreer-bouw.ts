@@ -430,9 +430,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         // Per ronde opnieuw lezen: de vorige run heeft een kolom verzet of een
         // escalatie-label gehangen, en op de oude lijst zou hij dat item nog eens pakken.
         leesRij: () =>
-          isFastlane
-            ? fastlaneWachtrij(bordItems(cwd) ?? [])
-            : bouwWachtrij(bordItems(cwd) ?? []),
+          isFastlane ? fastlaneWachtrij(bordItems(cwd) ?? []) : bouwWachtrij(bordItems(cwd) ?? []),
         // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
         // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
         branchVan: (item) => bouwBranch(item.issue),
@@ -1437,9 +1435,7 @@ export function leesBaan(waarde: string | undefined): BouwBaan | undefined {
   if (waarde === undefined) return undefined;
   if (waarde === 'fastlane') return 'fastlane';
   if (waarde === 'gewoon') return 'gewoon';
-  throw new GebruikersFout(
-    `Onbekende --baan '${waarde}'. Kies: gewoon (default) of fastlane.`,
-  );
+  throw new GebruikersFout(`Onbekende --baan '${waarde}'. Kies: gewoon (default) of fastlane.`);
 }
 
 /**

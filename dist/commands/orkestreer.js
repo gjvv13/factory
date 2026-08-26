@@ -645,9 +645,10 @@ export function orkestreerStatus(cwd, opties = {}) {
     const staat = leesStaat(paden, new Date(Date.now()));
     const instellingen = leesInstellingen(paden);
     kop('Vandaag');
-    process.stdout.write(`  nacht refine: ${String(staat.gestart)}/${String(instellingen.dagmaximum)}\n` +
-        `  nacht bouw:   ${String(staat.nachtBouw)}/${String(instellingen.bouwDagmaximum)}\n` +
-        `  zelf gestart: ${String(staat.interactief)} (geen maximum; het aantal geef je mee bij het starten)\n`);
+    process.stdout.write(`  nacht refine:   ${String(staat.gestart)}/${String(instellingen.dagmaximum)}\n` +
+        `  nacht bouw:     ${String(staat.nachtBouw)}/${String(instellingen.bouwDagmaximum)}\n` +
+        `  nacht fastlane: ${String(staat.nachtFastlane)}/${String(instellingen.fastlaneCap)}\n` +
+        `  zelf gestart:   ${String(staat.interactief)} (geen maximum; het aantal geef je mee bij het starten)\n`);
     kop(`Technisch uitgewerkt, wacht op jouw akkoord (${String(wachtOpAkkoord.length)})`);
     toonLijst(wachtOpAkkoord);
     kop(`Geëscaleerd, wacht op een antwoord (${String(vastgelopen.length)})`);

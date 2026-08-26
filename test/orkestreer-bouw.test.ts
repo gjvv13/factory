@@ -11,11 +11,15 @@ import {
   bouwWachtrij,
   bouwWerkplek,
   bronAppsVan,
+  FASTLANE_LABEL,
+  fastlaneWachtrij,
+  leesBaan,
   leesIssue,
   leesReeks,
   leesSoort,
   orkestreerBouw,
   redenBuitenDeRij,
+  redenBuitenFastlane,
   reviewPrompt,
   type BouwAfResultaat,
   type Bouwitem,
@@ -90,10 +94,11 @@ describe('de bouw-wachtrij', () => {
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // Oudste eerst: #177 (4 aug), #91 (5 aug), #106 (6 aug), #250 (7 aug), #126 (10 aug),
-    // #182 (19 aug). En verder niets: #164 is een epic, #149 draagt escalatie, #200 heeft
-    // geen App, #87 staat al op Bouwen, #119 staat in een andere kolom, #78 is gesloten.
-    expect(rij.map((item) => item.issue)).toEqual([177, 91, 106, 250, 126, 182]);
+    // Oudste eerst: #177 (4 aug), #91 (5 aug), #106 (6 aug), #250 (7 aug), #301 (8 aug),
+    // #126 (10 aug), #182 (19 aug). En verder niets: #164 is een epic, #149 draagt
+    // escalatie, #200 heeft geen App, #87 staat al op Bouwen, #119 staat in een andere
+    // kolom, #78 is gesloten.
+    expect(rij.map((item) => item.issue)).toEqual([177, 91, 106, 250, 301, 126, 182]);
   });
 
   it('laat het epic zelf staan, maar neemt zijn slice wel mee', () => {
@@ -340,7 +345,7 @@ describe('--issue', () => {
 
     // Elk item dat --issue accepteert, staat ook gewoon in de rij. Wie dat later
     // omzeilt — een aparte lezing voor het gevraagde issue — breekt deze test.
-    for (const issue of [177, 91, 106, 250, 126, 182]) {
+    for (const issue of [177, 91, 106, 250, 301, 126, 182]) {
       expect(rij.map((item) => item.issue)).toContain(issue);
     }
   });
@@ -382,6 +387,210 @@ describe('redenBuitenDeRij', () => {
       labels: ['type:task'],
     };
     expect(redenBuitenDeRij(zonderApp)?.grond).toBe('geen-app');
+  });
+});
+
+describe('fastlane-wachtrij (#400)', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    herstelAsyncUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('neemt type:bug zonder extra label', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = fastlaneWachtrij(bordItems() ?? []);
+
+    // #91 is type:bug, geen ouder → hoort erin.
+    expect(rij.map((item) => item.issue)).toContain(91);
+  });
+
+  it('neemt type:task alleen met het fastlane-label', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = fastlaneWachtrij(bordItems() ?? []);
+
+    // #301 is type:task + fastlane-label → hoort erin.
+    // #126 is type:task zonder fastlane-label → hoort er niet in.
+    expect(rij.map((item) => item.issue)).toContain(301);
+    expect(rij.map((item) => item.issue)).not.toContain(126);
+  });
+
+  it('sluit child-slices uit, ook als het een bug zou zijn', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = fastlaneWachtrij(bordItems() ?? []);
+
+    // #177 is type:task met ouder #169 → child-slice, uitgesloten.
+    // #182 is type:task met ouder #164 → child-slice, uitgesloten.
+    expect(rij.map((item) => item.issue)).not.toContain(177);
+    expect(rij.map((item) => item.issue)).not.toContain(182);
+  });
+
+  it('sluit geëscaleerde items uit', () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    const rij = fastlaneWachtrij(bordItems() ?? []);
+
+    // #149 draagt het escalatie-label.
+    expect(rij.map((item) => item.issue)).not.toContain(149);
+  });
+});
+
+describe('redenBuitenFastlane (#400)', () => {
+  function item(velden: Partial<Parameters<typeof redenBuitenFastlane>[0]>) {
+    return {
+      issue: 1,
+      titel: 't',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:bug'],
+      app: 'factory',
+      ...velden,
+    };
+  }
+
+  it('laat een bug zonder ouder door', () => {
+    expect(redenBuitenFastlane(item({}))).toBeUndefined();
+  });
+
+  it('laat een task met fastlane-label door', () => {
+    expect(redenBuitenFastlane(item({ labels: ['type:task', FASTLANE_LABEL] }))).toBeUndefined();
+  });
+
+  it('weigert een task zonder fastlane-label', () => {
+    const reden = redenBuitenFastlane(item({ labels: ['type:task'] }));
+    expect(reden?.grond).toBe('soort');
+    expect(reden?.zin).toContain(FASTLANE_LABEL);
+  });
+
+  it('weigert een child-slice', () => {
+    const reden = redenBuitenFastlane(item({ ouder: 99 }));
+    expect(reden?.grond).toBe('soort');
+    expect(reden?.zin).toContain('child-slice');
+  });
+
+  it('weigert een geëscaleerd item', () => {
+    expect(redenBuitenFastlane(item({ labels: ['type:bug', 'escalatie'] }))?.grond).toBe(
+      'escalatie',
+    );
+  });
+
+  it('weigert een item zonder App', () => {
+    const zonderApp: Parameters<typeof redenBuitenFastlane>[0] = {
+      issue: 1,
+      titel: 't',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:bug'],
+    };
+    expect(redenBuitenFastlane(zonderApp)?.grond).toBe('geen-app');
+  });
+});
+
+describe('fastlane-cap (#400)', () => {
+  it('cap 0 = fastlane uit: de nacht draait de fastlane niet', async () => {
+    // De volledige nacht-test is in de nachtblok hierboven. Hier testen we alleen
+    // dat cap 0 de fastlane overslaat — impliciet via de instellingen.
+    const instellingen = (await import('../src/orkestrator-instellingen.js')).leesInstellingen(
+      (await import('../src/orkestrator-instellingen.js')).standaardPaden(
+        mkdtempSync(path.join(os.tmpdir(), 'factory-fl-cap-')),
+      ),
+    );
+    // Default is 4: zonder env-bestand staat de fastlane-cap op 4 — niet 0.
+    expect(instellingen.fastlaneCap).toBe(4);
+  });
+
+  it('de fastlane-cap is onafhankelijk van het gewone bouw-dagmaximum', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'factory-fl-cap-'));
+    const { standaardPaden: sp, leesInstellingen: li } =
+      await import('../src/orkestrator-instellingen.js');
+    const paden = sp(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, 'FACTORY_BOUW_DAGMAXIMUM=1\nFACTORY_FASTLANE_CAP=8\n', {
+      mode: 0o600,
+    });
+
+    const instellingen = li(paden);
+
+    expect(instellingen.bouwDagmaximum).toBe(1);
+    expect(instellingen.fastlaneCap).toBe(8);
+    rmSync(home, { recursive: true, force: true });
+  });
+});
+
+describe('leesBaan (#400)', () => {
+  it('leest fastlane en gewoon', () => {
+    expect(leesBaan(undefined)).toBeUndefined();
+    expect(leesBaan('fastlane')).toBe('fastlane');
+    expect(leesBaan('gewoon')).toBe('gewoon');
+  });
+
+  it('weigert een onbekende baan', () => {
+    expect(() => leesBaan('snel')).toThrow(/Onbekende --baan/);
+  });
+});
+
+describe('--baan fastlane --dry (#400)', () => {
+  let herstelOmgeving: () => void;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+  });
+
+  afterEach(() => {
+    herstelOmgeving();
+    herstelUitvoerder();
+    herstelAsyncUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('toont de fastlane-wachtrij met alleen bugs en gelabelde tasks', async () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    await orkestreerBouw({
+      dry: true,
+      baan: 'fastlane',
+      werkplaatsWortel: '/Users/iemand/OrkestratorWerk',
+    });
+
+    const tekst = uitvoer.join('');
+    // De kop van de fastlane-rij is #91 (type:bug, 5 aug).
+    expect(tekst).toContain('Fastlane-wachtrij');
+    expect(tekst).toContain('#91');
+    // #301 (type:task + fastlane) hoort in de rij.
+    expect(tekst).toContain('#301');
+    // #126 (type:task zonder fastlane) en #177 (child-slice) horen er niet in.
+    expect(tekst).not.toMatch(/#126\s/);
+    expect(tekst).not.toMatch(/#177\s/);
+  });
+
+  it('--baan en --nacht gaan niet samen', async () => {
+    stelUitvoerderIn(metBord().uitvoerder);
+
+    await expect(orkestreerBouw({ nacht: true, baan: 'fastlane' })).rejects.toThrow(
+      /--baan.*--nacht/,
+    );
   });
 });
 

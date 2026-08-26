@@ -47,6 +47,8 @@ export interface Instellingen {
     readonly dagmaximum: number;
     /** Dagmaximum voor bouw-nacht-runs (#343). */
     readonly bouwDagmaximum: number;
+    /** Dagmaximum voor fastlane-nacht-runs (#400). 0 = fastlane uit. */
+    readonly fastlaneCap: number;
     readonly budgetPerRun: number;
     readonly bouwBudgetPerRun: number;
     /** Kostenrem voor een review-run (#184). */
@@ -83,11 +85,12 @@ declare const staatSchema: z.ZodObject<{
     dag: z.ZodString;
     gestart: z.ZodNumber;
     nachtBouw: z.ZodDefault<z.ZodNumber>;
+    nachtFastlane: z.ZodDefault<z.ZodNumber>;
     interactief: z.ZodDefault<z.ZodNumber>;
     laatsteRun: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 /** Uit welke pot een run geboekt wordt. */
-export type RunPot = 'nacht' | 'nacht-bouw' | 'interactief';
+export type RunPot = 'nacht' | 'nacht-bouw' | 'nacht-fastlane' | 'interactief';
 export type OrkestratorStaat = z.infer<typeof staatSchema>;
 /**
  * De kalenderdag in lokale tijd, als `YYYY-MM-DD`.

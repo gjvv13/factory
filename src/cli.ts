@@ -11,7 +11,13 @@ import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
 import { orkestreerAccepteer } from './commands/orkestreer-accepteer.js';
-import { leesBaan, leesIssue, leesReeks, leesSoort, orkestreerBouw } from './commands/orkestreer-bouw.js';
+import {
+  leesBaan,
+  leesIssue,
+  leesReeks,
+  leesSoort,
+  orkestreerBouw,
+} from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';

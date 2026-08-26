@@ -336,7 +336,7 @@ export function leesStaat(paden: OrkestratorPaden, nu: Date): OrkestratorStaat {
   // niet alleen een teller.
   return staat.data.dag === vandaag
     ? staat.data
-    : { dag: vandaag, gestart: 0, nachtBouw: 0, interactief: 0 };
+    : { dag: vandaag, gestart: 0, nachtBouw: 0, nachtFastlane: 0, interactief: 0 };
 }
 
 /**
