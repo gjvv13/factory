@@ -10,3 +10,13 @@ export declare const claudeCommandsDir: string;
 export declare const hooksDir: string;
 export declare const workflowsDir: string;
 export declare const skillsDir: string;
+/**
+ * Bestanden die `factory sync` als losse 1:1-kopie naar een app zet, naast de
+ * directory-spiegels. Bron is relatief aan de factory-pakketwortel, doel is
+ * relatief aan de app-map. Een directory-mapping `github/` → `.github/` zou
+ * de `overbodig`-detectie breken door overlap met `workflows/` → `.github/workflows/`.
+ */
+export declare const syncBestanden: {
+    readonly bron: string;
+    readonly doel: string;
+}[];
