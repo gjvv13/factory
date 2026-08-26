@@ -1745,10 +1745,20 @@ describe('de LaunchAgent van de orkestrator', () => {
     expect(execIndex).toBeGreaterThan(exportIndex);
   });
 
-  it('bevat geen pad onder ~/Documents (#332)', () => {
+  it('draait niet met een working directory of repo onder ~/Documents (#332)', () => {
     const plist = bouwOrkestreerPlist(opzet);
 
-    expect(plist).not.toContain('Documents');
+    // De #332-regressie ging over een ~/Documents-pad als working directory en een
+    // `git -C` naar een factory-repo daaronder — dat blokkeert macOS TCC voor
+    // achtergrondprocessen. De ingebakken PATH mág een ~/Documents-entry bevatten:
+    // launchd heeft die nodig om node/gh/claude te vinden, en dat is geen werkmap- of
+    // repo-pad. Toets daarom de working directory en het fetch-script, niet de hele plist.
+    const werkdir = /<key>WorkingDirectory<\/key><string>([^<]*)<\/string>/.exec(plist)?.[1] ?? '';
+    expect(werkdir).not.toContain('Documents');
+
+    const script = bouwNachtScript(opzet);
+    expect(script).not.toContain('Documents');
+    expect(script).not.toContain('git -C');
   });
 });
 
@@ -1794,10 +1804,18 @@ describe('de bouw-LaunchAgent (#343)', () => {
     expect(execRegel).toContain('orkestreer --soort bouw --nacht');
   });
 
-  it('bevat geen pad onder ~/Documents (#332)', () => {
+  it('draait niet met een working directory of repo onder ~/Documents (#332)', () => {
     const plist = bouwOrkestreerPlist(bouwOpzet);
 
-    expect(plist).not.toContain('Documents');
+    // Zie de refine-variant hierboven: de ingebakken PATH mág een ~/Documents-entry
+    // bevatten (launchd vindt node/gh/claude daarmee); wat #332 verbiedt is een
+    // ~/Documents-pad als working directory of een `git -C` naar een repo daaronder.
+    const werkdir = /<key>WorkingDirectory<\/key><string>([^<]*)<\/string>/.exec(plist)?.[1] ?? '';
+    expect(werkdir).not.toContain('Documents');
+
+    const script = bouwNachtScript(bouwOpzet);
+    expect(script).not.toContain('Documents');
+    expect(script).not.toContain('git -C');
   });
 });
 
