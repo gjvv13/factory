@@ -207,6 +207,28 @@ describe('draaiWerker', () => {
     expect(uitkomst.afloop).toBe('escalatie');
   });
 
+  it('gooit een geslaagde run niet weg bij een geweigerde niet-Bash-tool (#387)', async () => {
+    // Een geweigerde Write/Edit/MCP-tool heeft een `tool_input` zónder `command`;
+    // alleen `Bash` draagt een `command`. Het schema eiste `command` verplicht en
+    // zette zo'n geslaagde run weg als "envelop wijkt af" (val op #359). De envelop
+    // hieronder is de echte klaar-run mét twee weigeringen: één Bash (mét command),
+    // één Write (zónder). Beide horen geteld en gelabeld te worden, en de run blijft
+    // klaar.
+    const basis = JSON.parse(fixture('claude-run.json')) as Record<string, unknown>;
+    basis['permission_denials'] = [
+      { tool_name: 'Bash', tool_input: { command: 'git push origin main' } },
+      { tool_name: 'Write', tool_input: { file_path: '/Users/x/OrkestratorWerk/assistant/a.ts' } },
+    ];
+    metUitvoer(JSON.stringify(basis), 0);
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.weigeringen).toBe(2);
+    // De Bash-weigering wordt tot `git push` gelabeld, de Write tot kaal `Write`.
+    expect([...(uitkomst.geweigerd ?? [])].sort()).toEqual(['Write', 'git push']);
+  });
+
   it('meldt het als de envelop niet meer klopt', async () => {
     metUitvoer(JSON.stringify({ type: 'result', subtype: 'success', is_error: false }));
 
