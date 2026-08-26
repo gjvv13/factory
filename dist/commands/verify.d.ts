@@ -44,6 +44,13 @@ export interface VerifyOpties {
     readonly snel?: boolean;
     /** Alleen de snelle stappen, voor de pre-commit hook. */
     readonly preCommit?: boolean;
+    /**
+     * De map waarin de poort draait. Zonder dit gebruikt verify `process.cwd()`,
+     * wat correct is voor interactief gebruik maar fout als de aanroeper (inleveren,
+     * release) in een andere map draait dan de worktree — precies het geval bij de
+     * bouw-nacht (#379).
+     */
+    readonly cwd?: string;
 }
 export declare function verify(opties?: VerifyOpties): void;
 export {};
