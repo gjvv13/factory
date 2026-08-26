@@ -148,7 +148,12 @@ const envelopSchema = z.object({
     permission_denials: z
         .array(z.object({
         tool_name: z.string(),
-        tool_input: z.object({ command: z.string() }).optional(),
+        // `command` alleen optioneel: een geweigerde Bash-tool heeft het, een
+        // geweigerde Write/Edit/MCP-tool heeft een `tool_input` zónder `command`.
+        // Verplicht stellen zette een geslaagde run met zo'n weigering weg als
+        // "envelop wijkt af" — precies de schade waar de comment hierboven tegen
+        // waarschuwt. De consument (`weigeringLabel`) tolereert `undefined` al.
+        tool_input: z.object({ command: z.string().optional() }).optional(),
     }))
         .optional(),
 });
