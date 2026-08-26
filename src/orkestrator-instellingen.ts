@@ -118,6 +118,14 @@ const instellingenSchema = z.object({
    */
   FACTORY_WERKER_EFFORT: z.enum(['low', 'medium', 'high']).default('medium'),
   [TOKEN_SLEUTEL]: z.string().min(1).optional(),
+  /**
+   * Het endpoint waarnaar de ochtendmelding gaat (#401): dezelfde URL als de deploy-
+   * faalmelding in `deploy.yml`, maar nu ook vanuit de CLI. Zonder waarde wordt de
+   * meldstap overgeslagen met een waarschuwing.
+   */
+  DEPLOY_NOTIFY_URL: z.url().optional(),
+  /** Bearer-token voor het notify-endpoint (#401). */
+  DEPLOY_NOTIFY_TOKEN: z.string().min(1).optional(),
 });
 
 export interface Instellingen {
@@ -136,6 +144,10 @@ export interface Instellingen {
   readonly werkerEffort: 'low' | 'medium' | 'high';
   /** Undefined als er (nog) geen token in het bestand staat. */
   readonly token?: string;
+  /** Het endpoint waarnaar de ochtendmelding gaat (#401). */
+  readonly notifyUrl?: string;
+  /** Bearer-token voor het notify-endpoint (#401). */
+  readonly notifyToken?: string;
 }
 
 /** Regels in `sleutel=waarde`-vorm, zoals de env-bestanden van de apps. */
@@ -191,6 +203,8 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
     throw new GebruikersFout(`${paden.envPad} is ongeldig: ${details}`);
   }
   const token = gelezen.data[TOKEN_SLEUTEL];
+  const notifyUrl = gelezen.data.DEPLOY_NOTIFY_URL;
+  const notifyToken = gelezen.data.DEPLOY_NOTIFY_TOKEN;
   return {
     dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
     bouwDagmaximum: gelezen.data.FACTORY_BOUW_DAGMAXIMUM,
@@ -201,6 +215,8 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
     runTimeoutMs: gelezen.data.FACTORY_RUN_TIMEOUT_MIN * 60_000,
     werkerEffort: gelezen.data.FACTORY_WERKER_EFFORT,
     ...(token === undefined ? {} : { token }),
+    ...(notifyUrl === undefined ? {} : { notifyUrl }),
+    ...(notifyToken === undefined ? {} : { notifyToken }),
   };
 }
 
