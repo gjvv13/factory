@@ -130,7 +130,7 @@ export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => void, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number): Promise<BouwAfResultaat>;
+export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => void, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number, baan?: BouwBaan): Promise<BouwAfResultaat>;
 /**
  * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
  * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in

@@ -400,6 +400,50 @@ describe('inleveren', () => {
     expect(create).not.toContain('--fill');
   });
 
+  it('zet auto-merge aan met --fastlane', () => {
+    process.chdir(maakRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({ fastlane: true });
+
+    // Auto-merge via de merge-queue, net als de gewone route maar dan als fastlane.
+    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+  });
+
+  it('zet auto-merge aan met --fastlane op een lokale-wachtrij-app', () => {
+    process.chdir(maakLokaleRepo());
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({ fastlane: true });
+
+    // Bij lokale wachtrij: het wachtrij-label, net als de gewone route — het label ís
+    // de opdracht om te mergen.
+    expect(argsVan(aanroepen, 'gh')).toContainEqual([
+      'pr',
+      'edit',
+      PR_URL,
+      '--add-label',
+      'wachtrij',
+    ]);
+    // Geen gh pr merge (dat is voor de merge-queue): de drain doet het.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+  });
+
+  it('geenAutomerge wint van fastlane als beide gezet zijn', () => {
+    process.chdir(maakRepo());
+    const regels = vangStdout();
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({ geenAutomerge: true, fastlane: true });
+
+    // geenAutomerge is de veiligste default en wint.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+    expect(regels.join('')).toContain('zonder auto-merge');
+  });
+
   it('lokale wachtrij-route: labelt de PR i.p.v. auto-merge', () => {
     process.chdir(maakLokaleRepo());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);

@@ -44,6 +44,15 @@ export interface InleverenOpties {
    * niet gezet wordt, want dat label ís de opdracht om te mergen.
    */
   readonly geenAutomerge?: boolean;
+  /**
+   * Zet auto-merge aan voor een fastlane-item (#401): de PR merget zichzelf zodra de
+   * poort groen is. Bewuste, afgebakende afwijking van akkoord-voor-inleveren — alleen
+   * voor losstaande bugs en gelabelde tasks in de fastlane-baan.
+   *
+   * `fastlane` en `geenAutomerge` sluiten elkaar uit; `geenAutomerge` wint als beide
+   * gezet zijn (veiligste default).
+   */
+  readonly fastlane?: boolean;
   /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
   readonly cwd?: string;
   /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
@@ -236,6 +245,18 @@ export function inleveren(opties: InleverenOpties = {}): void {
     process.stdout.write(
       `\n${branch} wacht op een menselijke merge; er is niets in een wachtrij gezet.\n`,
     );
+  } else if (opties.fastlane === true) {
+    // Fastlane (#401): auto-merge aanzetten, ongeacht of het een lokale of GitHub-
+    // merge-queue-app is. De fastlane is de bewuste afwijking van akkoord-voor-
+    // inleveren: de poort is de enige gate, en de PR merget zichzelf op groen.
+    if (lokaal) {
+      zorgVoorWachtrijLabel(repoDir);
+      run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+    } else {
+      run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
+    }
+    ok(`fastlane-PR met auto-merge: ${prUrl}`);
+    process.stdout.write(`\n${branch} merget zichzelf zodra de poort groen is.\n`);
   } else if (lokaal) {
     // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
     // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).

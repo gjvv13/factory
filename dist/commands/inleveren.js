@@ -160,6 +160,20 @@ export function inleveren(opties = {}) {
         ok(`PR geopend zonder auto-merge: ${prUrl}`);
         process.stdout.write(`\n${branch} wacht op een menselijke merge; er is niets in een wachtrij gezet.\n`);
     }
+    else if (opties.fastlane === true) {
+        // Fastlane (#401): auto-merge aanzetten, ongeacht of het een lokale of GitHub-
+        // merge-queue-app is. De fastlane is de bewuste afwijking van akkoord-voor-
+        // inleveren: de poort is de enige gate, en de PR merget zichzelf op groen.
+        if (lokaal) {
+            zorgVoorWachtrijLabel(repoDir);
+            run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+        }
+        else {
+            run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
+        }
+        ok(`fastlane-PR met auto-merge: ${prUrl}`);
+        process.stdout.write(`\n${branch} merget zichzelf zodra de poort groen is.\n`);
+    }
     else if (lokaal) {
         // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
         // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).

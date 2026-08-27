@@ -22,6 +22,15 @@ export interface InleverenOpties {
      * niet gezet wordt, want dat label ís de opdracht om te mergen.
      */
     readonly geenAutomerge?: boolean;
+    /**
+     * Zet auto-merge aan voor een fastlane-item (#401): de PR merget zichzelf zodra de
+     * poort groen is. Bewuste, afgebakende afwijking van akkoord-voor-inleveren — alleen
+     * voor losstaande bugs en gelabelde tasks in de fastlane-baan.
+     *
+     * `fastlane` en `geenAutomerge` sluiten elkaar uit; `geenAutomerge` wint als beide
+     * gezet zijn (veiligste default).
+     */
+    readonly fastlane?: boolean;
     /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
     readonly cwd?: string;
     /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */

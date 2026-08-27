@@ -12,6 +12,7 @@ import { draaiBouwer, draaiReviewer } from '../werker.js';
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
+import { stuurOchtendmelding } from '../ochtendmelding.js';
 import { werkplek } from './werkplek.js';
 /**
  * De tweede taaksoort: een werker die bouwt in plaats van refinet (#164, slice #182).
@@ -292,7 +293,7 @@ export async function orkestreerBouw(opties = {}) {
             // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
             // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
             branchVan: (item) => bouwBranch(item.issue),
-            werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], reeks),
+            werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], reeks, undefined, undefined, opties.baan),
             beschrijf: beschrijfBouw,
             beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
         }));
@@ -307,7 +308,7 @@ export async function orkestreerBouw(opties = {}) {
         // Wie dit start is een mens; de pot is interactief (#265).
         pot: 'interactief',
         item: eerste,
-    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? []), beschrijfBouw);
+    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], undefined, undefined, undefined, opties.baan), beschrijfBouw);
 }
 /**
  * Wat er van een bouw-run in het log komt.
@@ -384,7 +385,7 @@ export function reviewPrompt(item, werkmap, factoryMap, apps = []) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs) {
+export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs, baan) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -480,7 +481,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
             reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
         }
     }
-    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks);
+    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks, baan);
     return {
         // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
         // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
@@ -496,7 +497,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
  * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
  * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
  */
-function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks) {
+function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks, baan) {
     const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
     if (uitkomst.afloop === 'mislukt') {
         // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
@@ -527,12 +528,14 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     // inleveren: stuit `leverIn` op een omgevingsfout, dan is er géén PR en zou die comment
     // liegen (#383).
     const reviewComment = maakReviewComment(reviewUitkomst);
+    // Fastlane-items (#401) mergen zichzelf op groen; gewone items wachten op een mens.
+    const isFastlane = baan === 'fastlane';
     try {
         // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
         // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
         leverIn({
             cwd: werkmap,
-            geenAutomerge: true,
+            ...(isFastlane ? { fastlane: true } : { geenAutomerge: true }),
             titel: `#${String(item.issue)} — ${item.titel}`,
             // In een reeks de stacking-informatie doorgeven (#327): de positie en de
             // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
@@ -563,10 +566,13 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
         throw fout;
     }
     // Inleveren geslaagd: nu pas melden dat er gebouwd is en dat de PR openstaat.
+    const mergeRegel = isFastlane
+        ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
+        : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
     plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
         `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
         verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-        `\n\nDe PR staat open **zonder auto-merge**; mergen is jouw beslissing.\n\n${voetnoot}`, cwd);
+        `\n\n${mergeRegel}\n\n${voetnoot}`, cwd);
     // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
     if (reviewComment !== undefined) {
         if (!plaatsPrComment(item, reviewComment)) {
@@ -575,7 +581,9 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
             plaatsComment(item.issue, reviewComment, cwd);
         }
     }
-    ok(`#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
+    ok(isFastlane
+        ? `#${String(item.issue)} gebouwd en ingeleverd met auto-merge (fastlane).`
+        : `#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`);
     return false;
 }
 /** Zet een item stil: terug in de bouw-wachtrij, met het label dat het overslaat. */
@@ -916,6 +924,7 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
             }
         }
         // Fastlane-baan (#400): eigen cap, eigen teller.
+        const fastlaneGemergd = [];
         if (!fastlaneKlaar) {
             kop('Fastlane-baan');
             const flUitkomst = await draaiReeks({
@@ -927,7 +936,27 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
                 aantal: instellingen.fastlaneCap - fastlaneAlGestart,
                 leesRij: () => fastlaneWachtrij(bordItems(cwd) ?? []),
                 branchVan: (item) => bouwBranch(item.issue),
-                werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs),
+                werkAf: async (item, reeks) => {
+                    const resultaat = await bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs, 'fastlane');
+                    if (resultaat.bouw.afloop === 'klaar') {
+                        // De PR-URL achterhalen: de branch is voorspelbaar, de PR is net geopend.
+                        const prUrl = uitvoerVan('gh', [
+                            'pr',
+                            'view',
+                            bouwBranch(item.issue),
+                            '--repo',
+                            `${EIGENAAR}/${item.app}`,
+                            '--json',
+                            'url',
+                            '--jq',
+                            '.url',
+                        ]);
+                        if (prUrl !== undefined && prUrl !== '') {
+                            fastlaneGemergd.push({ issue: item.issue, app: item.app, prUrl });
+                        }
+                    }
+                    return resultaat;
+                },
                 beschrijf: beschrijfBouw,
                 beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
                 naElkeRun: (aantal) => {
@@ -941,6 +970,9 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
                 ok('niets nieuws meer in de fastlane-wachtrij.');
             }
         }
+        // Ochtendmelding (#401): één POST met alle fastlane-items die vannacht vanzelf
+        // gemergd zijn. Geen items → geen melding (geen ruis).
+        await stuurOchtendmelding(fastlaneGemergd, instellingen.notifyUrl, instellingen.notifyToken);
     }
     finally {
         geefLockVrij();
