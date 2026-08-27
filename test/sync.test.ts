@@ -60,6 +60,9 @@ describe('sync', () => {
       true,
     );
     expect(existsSync(path.join(app, '.github', 'workflows', 'ci.yml'))).toBe(true);
+    expect(existsSync(path.join(app, '.github', 'workflows', 'dependabot-auto-merge.yml'))).toBe(
+      true,
+    );
     expect(existsSync(path.join(app, '.githooks', 'pre-commit'))).toBe(true);
     // Meldt elk bijgewerkt bestand terug.
     expect(bijgewerkt).toContain(path.join('.claude', 'commands', 'bouw.md'));
