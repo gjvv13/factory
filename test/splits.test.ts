@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseSlices, herschrijfBody, parseAppAntwoord, splits } from '../src/splits.js';
+import { parseSlices, herschrijfBody, parseAppAntwoord, APP_QUERY, splits } from '../src/splits.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, zetBoardOmgeving, type ProcesAanroep } from './helpers.js';
 
@@ -275,6 +275,28 @@ describe('parseAppAntwoord', () => {
     });
 
     expect(parseAppAntwoord(ruw)).toBe('goed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// APP_QUERY — de query-string zelf moet geldig zijn
+// ---------------------------------------------------------------------------
+
+describe('APP_QUERY', () => {
+  it('gebruikt elke gedeclareerde variabele in de body (anders weigert GitHub de query)', () => {
+    // GitHub GraphQL faalt met `variableNotUsed` als een gedeclareerde $variabele niet
+    // in de body voorkomt; dan valt leesApp stil op undefined en krijgt het kind geen
+    // App-veld. Deze test vangt zo'n ongebruikte variabele af (regressie #426-split).
+    const declaratie = APP_QUERY.match(/query\(([^)]*)\)/);
+    expect(declaratie).not.toBeNull();
+    const variabelen = declaratie![1]!.match(/\$[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
+    expect(variabelen.length).toBeGreaterThan(0);
+    const body = APP_QUERY.slice(APP_QUERY.indexOf('{'));
+    for (const variabele of variabelen) {
+      expect(body, `variabele ${variabele} wordt gedeclareerd maar niet gebruikt`).toContain(
+        variabele,
+      );
+    }
   });
 });
 

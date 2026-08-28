@@ -144,7 +144,12 @@ function leesIssue(issue) {
  * Leest het App-veld van een issue via het board. Gebruikt een gerichte query die
  * 1–2 GraphQL-punten kost, niet `item-list` (102 punten).
  */
-const APP_QUERY = `query($eigenaar:String!,$repo:String!,$project:Int!,$nummer:Int!){
+// Geëxporteerd zodat een unit-test kan bewaken dat elke gedeclareerde variabele ook
+// echt gebruikt wordt: GitHub weigert een query met een ongebruikte variabele
+// (`variableNotUsed`), waardoor `leesApp` stil op undefined viel en het App-veld nooit
+// op de kinderen kwam. Het projectfilter zit client-side in `parseAppAntwoord`, dus
+// `$project` hoort hier niet als (ongebruikte) variabele thuis.
+export const APP_QUERY = `query($eigenaar:String!,$repo:String!,$nummer:Int!){
   repository(owner:$eigenaar,name:$repo){ issue(number:$nummer){
     projectItems(first:10){ nodes { project { number }
       app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } }
@@ -171,8 +176,6 @@ function leesApp(issue) {
         `eigenaar=${EIGENAAR}`,
         '-f',
         `repo=${BACKLOG_REPO}`,
-        '-F',
-        `project=${String(PROJECT_NUMMER)}`,
         '-F',
         `nummer=${String(issue)}`,
     ], { capture: true, toleranter: true });

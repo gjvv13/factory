@@ -25,6 +25,11 @@ export declare function herschrijfBody(origineel: string, kinderen: readonly {
     issue: number;
     naam: string;
 }[]): string;
+/**
+ * Leest het App-veld van een issue via het board. Gebruikt een gerichte query die
+ * 1–2 GraphQL-punten kost, niet `item-list` (102 punten).
+ */
+export declare const APP_QUERY = "query($eigenaar:String!,$repo:String!,$nummer:Int!){\n  repository(owner:$eigenaar,name:$repo){ issue(number:$nummer){\n    projectItems(first:10){ nodes { project { number }\n      app: fieldValueByName(name:\"App\"){ ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } }\n}";
 /** Parset het GraphQL-antwoord tot de App-waarde. Geëxporteerd voor contract-tests. */
 export declare function parseAppAntwoord(ruw: string): string | undefined;
 export declare function splits(issueNummer: string | undefined): void;
