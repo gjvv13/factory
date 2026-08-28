@@ -234,6 +234,8 @@ export declare function escalaties(cwd?: string): Set<number> | undefined;
 export declare function zorgVoorEscalatieLabel(cwd?: string): void;
 /** Zet een label op een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
 export declare function zetLabel(issue: number, label: string, cwd?: string): void;
+/** Haalt een label van een backlog-issue af. Faalt zacht, net als {@link zetLabel}. */
+export declare function verwijderLabel(issue: number, label: string, cwd?: string): void;
 /** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
 export declare function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean;
 /** Wat een afrondronde over een tagbereik heeft opgeleverd. */

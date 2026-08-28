@@ -412,9 +412,14 @@ describe('splits — commando', () => {
     expect(appEdits).toHaveLength(2);
     expect(appEdits[0]).toContain('assistant');
 
-    // Kolom gezet via zetKolom (project item-edit met optie-bouwen)
+    // Kolom gezet via de issue-URL (item-edit --field Status --value "Klaar voor Bouwen"),
+    // niet via de lagende projectItems-lookup.
     const kolomEdits = ghArgs(opnemer.aanroepen).filter(
-      (a) => a[0] === 'project' && a[1] === 'item-edit' && a.includes('optie-bouwen'),
+      (a) =>
+        a[0] === 'project' &&
+        a[1] === 'item-edit' &&
+        a.includes('Status') &&
+        a.includes('Klaar voor Bouwen'),
     );
     expect(kolomEdits).toHaveLength(2);
 
@@ -423,6 +428,16 @@ describe('splits — commando', () => {
       (a) => a[0] === 'issue' && a[1] === 'edit' && a.includes('type:epic'),
     );
     expect(epicLabel).toBeDefined();
+
+    // type:task van de ouder afgehaald — een epic draagt geen task-label.
+    const taskVerwijderd = ghArgs(opnemer.aanroepen).find(
+      (a) =>
+        a[0] === 'issue' &&
+        a[1] === 'edit' &&
+        a.includes('--remove-label') &&
+        a.includes('type:task'),
+    );
+    expect(taskVerwijderd).toBeDefined();
 
     // Kolom van de ouder gewist (project item-edit met --clear)
     const clearKolom = ghArgs(opnemer.aanroepen).find(
