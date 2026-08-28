@@ -830,6 +830,35 @@ export function zetLabel(issue: number, label: string, cwd?: string): void {
   }
 }
 
+/** Haalt een label van een backlog-issue af. Faalt zacht, net als {@link zetLabel}. */
+export function verwijderLabel(issue: number, label: string, cwd?: string): void {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    return;
+  }
+  const uitkomst = run(
+    'gh',
+    [
+      'issue',
+      'edit',
+      String(issue),
+      '--repo',
+      `${EIGENAAR}/${BACKLOG_REPO}`,
+      '--remove-label',
+      label,
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon label '${label}' niet van #${String(issue)} verwijderen.`);
+  }
+}
+
 /** Schrijft de body van een backlog-issue uit een bestand. Faalt zacht. */
 export function schrijfBody(issue: number, bodyBestand: string, cwd?: string): boolean {
   const omgeving = ghOmgeving();

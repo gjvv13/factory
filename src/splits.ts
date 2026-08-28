@@ -10,7 +10,7 @@
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { zetKolom, zetLabel, schrijfBody } from './board.js';
+import { zetLabel, verwijderLabel, schrijfBody } from './board.js';
 import { ok, run, waarschuwing, GebruikersFout } from './shell.js';
 
 // ---------------------------------------------------------------------------
@@ -317,15 +317,13 @@ function maakKind(
 // Board-operaties op kinderen
 // ---------------------------------------------------------------------------
 
-/** Voegt een issue toe aan het project en zet het App-veld. */
-function zetAppOpBoard(kindUrl: string, app: string): void {
-  // Voeg het issue toe aan het project (als het er nog niet in zit).
-  run(
-    'gh',
-    ['project', 'item-add', String(PROJECT_NUMMER), '--owner', EIGENAAR, '--url', kindUrl],
-    { capture: true, toleranter: true },
-  );
-  // Zet het App-veld.
+/**
+ * Zet één single-select-veld op een board-item via de issue-URL (naam-gebaseerd).
+ * `gh` lost de issue-URL zelf op naar het board-item, zónder een projectItems-GraphQL-
+ * lookup — dat is bewust: een net toegevoegd item is via die lookup nog niet zichtbaar
+ * (consistentie-lag), de URL-vorm wél.
+ */
+function zetVeldViaUrl(kindUrl: string, veld: string, waarde: string): void {
   const uitkomst = run(
     'gh',
     [
@@ -337,15 +335,34 @@ function zetAppOpBoard(kindUrl: string, app: string): void {
       '--url',
       kindUrl,
       '--field',
-      'App',
+      veld,
       '--value',
-      app,
+      waarde,
     ],
     { capture: true, toleranter: true },
   );
   if (uitkomst.code !== 0) {
-    waarschuwing(`kon het App-veld niet zetten op ${kindUrl}.`);
+    waarschuwing(`kon het veld '${veld}' niet op '${waarde}' zetten op ${kindUrl}.`);
   }
+}
+
+/**
+ * Plaatst een child-issue op het board: voegt het toe, zet het App-veld (als de ouder
+ * er een had) en de kolom. Beide velden gaan via {@link zetVeldViaUrl} (de issue-URL),
+ * niet via een projectItems-lookup — anders bleef de kolom ongezet op een net
+ * aangemaakt kind (#378-nazorg).
+ */
+function plaatsKindOpBoard(kindUrl: string, app: string | undefined, kolom: string): void {
+  // Voeg het issue toe aan het project (als het er nog niet in zit).
+  run(
+    'gh',
+    ['project', 'item-add', String(PROJECT_NUMMER), '--owner', EIGENAAR, '--url', kindUrl],
+    { capture: true, toleranter: true },
+  );
+  if (app !== undefined) {
+    zetVeldViaUrl(kindUrl, 'App', app);
+  }
+  zetVeldViaUrl(kindUrl, 'Status', kolom);
 }
 
 /** Wist de kolomwaarde van een issue op het board. Een epic draagt geen kolom. */
@@ -431,20 +448,21 @@ export function splits(issueNummer: string | undefined): void {
 
     kinderen.push({ issue: kind.issue, naam: slice.naam });
 
-    // Zet het App-veld op het board (als de ouder er een had).
-    if (app !== undefined) {
-      zetAppOpBoard(kind.url, app);
-    }
-
-    // Zet de kolom op Klaar voor Bouwen.
-    zetKolom(kind.issue, 'Klaar voor Bouwen');
+    // Plaats het kind op het board: App-veld (als de ouder er een had) én de kolom
+    // Klaar voor Bouwen — beide via de issue-URL, zodat een net aangemaakt kind niet
+    // door de consistentie-lag ongeplaatst blijft (#378-nazorg).
+    plaatsKindOpBoard(kind.url, app, 'Klaar voor Bouwen');
 
     ok(`#${String(kind.issue)} — Slice ${String(slice.nummer)} — ${slice.naam}`);
   }
 
-  // 6. Zet type:epic op de ouder (als dat nog niet zo is)
+  // 6. Maak de ouder een epic: zet type:epic (als dat nog niet zo is) en haal
+  //    type:task eraf — een epic draagt niet ook nog het task-label.
   if (!issue.labels.includes(EPIC_LABEL)) {
     zetLabel(nummer, EPIC_LABEL);
+  }
+  if (issue.labels.includes('type:task')) {
+    verwijderLabel(nummer, 'type:task');
   }
 
   // 7. Wis de kolom van de ouder (een epic draagt geen kolom)
