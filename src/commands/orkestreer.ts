@@ -922,6 +922,7 @@ export function orkestreerStatus(
     (item) => item.kolom === WERK_KOLOM && !geblokkeerd.has(item.issue),
   );
   const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
+  const wachtOpMerge = items.filter((item) => item.kolom === 'Wacht op merge');
   const wachtrij = items.filter(
     (item) => item.kolom === WACHTRIJ_KOLOM && !geblokkeerd.has(item.issue),
   );
@@ -960,8 +961,63 @@ export function orkestreerStatus(
     );
   }
 
+  kop(`Wacht op merge (${String(wachtOpMerge.length)})`);
+  if (wachtOpMerge.length === 0) {
+    process.stdout.write('  —\n');
+  } else {
+    for (const item of wachtOpMerge) {
+      toonRegel(item);
+      const pr = prStatus(item.issue, item.app, cwd);
+      if (pr !== undefined) {
+        const ci = pr.ci === '' ? 'onbekend' : pr.ci;
+        process.stdout.write(`         PR: ${pr.url}  CI: ${ci}\n`);
+      }
+    }
+  }
+
   kop(`Wachtrij: ${WACHTRIJ_KOLOM} (${String(wachtrij.length)})`);
   toonLijst(wachtrij);
+}
+
+/**
+ * PR-url en CI-status voor een item op Wacht op merge. Kijkt naar de eerste
+ * slice-branch (`slice/<issue>-1`) in de repo van de app; undefined als de PR
+ * niet te lezen is.
+ */
+function prStatus(
+  issue: number,
+  app: string | undefined,
+  cwd?: string,
+): { url: string; ci: string } | undefined {
+  const repo = app === 'factory' ? `${EIGENAAR}/factory` : `${EIGENAAR}/${app ?? 'factory'}`;
+  const ruw = uitvoerVan(
+    'gh',
+    ['pr', 'view', `slice/${String(issue)}-1`, '--repo', repo, '--json', 'url,statusCheckRollup'],
+    cwd,
+  );
+  if (ruw === undefined || ruw === '') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(ruw) as {
+      url?: string;
+      statusCheckRollup?: { state?: string }[];
+    };
+    const url = parsed.url ?? '';
+    // De rollup is een lijst per check; de samenvatting is het slechtste resultaat.
+    const checks = parsed.statusCheckRollup ?? [];
+    const ci =
+      checks.length === 0
+        ? ''
+        : checks.every((c) => c.state === 'SUCCESS')
+          ? 'groen'
+          : checks.some((c) => c.state === 'FAILURE' || c.state === 'ERROR')
+            ? 'rood'
+            : 'lopend';
+    return { url, ci };
+  } catch {
+    return undefined;
+  }
 }
 
 function toonLijst(items: readonly BacklogItem[]): void {
