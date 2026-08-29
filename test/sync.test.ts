@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
+import { syncBestanden } from '../src/paths.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
 
@@ -195,6 +196,25 @@ describe('sync', () => {
       'utf8',
     );
     expect(readFileSync(path.join(app, DEPENDABOT), 'utf8')).toBe(bronInhoud);
+  });
+
+  it('elke syncBestanden-bron zit in de npm "files"-allowlist (#398-regressie)', () => {
+    // De bug van #398: dependabot.yml stond wél in de repo-root maar niet in
+    // package.json "files", dus het factory-pakket leverde het niet mee en
+    // `factory sync` klapte in productie op ENOENT — terwijl de andere tests
+    // (die de bron uit de repo-root lezen) groen bleven. Deze test bewaakt dat
+    // elke losse-bestandskopie ook echt meegepackt wordt.
+    const wortel = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+    const pkg = JSON.parse(readFileSync(path.join(wortel, 'package.json'), 'utf8')) as {
+      files?: string[];
+    };
+    const files = pkg.files ?? [];
+    for (const { bron } of syncBestanden) {
+      const top = bron.split(/[\\/]/)[0]!;
+      expect(files, `syncBestanden-bron '${bron}' ontbreekt in package.json "files"`).toContain(
+        top,
+      );
+    }
   });
 
   it('kopieert een bestandskopie niet opnieuw als die al gelijk staat', () => {
