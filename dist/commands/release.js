@@ -64,5 +64,6 @@ export function release(soortArgument) {
         waarschuwing("Geen remote 'origin'; alleen lokaal getagd.");
     }
     process.stdout.write(`\nPromoveren met:\n  factory promote acc ${tag}\n  factory promote prod ${tag}\n`);
+    return tag;
 }
 //# sourceMappingURL=release.js.map
