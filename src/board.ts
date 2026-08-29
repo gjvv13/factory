@@ -65,6 +65,7 @@ export const KOLOMMEN = [
   'Functioneel uitwerken',
   'Klaar voor technische refinement',
   'Technisch refinen',
+  'Wacht op akkoord',
   'Klaar voor Bouwen',
   'Bouwen',
   'Wacht op merge',
@@ -562,6 +563,12 @@ export interface BacklogItem {
   readonly labels: readonly string[];
   /** Het ouder-issue (sub-issue-relatie), als dit item er een heeft. */
   readonly ouder?: number;
+  /**
+   * Het Prioriteit-veld op het board; undefined als het niet gezet is. Hoe lager het
+   * getal, hoe eerder het item aan de beurt is. Zonder prioriteit behoudt een item zijn
+   * FIFO-volgorde — alsof het getal oneindig is (#438).
+   */
+  readonly prioriteit?: number;
 }
 
 const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
@@ -572,6 +579,7 @@ const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
       nodes{
         status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        prioriteit: fieldValueByName(name:"Prioriteit"){ ... on ProjectV2ItemFieldNumberValue { number } }
         content{ ... on Issue { number title state createdAt
           labels(first:20){ nodes{ name } }
           parent{ number } } } } } } }
@@ -589,6 +597,7 @@ interface WachtrijAntwoord {
           readonly nodes?: {
             status?: { name?: string } | null;
             app?: { name?: string } | null;
+            prioriteit?: { number?: number } | null;
             content?: {
               number?: number;
               title?: string;
@@ -607,6 +616,18 @@ interface WachtrijAntwoord {
 /** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
 export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined {
   return bordItems(cwd)?.filter((item) => item.kolom === kolom);
+}
+
+/**
+ * Sorteert op prioriteit → aangemaakt → issue. Items zonder prioriteit komen na
+ * items mét prioriteit; onderling behouden ze hun FIFO-volgorde (#438).
+ */
+export function sorteerOpPrioriteit(a: BacklogItem, b: BacklogItem): number {
+  return (
+    (a.prioriteit ?? Infinity) - (b.prioriteit ?? Infinity) ||
+    a.aangemaakt.localeCompare(b.aangemaakt) ||
+    a.issue - b.issue
+  );
 }
 
 /**
@@ -689,6 +710,7 @@ export function bordItems(cwd?: string): BacklogItem[] | undefined {
       }
       const app = knoop.app?.name;
       const ouder = inhoud.parent?.number;
+      const prioriteit = knoop.prioriteit?.number;
       const labels = (inhoud.labels?.nodes ?? [])
         .map((label) => label?.name)
         .filter((naam): naam is string => naam !== undefined);
@@ -700,11 +722,12 @@ export function bordItems(cwd?: string): BacklogItem[] | undefined {
         labels,
         ...(app === undefined ? {} : { app }),
         ...(ouder === undefined ? {} : { ouder }),
+        ...(prioriteit === undefined ? {} : { prioriteit }),
       });
     }
     const volgende = items.pageInfo?.endCursor;
     if (items.pageInfo?.hasNextPage !== true || volgende === undefined || volgende === null) {
-      return gevonden.sort((a, b) => a.aangemaakt.localeCompare(b.aangemaakt) || a.issue - b.issue);
+      return gevonden.sort(sorteerOpPrioriteit);
     }
     na = volgende;
   }
@@ -1021,6 +1044,134 @@ export function orkestratorComments(issue: number, markering: string, cwd?: stri
   return bodies.filter(
     (body): body is string => typeof body === 'string' && body.includes(markering),
   );
+}
+
+// --- Prioriteit: het nummer-veld dat de volgorde in de wachtrij stuurt (#438) ---
+
+const PRIORITEIT_QUERY = `query($eigenaar:String!,$repo:String!,$project:Int!,$nummer:Int!){
+  user(login:$eigenaar){ projectV2(number:$project){ id
+    field(name:"Prioriteit"){ ... on ProjectV2Field { id } } } }
+  repository(owner:$eigenaar,name:$repo){ issue(number:$nummer){
+    projectItems(first:10){ nodes { id project { number } } } } }
+}`;
+
+interface PrioriteitDoelwit {
+  readonly itemId: string;
+  readonly projectId: string;
+  readonly veldId: string;
+}
+
+/**
+ * Zoekt het item-id, project-id en Prioriteit-veld-id voor een issue. Geëxporteerd
+ * zodat de tests het kunnen vastpinnen.
+ */
+export function parsePrioriteitAntwoord(ruw: string): PrioriteitDoelwit | undefined {
+  let antwoord: {
+    data?: {
+      user?: {
+        projectV2?: {
+          id?: string;
+          field?: { id?: string } | null;
+        };
+      };
+      repository?: {
+        issue?: {
+          projectItems?: {
+            nodes?: { id?: string; project?: { number?: number } }[];
+          };
+        };
+      };
+    };
+  };
+  try {
+    antwoord = JSON.parse(ruw) as typeof antwoord;
+  } catch {
+    return undefined;
+  }
+  const project = antwoord.data?.user?.projectV2;
+  const projectId = project?.id;
+  const veldId = project?.field?.id;
+  const knoop = antwoord.data?.repository?.issue?.projectItems?.nodes?.find(
+    (node) => node.project?.number === PROJECT_NUMMER,
+  );
+  const itemId = knoop?.id;
+  if (projectId === undefined || veldId === undefined || itemId === undefined) {
+    return undefined;
+  }
+  return { itemId, projectId, veldId };
+}
+
+/** Zoekt de ids die nodig zijn om het Prioriteit-veld te schrijven. */
+function zoekPrioriteitDoelwit(
+  issue: number,
+  cwd?: string,
+  env?: NodeJS.ProcessEnv,
+): PrioriteitDoelwit | undefined {
+  const ruw = uitvoerMetEnv(
+    'gh',
+    [
+      'api',
+      'graphql',
+      '-f',
+      `query=${PRIORITEIT_QUERY}`,
+      '-f',
+      `eigenaar=${EIGENAAR}`,
+      '-f',
+      `repo=${BACKLOG_REPO}`,
+      '-F',
+      `project=${String(PROJECT_NUMMER)}`,
+      '-F',
+      `nummer=${String(issue)}`,
+    ],
+    cwd,
+    env,
+  );
+  if (ruw === undefined || ruw === '') {
+    return undefined;
+  }
+  return parsePrioriteitAntwoord(ruw);
+}
+
+/**
+ * Zet het Prioriteit-veld op het board. Levert true als het gelukt is.
+ * Een `undefined`-waarde wist het veld (terug naar FIFO).
+ */
+export function zetPrioriteit(issue: number, waarde: number | undefined, cwd?: string): boolean {
+  const omgeving = ghOmgeving();
+  if (!omgeving.kan) {
+    waarschuwing(`geen PROJECT_TOKEN — prioriteit van #${String(issue)} niet gezet.`);
+    return false;
+  }
+  const doelwit = zoekPrioriteitDoelwit(issue, cwd, omgeving.env);
+  if (doelwit === undefined) {
+    waarschuwing(`kon #${String(issue)} niet op het board vinden — prioriteit niet gezet.`);
+    return false;
+  }
+  const uitkomst = run(
+    'gh',
+    [
+      'project',
+      'item-edit',
+      '--id',
+      doelwit.itemId,
+      '--project-id',
+      doelwit.projectId,
+      '--field-id',
+      doelwit.veldId,
+      ...(waarde === undefined ? ['--clear'] : ['--number', String(waarde)]),
+    ],
+    {
+      ...(cwd === undefined ? {} : { cwd }),
+      ...(omgeving.env === undefined ? {} : { env: omgeving.env }),
+      capture: true,
+      toleranter: true,
+    },
+  );
+  if (uitkomst.code !== 0) {
+    waarschuwing(`kon prioriteit van #${String(issue)} niet zetten: ${ghReden(uitkomst.stderr)}`);
+    return false;
+  }
+  return true;
 }
 
 /** Haalt een label van een backlog-issue. Faalt zacht. */

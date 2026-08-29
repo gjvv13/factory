@@ -10,6 +10,7 @@
             { "id": "opt-func", "name": "Functioneel uitwerken" },
             { "id": "opt-klaar-ref", "name": "Klaar voor technische refinement" },
             { "id": "opt-refinen", "name": "Technisch refinen" },
+            { "id": "opt-wacht-akkoord", "name": "Wacht op akkoord" },
             { "id": "opt-klaar-bouw", "name": "Klaar voor Bouwen" },
             { "id": "opt-bouwen", "name": "Bouwen" },
             { "id": "opt-wacht-merge", "name": "Wacht op merge" },
