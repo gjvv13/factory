@@ -33,7 +33,7 @@ function leesVersie(repoDir: string): string {
  * Een release is een git-tag waarvan bewezen is dat de poort groen was.
  * Promoveren gebeurt altijd op zo'n tag, nooit op een branch.
  */
-export function release(soortArgument: string | undefined): void {
+export function release(soortArgument: string | undefined): string {
   const soort: Soort = (soortArgument ?? 'patch') as Soort;
   if (!(SOORTEN as readonly string[]).includes(soort)) {
     throw new GebruikersFout(`Gebruik: factory release [${SOORTEN.join('|')}]`);
@@ -98,4 +98,6 @@ export function release(soortArgument: string | undefined): void {
   process.stdout.write(
     `\nPromoveren met:\n  factory promote acc ${tag}\n  factory promote prod ${tag}\n`,
   );
+
+  return tag;
 }
