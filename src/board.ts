@@ -67,6 +67,7 @@ export const KOLOMMEN = [
   'Technisch refinen',
   'Klaar voor Bouwen',
   'Bouwen',
+  'Wacht op merge',
   'Uitrollen',
   'Done',
 ] as const;
