@@ -689,7 +689,7 @@ export function orkestreerStatus(cwd, opties = {}) {
  * niet te lezen is.
  */
 function prStatus(issue, app, cwd) {
-    const repo = app === 'factory' ? `${EIGENAAR}/factory` : `${EIGENAAR}/${app ?? 'factory'}`;
+    const repo = `${EIGENAAR}/${app ?? 'factory'}`;
     const ruw = uitvoerVan('gh', ['pr', 'view', `slice/${String(issue)}-1`, '--repo', repo, '--json', 'url,statusCheckRollup'], cwd);
     if (ruw === undefined || ruw === '') {
         return undefined;
@@ -697,20 +697,28 @@ function prStatus(issue, app, cwd) {
     try {
         const parsed = JSON.parse(ruw);
         const url = parsed.url ?? '';
-        // De rollup is een lijst per check; de samenvatting is het slechtste resultaat.
-        const checks = parsed.statusCheckRollup ?? [];
-        const ci = checks.length === 0
-            ? ''
-            : checks.every((c) => c.state === 'SUCCESS')
-                ? 'groen'
-                : checks.some((c) => c.state === 'FAILURE' || c.state === 'ERROR')
-                    ? 'rood'
-                    : 'lopend';
-        return { url, ci };
+        return { url, ci: ciSamenvatting(parsed.statusCheckRollup ?? []) };
     }
     catch {
         return undefined;
     }
+}
+/**
+ * Vat een statusCheckRollup samen tot 'groen' | 'rood' | 'lopend' | '' (geen checks).
+ * Slechtste resultaat wint: één rode check kleurt het geheel rood; groen pas als élke
+ * check afgerond én groen is; al het overige is nog lopend. CheckRuns (GitHub Actions)
+ * dragen status/conclusion, legacy StatusContexts state — allebei worden gelezen.
+ */
+export function ciSamenvatting(checks) {
+    const isRood = (c) => ['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(c.conclusion ?? '') || ['FAILURE', 'ERROR'].includes(c.state ?? '');
+    const isGroen = (c) => ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.conclusion ?? '') || c.state === 'SUCCESS';
+    if (checks.length === 0) {
+        return '';
+    }
+    if (checks.some(isRood)) {
+        return 'rood';
+    }
+    return checks.every(isGroen) ? 'groen' : 'lopend';
 }
 function toonLijst(items) {
     if (items.length === 0) {

@@ -989,7 +989,7 @@ function prStatus(
   app: string | undefined,
   cwd?: string,
 ): { url: string; ci: string } | undefined {
-  const repo = app === 'factory' ? `${EIGENAAR}/factory` : `${EIGENAAR}/${app ?? 'factory'}`;
+  const repo = `${EIGENAAR}/${app ?? 'factory'}`;
   const ruw = uitvoerVan(
     'gh',
     ['pr', 'view', `slice/${String(issue)}-1`, '--repo', repo, '--json', 'url,statusCheckRollup'],
@@ -1001,23 +1001,44 @@ function prStatus(
   try {
     const parsed = JSON.parse(ruw) as {
       url?: string;
-      statusCheckRollup?: { state?: string }[];
+      // CheckRuns (GitHub Actions) dragen status/conclusion; legacy StatusContexts dragen
+      // state. De rollup mengt beide, dus we lezen alle drie.
+      statusCheckRollup?: { state?: string; status?: string; conclusion?: string }[];
     };
     const url = parsed.url ?? '';
-    // De rollup is een lijst per check; de samenvatting is het slechtste resultaat.
-    const checks = parsed.statusCheckRollup ?? [];
-    const ci =
-      checks.length === 0
-        ? ''
-        : checks.every((c) => c.state === 'SUCCESS')
-          ? 'groen'
-          : checks.some((c) => c.state === 'FAILURE' || c.state === 'ERROR')
-            ? 'rood'
-            : 'lopend';
-    return { url, ci };
+    return { url, ci: ciSamenvatting(parsed.statusCheckRollup ?? []) };
   } catch {
     return undefined;
   }
+}
+
+/** Eén check uit de statusCheckRollup; CheckRuns én legacy StatusContexts. */
+export interface RollupCheck {
+  readonly state?: string;
+  readonly status?: string;
+  readonly conclusion?: string;
+}
+
+/**
+ * Vat een statusCheckRollup samen tot 'groen' | 'rood' | 'lopend' | '' (geen checks).
+ * Slechtste resultaat wint: één rode check kleurt het geheel rood; groen pas als élke
+ * check afgerond én groen is; al het overige is nog lopend. CheckRuns (GitHub Actions)
+ * dragen status/conclusion, legacy StatusContexts state — allebei worden gelezen.
+ */
+export function ciSamenvatting(checks: readonly RollupCheck[]): string {
+  const isRood = (c: RollupCheck): boolean =>
+    ['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(
+      c.conclusion ?? '',
+    ) || ['FAILURE', 'ERROR'].includes(c.state ?? '');
+  const isGroen = (c: RollupCheck): boolean =>
+    ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.conclusion ?? '') || c.state === 'SUCCESS';
+  if (checks.length === 0) {
+    return '';
+  }
+  if (checks.some(isRood)) {
+    return 'rood';
+  }
+  return checks.every(isGroen) ? 'groen' : 'lopend';
 }
 
 function toonLijst(items: readonly BacklogItem[]): void {
