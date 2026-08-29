@@ -12,6 +12,7 @@
             { "id": "opt-refinen", "name": "Technisch refinen" },
             { "id": "opt-klaar-bouw", "name": "Klaar voor Bouwen" },
             { "id": "opt-bouwen", "name": "Bouwen" },
+            { "id": "opt-wacht-merge", "name": "Wacht op merge" },
             { "id": "opt-uitrollen", "name": "Uitrollen" },
             { "id": "opt-done", "name": "Done" }
           ]
