@@ -162,6 +162,7 @@ describe('zoekDoelwit — GraphQL-parse tegen opgenomen respons', () => {
   it('vindt de optie-id voor elke kolom', () => {
     const ruw = leesFixture('graphql-opzoek.json');
 
+    expect(parseOpzoekAntwoord(ruw, 'Wacht op merge')?.optieId).toBe('opt-wacht-merge');
     expect(parseOpzoekAntwoord(ruw, 'Uitrollen')?.optieId).toBe('opt-uitrollen');
     expect(parseOpzoekAntwoord(ruw, 'Done')?.optieId).toBe('opt-done');
     expect(parseOpzoekAntwoord(ruw, 'Idee')?.optieId).toBe('opt-idee');

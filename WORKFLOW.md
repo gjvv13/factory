@@ -31,7 +31,8 @@ Waar een item in de pijplijn staat, is **de kolom op het board** — het veld
 | **Technisch refinen**                | Een werker werkt het uit; daarna wacht het op jouw akkoord | werker, dan jij         |
 | **Klaar voor Bouwen**                | Door jou akkoord bevonden; wachtrij voor de bouwer         | —                       |
 | **Bouwen**                           | Er wordt nu aan gebouwd                                    | de bouwer               |
-| **Uitrollen**                        | Ingeleverd, onderweg naar acc en prod                      | machinaal               |
+| **Wacht op merge**                   | Ingeleverd; PR wacht op merge                              | ja — merge              |
+| **Uitrollen**                        | Gemerged, onderweg naar acc en prod                        | machinaal               |
 | **Done**                             | Draait op prod, gezien                                     | —                       |
 
 De kolommen komen in paren: een **wachtrij** waar niemand aan zet is, en de stap
@@ -124,8 +125,9 @@ Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
 | 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij            |
 | 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue          |
 | 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                     |
-| 7. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen**                                                 |
-| 8. Promoveren  | `pnpm promote`          | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                        |
+| 7. Inleveren   | `factory inleveren`     | in de applicatie | → kolom **Wacht op merge**                                            |
+| 8. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen** (via deploy)                                    |
+| 9. Promoveren  | `pnpm promote`          | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                        |
 
 `/status` geeft het overzicht via het board (per `App`-veld en per kolom).
 

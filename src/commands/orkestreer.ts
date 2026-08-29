@@ -922,6 +922,7 @@ export function orkestreerStatus(
     (item) => item.kolom === WERK_KOLOM && !geblokkeerd.has(item.issue),
   );
   const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
+  const wachtOpMerge = items.filter((item) => item.kolom === 'Wacht op merge');
   const wachtrij = items.filter(
     (item) => item.kolom === WACHTRIJ_KOLOM && !geblokkeerd.has(item.issue),
   );
@@ -960,8 +961,84 @@ export function orkestreerStatus(
     );
   }
 
+  kop(`Wacht op merge (${String(wachtOpMerge.length)})`);
+  if (wachtOpMerge.length === 0) {
+    process.stdout.write('  —\n');
+  } else {
+    for (const item of wachtOpMerge) {
+      toonRegel(item);
+      const pr = prStatus(item.issue, item.app, cwd);
+      if (pr !== undefined) {
+        const ci = pr.ci === '' ? 'onbekend' : pr.ci;
+        process.stdout.write(`         PR: ${pr.url}  CI: ${ci}\n`);
+      }
+    }
+  }
+
   kop(`Wachtrij: ${WACHTRIJ_KOLOM} (${String(wachtrij.length)})`);
   toonLijst(wachtrij);
+}
+
+/**
+ * PR-url en CI-status voor een item op Wacht op merge. Kijkt naar de eerste
+ * slice-branch (`slice/<issue>-1`) in de repo van de app; undefined als de PR
+ * niet te lezen is.
+ */
+function prStatus(
+  issue: number,
+  app: string | undefined,
+  cwd?: string,
+): { url: string; ci: string } | undefined {
+  const repo = `${EIGENAAR}/${app ?? 'factory'}`;
+  const ruw = uitvoerVan(
+    'gh',
+    ['pr', 'view', `slice/${String(issue)}-1`, '--repo', repo, '--json', 'url,statusCheckRollup'],
+    cwd,
+  );
+  if (ruw === undefined || ruw === '') {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(ruw) as {
+      url?: string;
+      // CheckRuns (GitHub Actions) dragen status/conclusion; legacy StatusContexts dragen
+      // state. De rollup mengt beide, dus we lezen alle drie.
+      statusCheckRollup?: { state?: string; status?: string; conclusion?: string }[];
+    };
+    const url = parsed.url ?? '';
+    return { url, ci: ciSamenvatting(parsed.statusCheckRollup ?? []) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Eén check uit de statusCheckRollup; CheckRuns én legacy StatusContexts. */
+export interface RollupCheck {
+  readonly state?: string;
+  readonly status?: string;
+  readonly conclusion?: string;
+}
+
+/**
+ * Vat een statusCheckRollup samen tot 'groen' | 'rood' | 'lopend' | '' (geen checks).
+ * Slechtste resultaat wint: één rode check kleurt het geheel rood; groen pas als élke
+ * check afgerond én groen is; al het overige is nog lopend. CheckRuns (GitHub Actions)
+ * dragen status/conclusion, legacy StatusContexts state — allebei worden gelezen.
+ */
+export function ciSamenvatting(checks: readonly RollupCheck[]): string {
+  const isRood = (c: RollupCheck): boolean =>
+    ['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE'].includes(
+      c.conclusion ?? '',
+    ) || ['FAILURE', 'ERROR'].includes(c.state ?? '');
+  const isGroen = (c: RollupCheck): boolean =>
+    ['SUCCESS', 'SKIPPED', 'NEUTRAL'].includes(c.conclusion ?? '') || c.state === 'SUCCESS';
+  if (checks.length === 0) {
+    return '';
+  }
+  if (checks.some(isRood)) {
+    return 'rood';
+  }
+  return checks.every(isGroen) ? 'groen' : 'lopend';
 }
 
 function toonLijst(items: readonly BacklogItem[]): void {

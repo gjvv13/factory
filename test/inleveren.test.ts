@@ -58,13 +58,16 @@ const gelukkig: UitkomstBepaler = ({ commando, argumenten }) => {
   return {};
 };
 
-/** Antwoord van de board-opzoeking: het item staat op Bouwen, doel is Uitrollen. */
+/** Antwoord van de board-opzoeking: het item staat op Bouwen, doel is Wacht op merge. */
 const BOARD_ANTWOORD = JSON.stringify({
   data: {
     user: {
       projectV2: {
         id: 'PVT_test',
-        field: { id: 'PVTSSF_test', options: [{ id: 'optie-uitrollen', name: 'Uitrollen' }] },
+        field: {
+          id: 'PVTSSF_test',
+          options: [{ id: 'optie-wacht-merge', name: 'Wacht op merge' }],
+        },
       },
     },
     repository: {
@@ -335,7 +338,7 @@ describe('inleveren', () => {
     }).toThrow(/niets nieuws/);
   });
 
-  it('zet het board niet naar Uitrollen als er geen open PR is', () => {
+  it('zet het board niet naar Wacht op merge als er geen open PR is', () => {
     process.chdir(maakRepo());
     const bepaal: UitkomstBepaler = (aanroep) => {
       if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'view') {
@@ -493,7 +496,7 @@ describe('inleveren', () => {
     expect(uitvoer).toContain('integreert slice/58-1 serieel naar main');
   });
 
-  it('zet het backlog-item op Uitrollen en meldt de PR erbij', () => {
+  it('zet het backlog-item op Wacht op merge en meldt de PR erbij', () => {
     process.chdir(maakRepo());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkigMetBoard);
     stelUitvoerderIn(uitvoerder);
@@ -511,7 +514,7 @@ describe('inleveren', () => {
       '--field-id',
       'PVTSSF_test',
       '--single-select-option-id',
-      'optie-uitrollen',
+      'optie-wacht-merge',
     ]);
     const comment = argsVan(aanroepen, 'gh').find((a) => a[0] === 'issue' && a[1] === 'comment');
     expect(comment?.slice(0, 5)).toEqual(['issue', 'comment', '58', '--repo', 'gjvv13/factory']);

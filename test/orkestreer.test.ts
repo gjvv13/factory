@@ -18,6 +18,7 @@ import {
   bouwNachtScript,
   bouwOrkestreerPlist,
   bouwPrompt,
+  ciSamenvatting,
   eigenVersie,
   escalatieComment,
   leesEscalatie,
@@ -2010,5 +2011,40 @@ describe('bouwPrompt (refine)', () => {
 
     expect(prompt).toContain('assistant, beheer, factory');
     expect(prompt).not.toContain('{{BEKENDE_APPS}}');
+  });
+});
+
+describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {
+  it('leest CheckRuns (Actions) uit conclusion/status, niet uit state', () => {
+    // GitHub Actions-checks dragen status/conclusion; `state` is afwezig. Een eerdere
+    // versie las alleen `state` en rapporteerde een groene PR daardoor als 'lopend' (#437).
+    const groen = [
+      { name: 'verify', status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { name: 'auto-merge', status: 'COMPLETED', conclusion: 'SKIPPED' },
+    ];
+    expect(ciSamenvatting(groen)).toBe('groen');
+  });
+
+  it('een gefaalde check kleurt het geheel rood', () => {
+    const rood = [
+      { status: 'COMPLETED', conclusion: 'SUCCESS' },
+      { status: 'COMPLETED', conclusion: 'FAILURE' },
+    ];
+    expect(ciSamenvatting(rood)).toBe('rood');
+  });
+
+  it('een nog lopende check is lopend', () => {
+    const lopend = [{ status: 'COMPLETED', conclusion: 'SUCCESS' }, { status: 'IN_PROGRESS' }];
+    expect(ciSamenvatting(lopend)).toBe('lopend');
+  });
+
+  it('valt terug op state voor legacy StatusContexts', () => {
+    expect(ciSamenvatting([{ state: 'SUCCESS' }])).toBe('groen');
+    expect(ciSamenvatting([{ state: 'FAILURE' }])).toBe('rood');
+    expect(ciSamenvatting([{ state: 'PENDING' }])).toBe('lopend');
+  });
+
+  it('geeft leeg terug zonder checks', () => {
+    expect(ciSamenvatting([])).toBe('');
   });
 });

@@ -1,5 +1,5 @@
 /** De kolommen van het board, in pijplijnvolgorde. Zie WORKFLOW.md. */
-export declare const KOLOMMEN: readonly ["Idee", "Functioneel uitwerken", "Klaar voor technische refinement", "Technisch refinen", "Klaar voor Bouwen", "Bouwen", "Uitrollen", "Done"];
+export declare const KOLOMMEN: readonly ["Idee", "Functioneel uitwerken", "Klaar voor technische refinement", "Technisch refinen", "Klaar voor Bouwen", "Bouwen", "Wacht op merge", "Uitrollen", "Done"];
 export type Kolom = (typeof KOLOMMEN)[number];
 /**
  * Of de huidige repo de backlog-repo (`gjvv13/factory`) zelf is.

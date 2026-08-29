@@ -107,6 +107,19 @@ export declare function leesEscalatie(comment: string): Escalatie | undefined;
 export declare function orkestreerStatus(cwd: string, opties?: {
     readonly paden?: OrkestratorPaden;
 }): void;
+/** Eén check uit de statusCheckRollup; CheckRuns én legacy StatusContexts. */
+export interface RollupCheck {
+    readonly state?: string;
+    readonly status?: string;
+    readonly conclusion?: string;
+}
+/**
+ * Vat een statusCheckRollup samen tot 'groen' | 'rood' | 'lopend' | '' (geen checks).
+ * Slechtste resultaat wint: één rode check kleurt het geheel rood; groen pas als élke
+ * check afgerond én groen is; al het overige is nog lopend. CheckRuns (GitHub Actions)
+ * dragen status/conclusion, legacy StatusContexts state — allebei worden gelezen.
+ */
+export declare function ciSamenvatting(checks: readonly RollupCheck[]): string;
 export interface AntwoordOpties {
     /** Begin een verse sessie in plaats van de bestaande te hervatten. */
     readonly opnieuw?: boolean;

@@ -143,13 +143,13 @@ export function inleveren(opties = {}) {
             throw new GebruikersFout(reden);
         }
     }
-    // Het item schuift zelf mee (#128). Vanaf hier is de slice ingeleverd en dus onderweg
-    // naar acc en prod; dat is precies wat de kolom Uitrollen betekent. Een branch zonder
+    // Het item schuift zelf mee (#128). Vanaf hier wacht de slice op de merge — de
+    // menselijke poort die bepaalt of het de main bereikt. Een branch zonder
     // slice-vorm hoort bij geen enkel backlog-item en verschuift daarom niets.
     const issue = issueUitBranch(branch);
-    if (issue !== undefined && zetKolom(issue, 'Uitrollen', repoDir)) {
+    if (issue !== undefined && zetKolom(issue, 'Wacht op merge', repoDir)) {
         plaatsComment(issue, `Ingeleverd via \`factory inleveren\`: ${prUrl}`, repoDir);
-        ok(`#${String(issue)} staat op Uitrollen`);
+        ok(`#${String(issue)} staat op Wacht op merge`);
     }
     // Nu opzoeken, zolang de map er nog is: het opruimen hieronder maakt hem onvindbaar.
     const werkplek = werkplekVanSessie(repoDir);
