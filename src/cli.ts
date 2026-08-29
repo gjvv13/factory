@@ -9,6 +9,7 @@ import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
+import { prioriteit } from './commands/prioriteit.js';
 import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
 import { orkestreerAccepteer } from './commands/orkestreer-accepteer.js';
 import {
@@ -58,6 +59,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
   factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
+  factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
@@ -223,6 +225,11 @@ async function main(argumenten: string[]): Promise<void> {
     case 'splits': {
       const { positioneel } = leesArgumenten(rest);
       splits(positioneel[0]);
+      return;
+    }
+    case 'prioriteit': {
+      const { positioneel } = leesArgumenten(rest);
+      prioriteit(positioneel[0], positioneel[1]);
       return;
     }
     case 'board': {

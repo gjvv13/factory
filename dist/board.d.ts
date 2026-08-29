@@ -1,5 +1,5 @@
 /** De kolommen van het board, in pijplijnvolgorde. Zie WORKFLOW.md. */
-export declare const KOLOMMEN: readonly ["Idee", "Functioneel uitwerken", "Klaar voor technische refinement", "Technisch refinen", "Klaar voor Bouwen", "Bouwen", "Wacht op merge", "Uitrollen", "Done"];
+export declare const KOLOMMEN: readonly ["Idee", "Functioneel uitwerken", "Klaar voor technische refinement", "Technisch refinen", "Wacht op akkoord", "Klaar voor Bouwen", "Bouwen", "Wacht op merge", "Uitrollen", "Done"];
 export type Kolom = (typeof KOLOMMEN)[number];
 /**
  * Of de huidige repo de backlog-repo (`gjvv13/factory`) zelf is.
@@ -173,9 +173,20 @@ export interface BacklogItem {
     readonly labels: readonly string[];
     /** Het ouder-issue (sub-issue-relatie), als dit item er een heeft. */
     readonly ouder?: number;
+    /**
+     * Het Prioriteit-veld op het board; undefined als het niet gezet is. Hoe lager het
+     * getal, hoe eerder het item aan de beurt is. Zonder prioriteit behoudt een item zijn
+     * FIFO-volgorde — alsof het getal oneindig is (#438).
+     */
+    readonly prioriteit?: number;
 }
 /** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
 export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;
+/**
+ * Sorteert op prioriteit → aangemaakt → issue. Items zonder prioriteit komen na
+ * items mét prioriteit; onderling behouden ze hun FIFO-volgorde (#438).
+ */
+export declare function sorteerOpPrioriteit(a: BacklogItem, b: BacklogItem): number;
 /**
  * Alle open items op het board, met hun kolom, oudste eerst — in één query.
  *
@@ -274,5 +285,21 @@ export declare function zetItemsUitBereikOpDone(vanaf: string, tag: string, item
  * terug staan bij het onderwerp waar ze over gaan.
  */
 export declare function orkestratorComments(issue: number, markering: string, cwd?: string): string[];
+interface PrioriteitDoelwit {
+    readonly itemId: string;
+    readonly projectId: string;
+    readonly veldId: string;
+}
+/**
+ * Zoekt het item-id, project-id en Prioriteit-veld-id voor een issue. Geëxporteerd
+ * zodat de tests het kunnen vastpinnen.
+ */
+export declare function parsePrioriteitAntwoord(ruw: string): PrioriteitDoelwit | undefined;
+/**
+ * Zet het Prioriteit-veld op het board. Levert true als het gelukt is.
+ * Een `undefined`-waarde wist het veld (terug naar FIFO).
+ */
+export declare function zetPrioriteit(issue: number, waarde: number | undefined, cwd?: string): boolean;
 /** Haalt een label van een backlog-issue. Faalt zacht. */
 export declare function haalLabelWeg(issue: number, label: string, cwd?: string): void;
+export {};

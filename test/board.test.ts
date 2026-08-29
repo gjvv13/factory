@@ -13,9 +13,11 @@ import {
   ouderVan,
   plaatsComment,
   sluitIssue,
+  sorteerOpPrioriteit,
   zetItemsUitBereikOpDone,
   zetKolomUitkomst,
   zetKolom,
+  type BacklogItem,
 } from '../src/board.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
@@ -763,5 +765,54 @@ describe('appOpties', () => {
     bordItems();
 
     expect(appOpties()).toBeUndefined();
+  });
+});
+
+describe('sorteerOpPrioriteit (#438)', () => {
+  function item(overrides: Partial<BacklogItem> & { issue: number }): BacklogItem {
+    return {
+      titel: `titel ${String(overrides.issue)}`,
+      kolom: 'Klaar voor technische refinement',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: [],
+      ...overrides,
+    };
+  }
+
+  it('sorteert items met prioriteit vóór items zonder', () => {
+    const a = item({ issue: 10, prioriteit: 5 });
+    const b = item({ issue: 20 }); // geen prioriteit → Infinity
+    expect([b, a].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([10, 20]);
+  });
+
+  it('sorteert op prioriteit, daarna op aangemaakt', () => {
+    const a = item({ issue: 1, prioriteit: 10, aangemaakt: '2026-08-02T00:00:00Z' });
+    const b = item({ issue: 2, prioriteit: 10, aangemaakt: '2026-08-01T00:00:00Z' });
+    const c = item({ issue: 3, prioriteit: 5 });
+    expect([a, b, c].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([3, 2, 1]);
+  });
+
+  it('behoudt FIFO-volgorde voor items zonder prioriteit', () => {
+    const a = item({ issue: 1, aangemaakt: '2026-08-01T00:00:00Z' });
+    const b = item({ issue: 2, aangemaakt: '2026-08-02T00:00:00Z' });
+    const c = item({ issue: 3, aangemaakt: '2026-08-03T00:00:00Z' });
+    expect([c, a, b].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([1, 2, 3]);
+  });
+
+  it('gebruikt issue als tiebreaker bij gelijke prioriteit en aangemaakt', () => {
+    const a = item({ issue: 10, prioriteit: 5 });
+    const b = item({ issue: 5, prioriteit: 5 });
+    expect([a, b].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([5, 10]);
+  });
+
+  it('leeg Prioriteit-veld gedraagt zich identiek aan FIFO', () => {
+    // Acceptatiecriterium: items zonder prioriteit behouden hun huidige volgorde.
+    const items = [
+      item({ issue: 51, aangemaakt: '2026-08-09T00:00:00Z' }),
+      item({ issue: 119, aangemaakt: '2026-08-18T00:00:00Z' }),
+      item({ issue: 131, aangemaakt: '2026-08-19T00:00:00Z' }),
+    ];
+    const gesorteerd = [...items].sort(sorteerOpPrioriteit);
+    expect(gesorteerd.map((i) => i.issue)).toEqual([51, 119, 131]);
   });
 });

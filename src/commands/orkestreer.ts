@@ -827,7 +827,15 @@ function blokkeer(item: { readonly issue: number }, cwd: string): void {
   zetLabel(item.issue, ESCALATIE_LABEL, cwd);
 }
 
-/** Schrijft de uitwerking weg en zet het item op wachten-op-akkoord. */
+/**
+ * Of een body een `wacht op #<nummer>`-verwijzing bevat. Zo ja, dan hoort het item
+ * op _Wacht op akkoord_ in plaats van rechtstreeks naar _Klaar voor Bouwen_ (#438).
+ */
+export function heeftWachtOp(body: string): boolean {
+  return /wacht op #\d+/i.test(body);
+}
+
+/** Schrijft de uitwerking weg en zet het item op de juiste kolom. */
 function rondAf(
   issue: number,
   body: string,
@@ -853,16 +861,22 @@ function rondAf(
     return 'mislukt';
   }
 
-  zetKolom(issue, WERK_KOLOM, cwd);
+  // Schone uitwerkingen gaan rechtstreeks naar de bouw-wachtrij; uitwerkingen die
+  // "wacht op #N" bevatten moeten eerst langs jouw ogen (#438).
+  const doelKolom: Kolom = heeftWachtOp(body) ? 'Wacht op akkoord' : 'Klaar voor Bouwen';
+  zetKolom(issue, doelKolom, cwd);
   haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
   plaatsComment(
     issue,
     `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
-      `${samenvatting}\n\nHet item staat op **${WERK_KOLOM}** en wacht op je akkoord; ` +
-      `dat akkoord is het verplaatsen naar **Klaar voor Bouwen**.\n\n${voetnoot(uitkomst, werkmap)}`,
+      `${samenvatting}\n\nHet item staat op **${doelKolom}**` +
+      (doelKolom === 'Klaar voor Bouwen'
+        ? '.'
+        : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
+      `\n\n${voetnoot(uitkomst, werkmap)}`,
     cwd,
   );
-  ok(`#${String(issue)} uitgewerkt en op ${WERK_KOLOM}`);
+  ok(`#${String(issue)} uitgewerkt en op ${doelKolom}`);
   return 'klaar';
 }
 
@@ -921,6 +935,9 @@ export function orkestreerStatus(
   const wachtOpAkkoord = items.filter(
     (item) => item.kolom === WERK_KOLOM && !geblokkeerd.has(item.issue),
   );
+  const wachtOpAkkKolom = items.filter(
+    (item) => item.kolom === 'Wacht op akkoord' && !geblokkeerd.has(item.issue),
+  );
   const vastgelopen = items.filter((item) => geblokkeerd.has(item.issue));
   const wachtOpMerge = items.filter((item) => item.kolom === 'Wacht op merge');
   const wachtrij = items.filter(
@@ -960,6 +977,9 @@ export function orkestreerStatus(
       `         Antwoorden: factory orkestreer antwoord ${String(item.issue)} "<jouw keuze>"\n`,
     );
   }
+
+  kop(`Wacht op akkoord (${String(wachtOpAkkKolom.length)})`);
+  toonLijst(wachtOpAkkKolom);
 
   kop(`Wacht op merge (${String(wachtOpMerge.length)})`);
   if (wachtOpMerge.length === 0) {

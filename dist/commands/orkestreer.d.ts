@@ -99,6 +99,11 @@ export declare function laatsteEscalatie(issue: number, cwd: string): Escalatie 
  */
 export declare function leesEscalatie(comment: string): Escalatie | undefined;
 /**
+ * Of een body een `wacht op #<nummer>`-verwijzing bevat. Zo ja, dan hoort het item
+ * op _Wacht op akkoord_ in plaats van rechtstreeks naar _Klaar voor Bouwen_ (#438).
+ */
+export declare function heeftWachtOp(body: string): boolean;
+/**
  * Toont in één blik waar iedereen op wacht: op jou, op een antwoord, of op een werker.
  *
  * Eén board-lezing voor alle drie de blokken; het escalatie-blok haalt zijn vraag en

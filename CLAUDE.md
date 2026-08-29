@@ -31,6 +31,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory nieuw <naam>`                                | Nieuwe applicatie uit het skeleton, met een vrij poortblok                                                |
 | `factory splits <issue>`                              | Multi-slice-refinement opsplitsen in child-issues onder een epic (#378)                                   |
 | `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
+| `factory prioriteit <issue> [getal]`                  | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                  |
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
 | `factory opruimen [--dry]`                            | Gemergede branches opruimen: lokaal en op de remote                                                       |
 | `factory orkestreer <--dry\|--eenmalig>`              | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |

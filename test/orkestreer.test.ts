@@ -99,6 +99,7 @@ function doelwitAntwoord(huidig: string): string {
             options: [
               { id: 'optie-wachtrij', name: 'Klaar voor technische refinement' },
               { id: 'optie-technisch', name: 'Technisch refinen' },
+              { id: 'optie-wacht-akkoord', name: 'Wacht op akkoord' },
               { id: 'optie-bouwen', name: 'Klaar voor Bouwen' },
             ],
           },
@@ -193,8 +194,12 @@ function bepaler(
     }
     if (commando === 'gh' && argumenten[0] === 'project') {
       const optie = argumenten[argumenten.indexOf('--single-select-option-id') + 1];
-      huidig =
-        optie === 'optie-technisch' ? 'Technisch refinen' : 'Klaar voor technische refinement';
+      const OPTIE_MAP: Record<string, string> = {
+        'optie-technisch': 'Technisch refinen',
+        'optie-wacht-akkoord': 'Wacht op akkoord',
+        'optie-bouwen': 'Klaar voor Bouwen',
+      };
+      huidig = OPTIE_MAP[optie ?? ''] ?? 'Klaar voor technische refinement';
       return {};
     }
     if (commando === 'gh' && argumenten[0] === 'api') return { stdout: opties.escalaties ?? '' };
@@ -408,7 +413,7 @@ describe('orkestreer', () => {
     expect(boardLezingen(aanroepen)).toBe(1);
   });
 
-  it('werkt het oudste item af en laat het op Technisch refinen wachten', async () => {
+  it('werkt het oudste item af en zet het op Klaar voor Bouwen (#438)', async () => {
     const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
 
     await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
@@ -422,20 +427,40 @@ describe('orkestreer', () => {
     );
     // …en er komt precies één comment bij.
     expect(ghArgs(aanroepen).filter((a) => a[0] === 'issue' && a[1] === 'comment')).toHaveLength(1);
+    // Schone body → Klaar voor Bouwen, niet Wacht op akkoord.
+    const opties = aanroepen
+      .filter((a) => a.argumenten[0] === 'project')
+      .map((a) => a.argumenten[a.argumenten.indexOf('--single-select-option-id') + 1]);
+    expect(opties).toContain('optie-bouwen');
   });
 
-  it('promoveert nooit naar Klaar voor Bouwen', async () => {
-    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
+  it('zet een body met "wacht op #N" op Wacht op akkoord (#438)', async () => {
+    const wachtVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Uitgewerkt maar wacht op iets.',
+        slices: 2,
+        body: '# Uitwerking\n\nDeze slice wacht op #100 (de API-laag).',
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: wachtVerdict }));
 
     await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
 
-    // Voor een refinement bestaat geen verify die hem kan afkeuren; de enige poort is
-    // de gebruiker. Een werker die zijn eigen werk goedkeurt heeft geen poort meer.
-    const zoekQueries = aanroepen.flatMap((a) =>
-      a.argumenten.filter((arg) => arg.startsWith('query=')),
-    );
-    expect(zoekQueries.join('')).not.toContain('Klaar voor Bouwen');
-    expect(uitvoer.join('')).not.toContain('Klaar voor Bouwen\n');
+    const opties = aanroepen
+      .filter((a) => a.argumenten[0] === 'project')
+      .map((a) => a.argumenten[a.argumenten.indexOf('--single-select-option-id') + 1]);
+    // Eerst naar Technisch refinen (begin werkAf), dan naar Wacht op akkoord (rondAf).
+    expect(opties).toContain('optie-wacht-akkoord');
+    expect(opties).not.toContain('optie-bouwen');
   });
 
   it('rekent een run met is_error als mislukt, ook bij exitcode 0', async () => {
@@ -717,6 +742,7 @@ describe('orkestreer status', () => {
     boardItem(51, 'assistant', 'Klaar voor technische refinement', '2026-08-09T00:00:00Z'),
     boardItem(96, 'beheer', 'Technisch refinen', '2026-08-10T00:00:00Z'),
     boardItem(119, 'assistant', 'Klaar voor technische refinement', '2026-08-18T00:00:00Z'),
+    boardItem(200, 'factory', 'Wacht op akkoord', '2026-08-20T00:00:00Z'),
   ];
 
   const statusBepaler: UitkomstBepaler = ({ commando, argumenten }) => {
@@ -768,7 +794,7 @@ describe('orkestreer status', () => {
     expect(tekst).toMatch(/zelf gestart:\s+2/);
   });
 
-  it('toont drie blokken en zet elk item in precies één', () => {
+  it('toont vier blokken en zet elk item in precies één (#438)', () => {
     zetBeideUitvoerdersOp(statusBepaler);
 
     orkestreerStatus('/repo', { paden: statusPaden });
@@ -778,6 +804,9 @@ describe('orkestreer status', () => {
     // escalatie-blok en niet in de rij — anders lijkt het alsof hij zo aan de beurt is.
     expect(tekst).toMatch(/wacht op jouw akkoord \(1\)/);
     expect(tekst).toMatch(/wacht op een antwoord \(1\)/);
+    // De nieuwe Wacht op akkoord-kolom (#438).
+    expect(tekst).toMatch(/Wacht op akkoord \(1\)/);
+    expect(tekst).toContain('#200');
     expect(tekst).toMatch(/Klaar voor technische refinement \(1\)/);
     expect(tekst.indexOf('#96')).toBeLessThan(tekst.indexOf('#51'));
     expect(tekst.indexOf('#51')).toBeLessThan(tekst.indexOf('#119'));
