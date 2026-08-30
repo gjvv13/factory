@@ -28,6 +28,12 @@ export interface Config {
   readonly migrationsDir: string;
   readonly fixturesDir: string;
   readonly version: string;
+  /** Sleutels die de app verwacht in het env-bestand. */
+  readonly verwachteSleutels: readonly string[];
+  /** Omgevingssleutels die aanwezig zijn (naam, nooit waarde). */
+  readonly presentKeys: readonly string[];
+  /** Subset van presentKeys waarvan de waarde een lege string is. */
+  readonly emptyKeys: readonly string[];
 }
 
 function readVersion(rootDir: string): string {
@@ -57,7 +63,10 @@ export const GEHEIME_SLEUTELS: readonly string[] = [];
  * Faalt hard bij ongeldige waarden: een verkeerd geconfigureerde omgeving
  * mag nooit half opstarten.
  */
-export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(
+  source: NodeJS.ProcessEnv = process.env,
+  opties: { readonly verwachteSleutels?: readonly string[] } = {},
+): Config {
   const parsed = environmentSchema.safeParse(source);
   if (!parsed.success) {
     const details = parsed.error.issues
@@ -67,6 +76,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   }
   const env = parsed.data;
   const rootDir = path.resolve(env.ROOT_DIR);
+
+  // Leg vast welke omgevingssleutels aanwezig zijn en welke leeg — alleen
+  // namen, nooit waarden. Gebruikt door /admin/config om de gezondheid van
+  // de configuratie te tonen zonder geheimen prijs te geven.
+  const presentKeys = Object.keys(source).filter((k) => k in source);
+  const emptyKeys = presentKeys.filter((k) => source[k] === '');
 
   return {
     environment: env.FACTORY_ENV,
@@ -81,5 +96,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     migrationsDir: path.join(rootDir, 'migrations'),
     fixturesDir: path.join(rootDir, 'app', 'test', 'fixtures'),
     version: readVersion(rootDir),
+    // De override laat een test één verwachte sleutel declareren zonder de
+    // productie-const aan te raken; zo is het `incomplete`-pad door de echte
+    // config-bedrading te testen (#106). Zonder override: de const.
+    verwachteSleutels: opties.verwachteSleutels ?? VERWACHTE_SLEUTELS,
+    presentKeys,
+    emptyKeys,
   };
 }

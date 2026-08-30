@@ -1,8 +1,10 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Application } from '../app.js';
+import { adminStatusRoutes } from './routes/admin-status.js';
 import { flagRoutes } from './routes/flags.js';
 import { healthRoutes } from './routes/health.js';
 import { inboundRoutes } from './routes/inbound.js';
+import { logLevelRoutes } from './routes/log-level.js';
 import { logRoutes } from './routes/logs.js';
 
 export function buildServer(app: Application): FastifyInstance {
@@ -13,6 +15,8 @@ export function buildServer(app: Application): FastifyInstance {
   server.register(healthRoutes(app));
   server.register(flagRoutes(app));
   server.register(logRoutes(app));
+  server.register(adminStatusRoutes(app));
+  server.register(logLevelRoutes(app));
   server.register(inboundRoutes(app));
 
   server.setNotFoundHandler((request, reply) => {
