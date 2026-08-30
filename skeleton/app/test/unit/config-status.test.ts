@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { configReport } from '../../src/core/config-status.js';
+import { loadConfig } from '../../src/config.js';
 
 describe('configReport', () => {
   it('geeft ok als alle verwachte sleutels aanwezig en niet-leeg zijn', () => {
@@ -72,5 +73,47 @@ describe('configReport', () => {
     for (const key of report.empty) {
       expect(typeof key).toBe('string');
     }
+  });
+
+  it('geeft incomplete via de skeleton-config als een verwachte sleutel ontbreekt', () => {
+    // Simuleer een app die VERWACHTE_SLEUTELS heeft aangevuld met één sleutel
+    // (zoals een echte app zou doen na factory nieuw). De env bevat die sleutel
+    // niet, dus configReport moet incomplete teruggeven.
+    const config = loadConfig({
+      FACTORY_ENV: 'test',
+      DATABASE_FILE: ':memory:',
+      LOG_LEVEL: 'silent',
+    });
+
+    // De skeleton-config legt presentKeys en emptyKeys vast uit de bron-env.
+    // Voeg één verwachte sleutel toe die niet in de env staat.
+    const report = configReport(
+      ['ONTBREKENDE_SLEUTEL'],
+      config.presentKeys,
+      config.emptyKeys,
+    );
+
+    expect(report.status).toBe('incomplete');
+    expect(report.missing).toEqual(['ONTBREKENDE_SLEUTEL']);
+  });
+
+  it('geeft incomplete via de skeleton-config als een verwachte sleutel leeg is', () => {
+    // Bron-env bevat de sleutel maar met een lege waarde.
+    const config = loadConfig({
+      FACTORY_ENV: 'test',
+      DATABASE_FILE: ':memory:',
+      LOG_LEVEL: 'silent',
+      LEGE_SLEUTEL: '',
+    });
+
+    const report = configReport(
+      ['LEGE_SLEUTEL'],
+      config.presentKeys,
+      config.emptyKeys,
+    );
+
+    expect(report.status).toBe('incomplete');
+    expect(report.empty).toEqual(['LEGE_SLEUTEL']);
+    expect(report.missing).toEqual([]);
   });
 });
