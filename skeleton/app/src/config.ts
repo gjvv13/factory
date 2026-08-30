@@ -63,7 +63,10 @@ export const GEHEIME_SLEUTELS: readonly string[] = [];
  * Faalt hard bij ongeldige waarden: een verkeerd geconfigureerde omgeving
  * mag nooit half opstarten.
  */
-export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
+export function loadConfig(
+  source: NodeJS.ProcessEnv = process.env,
+  opties: { readonly verwachteSleutels?: readonly string[] } = {},
+): Config {
   const parsed = environmentSchema.safeParse(source);
   if (!parsed.success) {
     const details = parsed.error.issues
@@ -93,7 +96,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     migrationsDir: path.join(rootDir, 'migrations'),
     fixturesDir: path.join(rootDir, 'app', 'test', 'fixtures'),
     version: readVersion(rootDir),
-    verwachteSleutels: VERWACHTE_SLEUTELS,
+    // De override laat een test één verwachte sleutel declareren zonder de
+    // productie-const aan te raken; zo is het `incomplete`-pad door de echte
+    // config-bedrading te testen (#106). Zonder override: de const.
+    verwachteSleutels: opties.verwachteSleutels ?? VERWACHTE_SLEUTELS,
     presentKeys,
     emptyKeys,
   };

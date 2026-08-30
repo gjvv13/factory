@@ -20,13 +20,19 @@ export interface TestApp {
  * Volledige applicatie op een in-memory database. Geen netwerk, geen bestanden:
  * snel genoeg om per test een verse instantie te maken.
  */
-export async function createTestApp(clock: Clock = fixedClock(TEST_INSTANT)): Promise<TestApp> {
-  const config = loadConfig({
-    FACTORY_ENV: 'test',
-    DATABASE_FILE: ':memory:',
-    LOG_LEVEL: 'silent',
-    FLAG_CACHE_TTL_MS: '0',
-  });
+export async function createTestApp(
+  clock: Clock = fixedClock(TEST_INSTANT),
+  opties: { readonly verwachteSleutels?: readonly string[] } = {},
+): Promise<TestApp> {
+  const config = loadConfig(
+    {
+      FACTORY_ENV: 'test',
+      DATABASE_FILE: ':memory:',
+      LOG_LEVEL: 'silent',
+      FLAG_CACHE_TTL_MS: '0',
+    },
+    opties,
+  );
   const app = createApplication(config, { clock, logger: silentLogger });
   const reloadTestData = (): void => {
     loadTestData(app.db, config.fixturesDir, clock.now());
