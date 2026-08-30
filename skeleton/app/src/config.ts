@@ -28,6 +28,12 @@ export interface Config {
   readonly migrationsDir: string;
   readonly fixturesDir: string;
   readonly version: string;
+  /** Sleutels die de app verwacht in het env-bestand. */
+  readonly verwachteSleutels: readonly string[];
+  /** Omgevingssleutels die aanwezig zijn (naam, nooit waarde). */
+  readonly presentKeys: readonly string[];
+  /** Subset van presentKeys waarvan de waarde een lege string is. */
+  readonly emptyKeys: readonly string[];
 }
 
 function readVersion(rootDir: string): string {
@@ -68,6 +74,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   const env = parsed.data;
   const rootDir = path.resolve(env.ROOT_DIR);
 
+  // Leg vast welke omgevingssleutels aanwezig zijn en welke leeg — alleen
+  // namen, nooit waarden. Gebruikt door /admin/config om de gezondheid van
+  // de configuratie te tonen zonder geheimen prijs te geven.
+  const presentKeys = Object.keys(source).filter((k) => k in source);
+  const emptyKeys = presentKeys.filter((k) => source[k] === '');
+
   return {
     environment: env.FACTORY_ENV,
     host: env.HOST,
@@ -81,5 +93,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     migrationsDir: path.join(rootDir, 'migrations'),
     fixturesDir: path.join(rootDir, 'app', 'test', 'fixtures'),
     version: readVersion(rootDir),
+    verwachteSleutels: VERWACHTE_SLEUTELS,
+    presentKeys,
+    emptyKeys,
   };
 }
