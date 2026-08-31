@@ -1,0 +1,48 @@
+# Spike #367 — native GitHub @claude-integratie naast de eigen factory.
+#
+# TIJDELIJK. Dit bestand hoort bij de spike die onderzoekt of de native
+# @claude-actie een deel van de factory-orkestratie kan vervangen/aanvullen.
+# Bij een no-go wordt dit bestand weer verwijderd (zie de acceptatiecriteria in
+# issue #367). Niet als vast onderdeel van de pijplijn behandelen.
+#
+# Auth: draait op een OAuth-token van het Claude-abonnement, als repo-secret
+# CLAUDE_CODE_OAUTH_TOKEN. De token-waarde staat alleen in GitHub, nergens in code.
+name: Claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  claude:
+    # Alleen een runner starten als er echt "@claude" in de trigger staat —
+    # anders draait dit op elke comment (verspilde runs, zie de efficiency-les
+    # uit de bump-factory-cron #99).
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
