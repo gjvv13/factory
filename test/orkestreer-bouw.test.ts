@@ -1350,6 +1350,56 @@ describe('orkestreer --soort bouw --nacht', () => {
     // En er start geen enkele bouw-run: `draaiReeks` wordt niet bereikt, dus geen `claude`.
     expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
   });
+
+  it('logt een waarschuwing bij een versie-mismatch met FACTORY_VERWACHTE_VERSIE (#375)', async () => {
+    zetBeideUitvoerdersOp(({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql'
+        ? { stdout: bord() }
+        : {},
+    );
+
+    // Simuleer een mislukte zelf-update: de env var zegt welke versie verwacht werd,
+    // maar de draaiende bin is een andere.
+    const vorige = process.env['FACTORY_VERWACHTE_VERSIE'];
+    process.env['FACTORY_VERWACHTE_VERSIE'] = '99.99.99';
+    try {
+      await orkestreerBouw({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    } finally {
+      if (vorige === undefined) {
+        delete process.env['FACTORY_VERWACHTE_VERSIE'];
+      } else {
+        process.env['FACTORY_VERWACHTE_VERSIE'] = vorige;
+      }
+    }
+
+    // De waarschuwing verschijnt in de uitvoer en in het log.
+    expect(uitvoer.join('')).toContain('de zelf-update is mislukt');
+    const log = readFileSync(paden.logPad, 'utf8');
+    expect(log).toContain('WARNING');
+    expect(log).toContain('verwacht 99.99.99');
+    expect(log).toContain('de zelf-update is mislukt');
+  });
+
+  it('logt geen waarschuwing als FACTORY_VERWACHTE_VERSIE niet gezet is (#375)', async () => {
+    zetBeideUitvoerdersOp(({ commando, argumenten }) =>
+      commando === 'gh' && argumenten[0] === 'api' && argumenten[1] === 'graphql'
+        ? { stdout: bord() }
+        : {},
+    );
+
+    // Zonder de env var (handmatige run, of tag-ophaal mislukt) is er niets te vergelijken.
+    const vorige = process.env['FACTORY_VERWACHTE_VERSIE'];
+    delete process.env['FACTORY_VERWACHTE_VERSIE'];
+    try {
+      await orkestreerBouw({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU });
+    } finally {
+      if (vorige !== undefined) {
+        process.env['FACTORY_VERWACHTE_VERSIE'] = vorige;
+      }
+    }
+
+    expect(uitvoer.join('')).not.toContain('de zelf-update is mislukt');
+  });
 });
 
 describe('leesReeks', () => {
