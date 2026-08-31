@@ -24,11 +24,18 @@ jobs:
     # Alleen een runner starten als er echt "@claude" in de trigger staat —
     # anders draait dit op elke comment (verspilde runs, zie de efficiency-les
     # uit de bump-factory-cron #99).
+    #
+    # Actor-guard (#367): de actie plaatst zelf een tracking-comment; die vuurt
+    # `issue_comment` af en zou anders een tweede run starten. `sender.type != 'Bot'`
+    # sluit elke door een App/bot getriggerde gebeurtenis uit — login-onafhankelijk,
+    # dus robuuster dan een naam-check op `claude[bot]`.
     if: |
+      github.event.sender.type != 'Bot' && (
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -43,6 +50,10 @@ jobs:
           fetch-depth: 1
 
       - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
+        # Gepind op de commit-SHA achter v1 (#367 / ADR 010): externe adoptie pint
+        # op commit, geen auto-update. Optrekken = SHA verversen na een review van de
+        # nieuwe tag. Los `gh api repos/anthropics/claude-code-action/git/refs/tags/v1`
+        # op om de huidige SHA te vinden.
+        uses: anthropics/claude-code-action@a874e9ecd7bb36efdad65429c6b35815f5a08f10 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
