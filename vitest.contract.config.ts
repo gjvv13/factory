@@ -11,6 +11,7 @@ export default defineConfig({
       include: [
         'src/board.ts',
         'src/commands/integreer.ts',
+        'src/commands/opruimen.ts',
         'src/commands/promote.ts',
         'src/commands/inleveren.ts',
       ],

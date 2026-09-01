@@ -1,0 +1,20 @@
+[
+  {
+    "number": 480,
+    "headRefName": "release/v1.15.92",
+    "mergeable": "CONFLICTING",
+    "title": "release: v1.15.92"
+  },
+  {
+    "number": 475,
+    "headRefName": "release/v1.15.89",
+    "mergeable": "MERGEABLE",
+    "title": "release: v1.15.89"
+  },
+  {
+    "number": 460,
+    "headRefName": "release/v1.14.80",
+    "mergeable": "UNKNOWN",
+    "title": "release: v1.14.80"
+  }
+]
