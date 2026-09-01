@@ -7,6 +7,7 @@ import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding,
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { werkBouwAntwoordAf } from './orkestreer-bouw.js';
+import { opruimen } from './opruimen.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker } from '../werker.js';
@@ -254,6 +255,7 @@ export async function orkestreer(opties = {}) {
                 beschrijf: beschrijfRun,
                 beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
             }));
+            veiligOpruimen(opties.opruimFn);
         }
         finally {
             geefLockVrij();
@@ -268,7 +270,7 @@ export async function orkestreer(opties = {}) {
             // test hem kan bereiken zonder de CLI te starten.
             throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
         }
-        await draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
+        await draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()), opties.opruimFn);
         return;
     }
     const wachtrij = bouwWachtrij(cwd);
@@ -333,6 +335,20 @@ function beschrijfRun(uitkomst) {
     };
 }
 /**
+ * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
+ * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
+ * is de overhead niet de moeite.
+ */
+export function veiligOpruimen(fn = opruimen) {
+    try {
+        fn();
+    }
+    catch (fout) {
+        const bericht = fout instanceof Error ? fout.message : String(fout);
+        waarschuwing(`opruimen mislukt: ${bericht}`);
+    }
+}
+/**
  * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
  *
  * De wachtrij wordt per ronde opnieuw gelezen. Dat is een board-lezing per item en dus
@@ -341,7 +357,7 @@ function beschrijfRun(uitkomst) {
  * kolom, of draagt een escalatie-label. Doorwerken op de oude lijst zou hetzelfde item
  * een tweede keer oppakken.
  */
-async function draaiNacht(cwd, wortel, paden, nu) {
+async function draaiNacht(cwd, wortel, paden, nu, opruimFn) {
     const instellingen = leesInstellingen(paden);
     // De token eerst: een nacht die pas bij de eerste `claude`-aanroep struikelt heeft
     // dan al een item uit de wachtrij gehaald en een kolom verzet.
@@ -399,6 +415,7 @@ async function draaiNacht(cwd, wortel, paden, nu) {
         else if (uitkomst.einde === 'niets-nieuws') {
             ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
         }
+        veiligOpruimen(opruimFn);
     }
     finally {
         geefLockVrij();

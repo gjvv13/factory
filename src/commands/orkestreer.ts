@@ -46,6 +46,7 @@ import {
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { type ReeksKeuze, werkBouwAntwoordAf } from './orkestreer-bouw.js';
+import { opruimen } from './opruimen.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 import { draaiWerker, type Afloop, type WerkerBasis, type WerkerUitkomst } from '../werker.js';
@@ -192,6 +193,11 @@ export interface OrkestreerOpties {
    * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
    */
   readonly issue?: number;
+  /**
+   * Injecteerbare opruimfunctie zodat een test kan verifiëren dat hij aangeroepen
+   * wordt, zonder de echte git-commando's te draaien. Default: `opruimen()`.
+   */
+  readonly opruimFn?: () => void;
 }
 
 /** Een item uit de wachtrij dat een werker aankan: het `App`-veld moet gezet zijn. */
@@ -386,6 +392,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
           beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
         }),
       );
+      veiligOpruimen(opties.opruimFn);
     } finally {
       geefLockVrij();
     }
@@ -399,7 +406,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
       // test hem kan bereiken zonder de CLI te starten.
       throw new GebruikersFout('--issue en --nacht gaan niet samen; gebruik --eenmalig.');
     }
-    await draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()));
+    await draaiNacht(cwd, wortel, paden, opties.nu ?? new Date(Date.now()), opties.opruimFn);
     return;
   }
 
@@ -486,6 +493,20 @@ function beschrijfRun(uitkomst: RunUitkomst): RunRegel {
 }
 
 /**
+ * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
+ * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
+ * is de overhead niet de moeite.
+ */
+export function veiligOpruimen(fn: () => void = opruimen): void {
+  try {
+    fn();
+  } catch (fout: unknown) {
+    const bericht = fout instanceof Error ? fout.message : String(fout);
+    waarschuwing(`opruimen mislukt: ${bericht}`);
+  }
+}
+
+/**
  * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
  *
  * De wachtrij wordt per ronde opnieuw gelezen. Dat is een board-lezing per item en dus
@@ -499,6 +520,7 @@ async function draaiNacht(
   wortel: string,
   paden: OrkestratorPaden,
   nu: Date,
+  opruimFn?: () => void,
 ): Promise<void> {
   const instellingen = leesInstellingen(paden);
   // De token eerst: een nacht die pas bij de eerste `claude`-aanroep struikelt heeft
@@ -561,6 +583,7 @@ async function draaiNacht(
     } else if (uitkomst.einde === 'niets-nieuws') {
       ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
     }
+    veiligOpruimen(opruimFn);
   } finally {
     geefLockVrij();
   }
