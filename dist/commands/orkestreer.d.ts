@@ -51,6 +51,11 @@ export interface OrkestreerOpties {
      * in de wachtrij, dan faalt de run met de reden — de filters blijven gelden.
      */
     readonly issue?: number;
+    /**
+     * Injecteerbare opruimfunctie zodat een test kan verifiëren dat hij aangeroepen
+     * wordt, zonder de echte git-commando's te draaien. Default: `opruimen()`.
+     */
+    readonly opruimFn?: () => void;
 }
 /** Een item uit de wachtrij dat een werker aankan: het `App`-veld moet gezet zijn. */
 interface Opdrachtitem extends BacklogItem {
@@ -60,6 +65,12 @@ interface Opdrachtitem extends BacklogItem {
 export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
+/**
+ * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
+ * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
+ * is de overhead niet de moeite.
+ */
+export declare function veiligOpruimen(fn?: () => void): void;
 /** Het soort werker dat escaleerde — bepaalt welk pad `antwoord` neemt. */
 export type EscalatieSoort = 'refine' | 'bouw';
 /** Wat er uit een escalatie-comment terug te lezen valt. */
