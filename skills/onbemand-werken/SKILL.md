@@ -21,23 +21,49 @@ plausibel antwoord.**
 Je stopt en escaleert bij deze dingen. Het is een lijst, geen richtlijn: je oordeelt
 niet of het "erg genoeg" is.
 
+<!-- sleutel:buiten-opdracht -->
+
 - Afwijken van wat er functioneel gevraagd is, of buiten de grens van de opdracht
   werken.
+
+<!-- sleutel:datamodel -->
+
 - Een datamodel- of migratiewijziging die niet uit de opdracht volgt.
+
+<!-- sleutel:externe-koppeling -->
+
 - Een nieuwe externe koppeling, of een bestaand contract dat verandert.
+
+<!-- sleutel:dependency -->
+
 - Een nieuwe dependency **waar iets te kiezen valt**. Volgt de bibliotheek dwingend
   uit de opdracht — je kunt geen E2EE doen zonder crypto-bibliotheek — dan is dat
   geen keuze en escaleer je niet. Zijn er reële alternatieven met verschillende
   gevolgen (WASM of native, twee concurrerende SDK's), dan wél: dan kies jij iets
   waar iemand anders mee moet leven.
+
+<!-- sleutel:flag-productie -->
+
 - Een feature flag die in productie aan zou moeten.
+
+<!-- sleutel:buiten-bestanden -->
+
 - Bestanden of lagen raken die de opdracht niet noemt.
+
+<!-- sleutel:onleesbare-code -->
+
 - **Code die de opdracht noemt en die je niet kunt lezen.** Je mappen staan bovenaan je
   prompt; wat daarbuiten ligt bestaat voor jou niet. Zegt de opdracht "dit is een kopie
   van `<app>`" of "neem dit over uit `<app>`", en heb je die map niet, dan escaleer je.
   Je schrijft nooit uit je hoofd na wat ergens al staat: het lijkt op het origineel en
   wijkt er net van af, en niemand ziet waar.
+
+<!-- sleutel:dekking-verlagen -->
+
 - De dekkings-basislijn willen verlagen.
+
+<!-- sleutel:productie -->
+
 - Wat dan ook aan productie.
 
 **Vuistregel: twijfel telt als een treffer.** Vraag je je af of iets op deze lijst

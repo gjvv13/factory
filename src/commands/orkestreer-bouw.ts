@@ -42,6 +42,7 @@ import {
   AGENT_REVIEWER,
   draaiBouwer,
   draaiReviewer,
+  formatDoorloop,
   type BouwUitkomst,
   type ReviewUitkomst,
 } from '../werker.js';
@@ -819,6 +820,7 @@ function verwerkBouw(
         werkmap,
         'bouw',
         item.app,
+        verdict.doorloop,
       ),
       cwd,
     );
@@ -882,11 +884,14 @@ function verwerkBouw(
     ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
     : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
   const wrijvingSectie = maakWrijvingSectie(verdict.wrijving, logWeigeringen, uitkomst);
+  const doorloopTabel =
+    verdict.doorloop.length > 0 ? `\n\n${formatDoorloop(verdict.doorloop)}` : '';
   plaatsComment(
     item.issue,
     `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
       `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
       verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+      doorloopTabel +
       `\n\n${mergeRegel}` +
       (wrijvingSectie !== undefined ? `\n\n${wrijvingSectie}` : '') +
       `\n\n${voetnoot}`,
