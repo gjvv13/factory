@@ -9,7 +9,7 @@ import { draaiReeks, meldReeks } from '../reeks.js';
 import { werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker, formatDoorloop, } from '../werker.js';
+import { draaiWerker, formatDoorloop, stilOpgelostPunten, } from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 /**
  * De supervisor: hij pakt het oudste item uit de wachtrij en laat er één onbemande
@@ -571,6 +571,20 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         // alternatief is stil doorgaan met een lege body.
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
         return 'mislukt';
+    }
+    // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
+    // oploste, mag dat niet zelf afvinken: de supervisor behandelt het als escalatie,
+    // zodat een mens oordeelt of de keuze mag (#424). De body wordt niet geschreven;
+    // het werk zit in de sessie en `orkestreer antwoord` hervat hem.
+    const stilOpgelost = stilOpgelostPunten(verdict.doorloop);
+    if (stilOpgelost.length > 0) {
+        blokkeer(item, cwd);
+        const punten = stilOpgelost
+            .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
+            .join('\n- ');
+        plaatsComment(item.issue, escalatieComment(item.issue, `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`, verdict.samenvatting, uitkomst, werkmap, 'refine', undefined, verdict.doorloop), cwd);
+        ok(`#${String(item.issue)} geëscaleerd (stil opgelost) — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
+        return 'escalatie';
     }
     return rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd);
 }

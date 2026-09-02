@@ -51,6 +51,7 @@ import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell
 import {
   draaiWerker,
   formatDoorloop,
+  stilOpgelostPunten,
   type Afloop,
   type DoorloopItem,
   type WerkerBasis,
@@ -829,6 +830,36 @@ function verwerk(
     // alternatief is stil doorgaan met een lege body.
     waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
     return 'mislukt';
+  }
+
+  // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
+  // oploste, mag dat niet zelf afvinken: de supervisor behandelt het als escalatie,
+  // zodat een mens oordeelt of de keuze mag (#424). De body wordt niet geschreven;
+  // het werk zit in de sessie en `orkestreer antwoord` hervat hem.
+  const stilOpgelost = stilOpgelostPunten(verdict.doorloop);
+  if (stilOpgelost.length > 0) {
+    blokkeer(item, cwd);
+    const punten = stilOpgelost
+      .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
+      .join('\n- ');
+    plaatsComment(
+      item.issue,
+      escalatieComment(
+        item.issue,
+        `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`,
+        verdict.samenvatting,
+        uitkomst,
+        werkmap,
+        'refine',
+        undefined,
+        verdict.doorloop,
+      ),
+      cwd,
+    );
+    ok(
+      `#${String(item.issue)} geëscaleerd (stil opgelost) — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`,
+    );
+    return 'escalatie';
   }
 
   return rondAf(

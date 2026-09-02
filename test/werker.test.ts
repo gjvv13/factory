@@ -11,6 +11,7 @@ import {
   draaiWerker,
   formatDoorloop,
   leesSleutels,
+  stilOpgelostPunten,
   werkerArgumenten,
   WERKER_TOEGESTAAN,
   WERKER_VERBODEN,
@@ -293,7 +294,7 @@ describe('draaiWerker', () => {
 const SLEUTELS = leesSleutels();
 
 /** Een volledige, geldige doorloop — elk punt niet-gespeeld. */
-function schoneDoorloop(): { sleutel: string; waarde: string }[] {
+function schoneDoorloop(): { sleutel: string; waarde: string; waarom?: string }[] {
   return SLEUTELS.map((s) => ({ sleutel: s, waarde: 'niet-gespeeld' }));
 }
 
@@ -361,6 +362,47 @@ describe('doorloop — refine-verdict (#423)', () => {
 
     expect(uitkomst.afloop).toBe('mislukt');
     expect(uitkomst.fout).toContain('volgt-uit-de-opdracht');
+  });
+
+  it('weigert stil-opgelost zonder waarom', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[1] = { sleutel: doorloop[1]!.sleutel, waarde: 'stil-opgelost' };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('stil-opgelost');
+  });
+
+  it('accepteert stil-opgelost met waarom', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[1] = {
+      sleutel: doorloop[1]!.sleutel,
+      waarde: 'stil-opgelost',
+      waarom: 'een veld toegevoegd',
+    };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
   });
 
   it('accepteert een geldig verdict met volledige doorloop', async () => {
@@ -494,11 +536,52 @@ describe('formatDoorloop (#423)', () => {
     expect(tabel).toContain('🔴 geëscaleerd');
   });
 
-  it('kent alle vier de waarden', () => {
-    expect(doorloopWaarden).toHaveLength(4);
+  it('kent alle vijf de waarden', () => {
+    expect(doorloopWaarden).toHaveLength(5);
     expect(doorloopWaarden).toContain('niet-gespeeld');
     expect(doorloopWaarden).toContain('volgt-uit-de-opdracht');
     expect(doorloopWaarden).toContain('gespeeld-doorgegaan');
+    expect(doorloopWaarden).toContain('stil-opgelost');
     expect(doorloopWaarden).toContain('geëscaleerd');
+  });
+
+  it('toont 🟠 voor stil-opgelost', () => {
+    const items = [
+      {
+        sleutel: 'dependency',
+        waarde: 'stil-opgelost' as const,
+        waarom: 'cheerio toegevoegd',
+      },
+    ];
+
+    const tabel = formatDoorloop(items);
+
+    expect(tabel).toContain('🟠 stil-opgelost');
+    expect(tabel).toContain('cheerio toegevoegd');
+  });
+});
+
+describe('stilOpgelostPunten (#424)', () => {
+  it('geeft alleen items met waarde stil-opgelost terug', () => {
+    const items = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      { sleutel: 'datamodel', waarde: 'stil-opgelost' as const, waarom: 'veld toegevoegd' },
+      { sleutel: 'dependency', waarde: 'volgt-uit-de-opdracht' as const, waarom: 'issue' },
+      { sleutel: 'productie', waarde: 'geëscaleerd' as const },
+    ];
+
+    const resultaat = stilOpgelostPunten(items);
+
+    expect(resultaat).toHaveLength(1);
+    expect(resultaat[0]!.sleutel).toBe('datamodel');
+  });
+
+  it('geeft een lege lijst als niets stil is opgelost', () => {
+    const items = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      { sleutel: 'datamodel', waarde: 'volgt-uit-de-opdracht' as const, waarom: 'issue' },
+    ];
+
+    expect(stilOpgelostPunten(items)).toHaveLength(0);
   });
 });

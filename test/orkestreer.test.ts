@@ -479,6 +479,99 @@ describe('orkestreer', () => {
     expect(opties).not.toContain('optie-bouwen');
   });
 
+  it('behandelt klaar met stil-opgelost als escalatie (#424)', async () => {
+    const doorloopMetStil = DOORLOOP_SCHOON.map((d) =>
+      d.sleutel === 'datamodel'
+        ? {
+            sleutel: 'datamodel',
+            waarde: 'stil-opgelost',
+            waarom: 'een veld toegevoegd aan de tabel',
+          }
+        : d,
+    );
+    const stilVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Alles gedaan inclusief migratie.',
+        slices: 2,
+        body: '# Uitwerking\n\nDit is de body.',
+        doorloop: doorloopMetStil,
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: stilVerdict }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // Geen body geschreven: de uitwerking gaat niet naar het issue.
+    expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(false);
+    // Wel een escalatie-label en terug naar de wachtrij-kolom.
+    expect(ghArgs(aanroepen)).toContainEqual(
+      expect.arrayContaining(['issue', 'edit', '51', '--add-label', 'escalatie']),
+    );
+    // De comment noemt het punt en wat de werker besloot.
+    const commentArgs = ghArgs(aanroepen).find(
+      (a) => a[0] === 'issue' && a[1] === 'comment' && a[2] === '51',
+    );
+    expect(commentArgs).toBeDefined();
+    const commentBody = commentArgs?.[commentArgs.indexOf('--body') + 1] ?? '';
+    expect(commentBody).toContain('stil opgelost');
+    expect(commentBody).toContain('datamodel');
+    expect(commentBody).toContain('een veld toegevoegd aan de tabel');
+  });
+
+  it('behandelt klaar met alleen volgt-uit-de-opdracht als gewoon klaar (#424)', async () => {
+    const doorloopMetVolgt = DOORLOOP_SCHOON.map((d) =>
+      d.sleutel === 'datamodel'
+        ? {
+            sleutel: 'datamodel',
+            waarde: 'volgt-uit-de-opdracht',
+            waarom: 'het issue vraagt om een migratie',
+          }
+        : d,
+    );
+    const volgtVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Premisse getoetst, twee slices.',
+        slices: 2,
+        body: '# Uitwerking\n\nDit is de body.',
+        doorloop: doorloopMetVolgt,
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: volgtVerdict }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // De body is wel geschreven: volgt-uit-de-opdracht is geen escalatie.
+    expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(true);
+    // Geen escalatie-label.
+    expect(
+      ghArgs(aanroepen).some(
+        (a) =>
+          a[0] === 'issue' &&
+          a[1] === 'edit' &&
+          a.includes('--add-label') &&
+          a.includes('escalatie'),
+      ),
+    ).toBe(false);
+  });
+
   it('rekent een run met is_error als mislukt, ook bij exitcode 0', async () => {
     const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerMislukt() }));
 

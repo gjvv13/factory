@@ -176,22 +176,25 @@ const envelopSchema = z.object({
         .optional(),
 });
 /**
- * De vier waarden die de werker per punt van de gesloten lijst rapporteert.
+ * De vijf waarden die de werker per punt van de gesloten lijst rapporteert.
  *
  * - `niet-gespeeld` — dit punt kwam niet voor tijdens het werk.
  * - `volgt-uit-de-opdracht` — de opdracht vraagt hier expliciet om; `waarom` is verplicht.
  * - `gespeeld-doorgegaan` — het punt speelde, maar valt onder _Doorgaan mag ook_.
+ * - `stil-opgelost` — het punt speelde en de werker loste het stilzwijgend op; `waarom`
+ *   is verplicht zodat de supervisor kan noemen wat de werker besloot (#424).
  * - `geëscaleerd` — dit punt triggert de escalatie.
  */
 export const doorloopWaarden = [
     'niet-gespeeld',
     'volgt-uit-de-opdracht',
     'gespeeld-doorgegaan',
+    'stil-opgelost',
     'geëscaleerd',
 ];
 /**
- * Eén punt uit de doorloop. `waarom` is verplicht bij `volgt-uit-de-opdracht`: zonder
- * motivatie is "het volgt uit de opdracht" een dooddoener, geen bewering.
+ * Eén punt uit de doorloop. `waarom` is verplicht bij `volgt-uit-de-opdracht` en bij
+ * `stil-opgelost`: zonder motivatie weet de supervisor niet wat de werker besloot (#424).
  */
 const doorloopItemSchema = z
     .object({
@@ -202,6 +205,9 @@ const doorloopItemSchema = z
     .refine((item) => item.waarde !== 'volgt-uit-de-opdracht' ||
     (item.waarom !== undefined && item.waarom.length > 0), {
     message: 'volgt-uit-de-opdracht vereist een waarom',
+})
+    .refine((item) => item.waarde !== 'stil-opgelost' || (item.waarom !== undefined && item.waarom.length > 0), {
+    message: 'stil-opgelost vereist een waarom',
 });
 /**
  * Valideert dat de doorloop alle sleutels uit de skill bevat, en geen onbekende.
@@ -225,6 +231,7 @@ export function formatDoorloop(items) {
         'niet-gespeeld': '⚪',
         'volgt-uit-de-opdracht': '🟢',
         'gespeeld-doorgegaan': '🟡',
+        'stil-opgelost': '🟠',
         geëscaleerd: '🔴',
     };
     const regels = items.map((item) => {
@@ -235,7 +242,15 @@ export function formatDoorloop(items) {
     return `| Doorloop | Punt |\n| --- | --- |\n${regels.join('\n')}`;
 }
 /**
- * Het verdict, afgedwongen met `--json-schema` zodat de uitkomst niet uit proza
+ * Geeft de doorloop-items terug die de werker als `stil-opgelost` heeft gemarkeerd.
+ * Een niet-lege lijst bij een `klaar`-verdict betekent dat de supervisor het als
+ * escalatie moet behandelen: de werker mag zijn eigen overtreding niet afvinken (#424).
+ */
+export function stilOpgelostPunten(items) {
+    return items.filter((i) => i.waarde === 'stil-opgelost');
+}
+/**
+ * Het verdict, afgedwongen met `--json-schema` zodat de uitkomst niet uit prosa
  * geraden hoeft te worden. `body` is de complete nieuwe issue-body; de orkestrator
  * schrijft hem, de werker niet.
  */
@@ -446,8 +461,14 @@ export const BOUW_JSON_SCHEMA = {
                     },
                     waarde: {
                         type: 'string',
-                        enum: ['niet-gespeeld', 'volgt-uit-de-opdracht', 'gespeeld-doorgegaan', 'geëscaleerd'],
-                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie',
+                        enum: [
+                            'niet-gespeeld',
+                            'volgt-uit-de-opdracht',
+                            'gespeeld-doorgegaan',
+                            'stil-opgelost',
+                            'geëscaleerd',
+                        ],
+                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; stil-opgelost = stilzwijgend opgelost (waarom verplicht, wordt escalatie); geëscaleerd = triggert de escalatie',
                     },
                     waarom: {
                         type: 'string',
@@ -503,8 +524,14 @@ export const VERDICT_JSON_SCHEMA = {
                     },
                     waarde: {
                         type: 'string',
-                        enum: ['niet-gespeeld', 'volgt-uit-de-opdracht', 'gespeeld-doorgegaan', 'geëscaleerd'],
-                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie',
+                        enum: [
+                            'niet-gespeeld',
+                            'volgt-uit-de-opdracht',
+                            'gespeeld-doorgegaan',
+                            'stil-opgelost',
+                            'geëscaleerd',
+                        ],
+                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; stil-opgelost = stilzwijgend opgelost (waarom verplicht, wordt escalatie); geëscaleerd = triggert de escalatie',
                     },
                     waarom: {
                         type: 'string',

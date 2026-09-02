@@ -38,6 +38,7 @@ import {
   draaiBouwer,
   draaiReviewer,
   formatDoorloop,
+  stilOpgelostPunten,
   type BouwUitkomst,
   type ReviewUitkomst,
 } from '../werker.js';
@@ -796,6 +797,33 @@ function verwerkBouw(
   if (verdict?.uitkomst !== 'klaar') {
     blokkeer(item, cwd);
     waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
+    return false;
+  }
+
+  // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
+  // oploste, mag dat niet zelf afvinken (#424). Niet inleveren — het werk zit in de
+  // sessie en `orkestreer antwoord` hervat hem.
+  const stilOpgelost = stilOpgelostPunten(verdict.doorloop);
+  if (stilOpgelost.length > 0) {
+    blokkeer(item, cwd);
+    const punten = stilOpgelost
+      .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
+      .join('\n- ');
+    plaatsComment(
+      item.issue,
+      escalatieComment(
+        item.issue,
+        `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`,
+        verdict.samenvatting,
+        uitkomst,
+        werkmap,
+        'bouw',
+        item.app,
+        verdict.doorloop,
+      ),
+      cwd,
+    );
+    ok(`#${String(item.issue)} geëscaleerd (stil opgelost) — niets ingeleverd.`);
     return false;
   }
 

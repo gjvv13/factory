@@ -8,7 +8,7 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiBouwer, draaiReviewer, formatDoorloop, } from '../werker.js';
+import { draaiBouwer, draaiReviewer, formatDoorloop, stilOpgelostPunten, } from '../werker.js';
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
@@ -518,6 +518,19 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     if (verdict?.uitkomst !== 'klaar') {
         blokkeer(item, cwd);
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
+        return false;
+    }
+    // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
+    // oploste, mag dat niet zelf afvinken (#424). Niet inleveren — het werk zit in de
+    // sessie en `orkestreer antwoord` hervat hem.
+    const stilOpgelost = stilOpgelostPunten(verdict.doorloop);
+    if (stilOpgelost.length > 0) {
+        blokkeer(item, cwd);
+        const punten = stilOpgelost
+            .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
+            .join('\n- ');
+        plaatsComment(item.issue, escalatieComment(item.issue, `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`, verdict.samenvatting, uitkomst, werkmap, 'bouw', item.app, verdict.doorloop), cwd);
+        ok(`#${String(item.issue)} geëscaleerd (stil opgelost) — niets ingeleverd.`);
         return false;
     }
     // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
