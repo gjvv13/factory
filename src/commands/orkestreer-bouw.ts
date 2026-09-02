@@ -34,7 +34,13 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
+import {
+  draaiBouwer,
+  draaiReviewer,
+  formatDoorloop,
+  type BouwUitkomst,
+  type ReviewUitkomst,
+} from '../werker.js';
 import {
   BOUW_NACHT_MINUUT,
   BOUW_NACHT_UUR,
@@ -779,6 +785,7 @@ function verwerkBouw(
         werkmap,
         'bouw',
         item.app,
+        verdict.doorloop,
       ),
       cwd,
     );
@@ -841,11 +848,14 @@ function verwerkBouw(
   const mergeRegel = isFastlane
     ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
     : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
+  const doorloopTabel =
+    verdict.doorloop.length > 0 ? `\n\n${formatDoorloop(verdict.doorloop)}` : '';
   plaatsComment(
     item.issue,
     `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
       `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
       verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+      doorloopTabel +
       `\n\n${mergeRegel}\n\n${voetnoot}`,
     cwd,
   );

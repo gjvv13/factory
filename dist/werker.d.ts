@@ -1,5 +1,15 @@
 import { z } from 'zod';
 /**
+ * Leest de stabiele sleutels uit de `onbemand-werken`-skill, in de volgorde waarin ze
+ * in de tekst staan. Elke sleutel is een HTML-comment `<!-- sleutel:<naam> -->`.
+ *
+ * Gaat stuk als de skill verandert zonder dat de sleutels meekomen: dat is precies het
+ * punt — de test vangt de drift vóór een werker zonder doorloop de nacht in gaat.
+ */
+export declare function leesSleutels(): readonly string[];
+/** Puur-functionele variant voor tests die de tekst zelf aanleveren. */
+export declare function leesSleutelsUitTekst(tekst: string): readonly string[];
+/**
  * De onbemande werker: één `claude -p`-aanroep, en de vertaling van zijn uitvoer naar
  * een uitkomst waar de orkestrator op kan sturen (#104).
  *
@@ -55,6 +65,37 @@ export declare const ACCEPTEER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Ba
 /** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
 export declare const WERKER_VERBODEN: readonly ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)"];
 /**
+ * De vier waarden die de werker per punt van de gesloten lijst rapporteert.
+ *
+ * - `niet-gespeeld` — dit punt kwam niet voor tijdens het werk.
+ * - `volgt-uit-de-opdracht` — de opdracht vraagt hier expliciet om; `waarom` is verplicht.
+ * - `gespeeld-doorgegaan` — het punt speelde, maar valt onder _Doorgaan mag ook_.
+ * - `geëscaleerd` — dit punt triggert de escalatie.
+ */
+export declare const doorloopWaarden: readonly ["niet-gespeeld", "volgt-uit-de-opdracht", "gespeeld-doorgegaan", "geëscaleerd"];
+/**
+ * Eén punt uit de doorloop. `waarom` is verplicht bij `volgt-uit-de-opdracht`: zonder
+ * motivatie is "het volgt uit de opdracht" een dooddoener, geen bewering.
+ */
+declare const doorloopItemSchema: z.ZodObject<{
+    sleutel: z.ZodString;
+    waarde: z.ZodEnum<{
+        "niet-gespeeld": "niet-gespeeld";
+        "volgt-uit-de-opdracht": "volgt-uit-de-opdracht";
+        "gespeeld-doorgegaan": "gespeeld-doorgegaan";
+        geëscaleerd: "geëscaleerd";
+    }>;
+    waarom: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export type DoorloopItem = z.infer<typeof doorloopItemSchema>;
+/**
+ * Formatteert de doorloop als leesbare tabel voor in een issue-comment.
+ *
+ * Elke waarde krijgt een emoji, zodat het resultaat in één oogopslag te scannen is
+ * zonder dat je de terminologie al kent.
+ */
+export declare function formatDoorloop(items: readonly DoorloopItem[]): string;
+/**
  * Het verdict, afgedwongen met `--json-schema` zodat de uitkomst niet uit proza
  * geraden hoeft te worden. `body` is de complete nieuwe issue-body; de orkestrator
  * schrijft hem, de werker niet.
@@ -64,10 +105,30 @@ declare const verdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     samenvatting: z.ZodString;
     slices: z.ZodNumber;
     body: z.ZodString;
+    doorloop: z.ZodArray<z.ZodObject<{
+        sleutel: z.ZodString;
+        waarde: z.ZodEnum<{
+            "niet-gespeeld": "niet-gespeeld";
+            "volgt-uit-de-opdracht": "volgt-uit-de-opdracht";
+            "gespeeld-doorgegaan": "gespeeld-doorgegaan";
+            geëscaleerd: "geëscaleerd";
+        }>;
+        waarom: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
     uitkomst: z.ZodLiteral<"escalatie">;
     vraag: z.ZodString;
     advies: z.ZodString;
+    doorloop: z.ZodArray<z.ZodObject<{
+        sleutel: z.ZodString;
+        waarde: z.ZodEnum<{
+            "niet-gespeeld": "niet-gespeeld";
+            "volgt-uit-de-opdracht": "volgt-uit-de-opdracht";
+            "gespeeld-doorgegaan": "gespeeld-doorgegaan";
+            geëscaleerd: "geëscaleerd";
+        }>;
+        waarom: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
 }, z.core.$strip>], "uitkomst">;
 export type Verdict = z.infer<typeof verdictSchema>;
 /**
@@ -83,10 +144,30 @@ declare const bouwVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
         criterium: z.ZodString;
         bewijs: z.ZodString;
     }, z.core.$strip>>;
+    doorloop: z.ZodArray<z.ZodObject<{
+        sleutel: z.ZodString;
+        waarde: z.ZodEnum<{
+            "niet-gespeeld": "niet-gespeeld";
+            "volgt-uit-de-opdracht": "volgt-uit-de-opdracht";
+            "gespeeld-doorgegaan": "gespeeld-doorgegaan";
+            geëscaleerd: "geëscaleerd";
+        }>;
+        waarom: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
     uitkomst: z.ZodLiteral<"escalatie">;
     vraag: z.ZodString;
     advies: z.ZodString;
+    doorloop: z.ZodArray<z.ZodObject<{
+        sleutel: z.ZodString;
+        waarde: z.ZodEnum<{
+            "niet-gespeeld": "niet-gespeeld";
+            "volgt-uit-de-opdracht": "volgt-uit-de-opdracht";
+            "gespeeld-doorgegaan": "gespeeld-doorgegaan";
+            geëscaleerd: "geëscaleerd";
+        }>;
+        waarom: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
 }, z.core.$strip>], "uitkomst">;
 export type BouwVerdict = z.infer<typeof bouwVerdictSchema>;
 declare const reviewVerdictSchema: z.ZodObject<{
@@ -250,6 +331,30 @@ export declare const BOUW_JSON_SCHEMA: {
                 readonly additionalProperties: false;
             };
         };
+        readonly doorloop: {
+            readonly type: "array";
+            readonly description: "verplicht bij klaar én escalatie: per punt van de gesloten lijst uit de onbemand-werken-skill het resultaat van de doorloop";
+            readonly items: {
+                readonly type: "object";
+                readonly properties: {
+                    readonly sleutel: {
+                        readonly type: "string";
+                        readonly description: "de sleutel uit de skill (bijv. buiten-opdracht, datamodel)";
+                    };
+                    readonly waarde: {
+                        readonly type: "string";
+                        readonly enum: readonly ["niet-gespeeld", "volgt-uit-de-opdracht", "gespeeld-doorgegaan", "geëscaleerd"];
+                        readonly description: "niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie";
+                    };
+                    readonly waarom: {
+                        readonly type: "string";
+                        readonly description: "verplicht bij volgt-uit-de-opdracht; optioneel bij andere waarden";
+                    };
+                };
+                readonly required: readonly ["sleutel", "waarde"];
+                readonly additionalProperties: false;
+            };
+        };
         readonly vraag: {
             readonly type: "string";
             readonly description: "alleen bij escalatie: wat je precies wilt weten";
@@ -291,6 +396,30 @@ export declare const VERDICT_JSON_SCHEMA: {
         readonly body: {
             readonly type: "string";
             readonly description: "alleen bij klaar: de complete nieuwe issue-body in markdown";
+        };
+        readonly doorloop: {
+            readonly type: "array";
+            readonly description: "verplicht bij klaar én escalatie: per punt van de gesloten lijst uit de onbemand-werken-skill het resultaat van de doorloop";
+            readonly items: {
+                readonly type: "object";
+                readonly properties: {
+                    readonly sleutel: {
+                        readonly type: "string";
+                        readonly description: "de sleutel uit de skill (bijv. buiten-opdracht, datamodel)";
+                    };
+                    readonly waarde: {
+                        readonly type: "string";
+                        readonly enum: readonly ["niet-gespeeld", "volgt-uit-de-opdracht", "gespeeld-doorgegaan", "geëscaleerd"];
+                        readonly description: "niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie";
+                    };
+                    readonly waarom: {
+                        readonly type: "string";
+                        readonly description: "verplicht bij volgt-uit-de-opdracht; optioneel bij andere waarden";
+                    };
+                };
+                readonly required: readonly ["sleutel", "waarde"];
+                readonly additionalProperties: false;
+            };
         };
         readonly vraag: {
             readonly type: "string";

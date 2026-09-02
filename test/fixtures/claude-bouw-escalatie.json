@@ -10,6 +10,17 @@
   "structured_output": {
     "uitkomst": "escalatie",
     "vraag": "Het issue verwijst naar logger.ts in de assistant-app, maar die module is verplaatst.",
-    "advies": "Verplaats de verwijzing in het issue naar core/logging.ts."
+    "advies": "Verplaats de verwijzing in het issue naar core/logging.ts.",
+    "doorloop": [
+      { "sleutel": "buiten-opdracht", "waarde": "niet-gespeeld" },
+      { "sleutel": "datamodel", "waarde": "niet-gespeeld" },
+      { "sleutel": "externe-koppeling", "waarde": "niet-gespeeld" },
+      { "sleutel": "dependency", "waarde": "niet-gespeeld" },
+      { "sleutel": "flag-productie", "waarde": "niet-gespeeld" },
+      { "sleutel": "buiten-bestanden", "waarde": "niet-gespeeld" },
+      { "sleutel": "onleesbare-code", "waarde": "geëscaleerd" },
+      { "sleutel": "dekking-verlagen", "waarde": "niet-gespeeld" },
+      { "sleutel": "productie", "waarde": "niet-gespeeld" }
+    ]
   }
 }
