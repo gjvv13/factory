@@ -1,5 +1,23 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { z } from 'zod';
+import { skillsDir } from './paths.js';
 import { runAsync, waarschuwing } from './shell.js';
+/**
+ * Leest de stabiele sleutels uit de `onbemand-werken`-skill, in de volgorde waarin ze
+ * in de tekst staan. Elke sleutel is een HTML-comment `<!-- sleutel:<naam> -->`.
+ *
+ * Gaat stuk als de skill verandert zonder dat de sleutels meekomen: dat is precies het
+ * punt — de test vangt de drift vóór een werker zonder doorloop de nacht in gaat.
+ */
+export function leesSleutels() {
+    const tekst = readFileSync(path.join(skillsDir, 'onbemand-werken', 'SKILL.md'), 'utf8');
+    return leesSleutelsUitTekst(tekst);
+}
+/** Puur-functionele variant voor tests die de tekst zelf aanleveren. */
+export function leesSleutelsUitTekst(tekst) {
+    return [...tekst.matchAll(/<!-- sleutel:([a-z][-a-z0-9]*) -->/g)].map((m) => m[1] ?? '');
+}
 /**
  * De onbemande werker: één `claude -p`-aanroep, en de vertaling van zijn uitvoer naar
  * een uitkomst waar de orkestrator op kan sturen (#104).
@@ -158,6 +176,65 @@ const envelopSchema = z.object({
         .optional(),
 });
 /**
+ * De vier waarden die de werker per punt van de gesloten lijst rapporteert.
+ *
+ * - `niet-gespeeld` — dit punt kwam niet voor tijdens het werk.
+ * - `volgt-uit-de-opdracht` — de opdracht vraagt hier expliciet om; `waarom` is verplicht.
+ * - `gespeeld-doorgegaan` — het punt speelde, maar valt onder _Doorgaan mag ook_.
+ * - `geëscaleerd` — dit punt triggert de escalatie.
+ */
+export const doorloopWaarden = [
+    'niet-gespeeld',
+    'volgt-uit-de-opdracht',
+    'gespeeld-doorgegaan',
+    'geëscaleerd',
+];
+/**
+ * Eén punt uit de doorloop. `waarom` is verplicht bij `volgt-uit-de-opdracht`: zonder
+ * motivatie is "het volgt uit de opdracht" een dooddoener, geen bewering.
+ */
+const doorloopItemSchema = z
+    .object({
+    sleutel: z.string().min(1),
+    waarde: z.enum(doorloopWaarden),
+    waarom: z.string().optional(),
+})
+    .refine((item) => item.waarde !== 'volgt-uit-de-opdracht' ||
+    (item.waarom !== undefined && item.waarom.length > 0), {
+    message: 'volgt-uit-de-opdracht vereist een waarom',
+});
+/**
+ * Valideert dat de doorloop alle sleutels uit de skill bevat, en geen onbekende.
+ * De sleutels worden bij het aanroepen opgehaald via `leesSleutels()`.
+ */
+function doorloopSchema() {
+    const sleutels = leesSleutels();
+    return z.array(doorloopItemSchema).refine((items) => {
+        const aanwezig = new Set(items.map((i) => i.sleutel));
+        return (sleutels.every((s) => aanwezig.has(s)) && items.every((i) => sleutels.includes(i.sleutel)));
+    }, { message: `doorloop moet exact deze sleutels bevatten: ${sleutels.join(', ')}` });
+}
+/**
+ * Formatteert de doorloop als leesbare tabel voor in een issue-comment.
+ *
+ * Elke waarde krijgt een emoji, zodat het resultaat in één oogopslag te scannen is
+ * zonder dat je de terminologie al kent.
+ */
+export function formatDoorloop(items) {
+    const emoji = {
+        'niet-gespeeld': '⚪',
+        'volgt-uit-de-opdracht': '🟢',
+        'gespeeld-doorgegaan': '🟡',
+        geëscaleerd: '🔴',
+    };
+    const regels = items.map((item) => {
+        const teken = emoji[item.waarde] ?? '❓';
+        const waarom = item.waarom !== undefined ? ` — ${item.waarom}` : '';
+        return `| ${teken} ${item.waarde} | \`${item.sleutel}\`${waarom} |`;
+    });
+    return `| Doorloop | Punt |\n| --- | --- |\n${regels.join('\n')}`;
+}
+/**
  * Het verdict, afgedwongen met `--json-schema` zodat de uitkomst niet uit proza
  * geraden hoeft te worden. `body` is de complete nieuwe issue-body; de orkestrator
  * schrijft hem, de werker niet.
@@ -168,11 +245,13 @@ const verdictSchema = z.discriminatedUnion('uitkomst', [
         samenvatting: z.string().min(1),
         slices: z.number().int().nonnegative(),
         body: z.string().min(1),
+        doorloop: doorloopSchema(),
     }),
     z.object({
         uitkomst: z.literal('escalatie'),
         vraag: z.string().min(1),
         advies: z.string().min(1),
+        doorloop: doorloopSchema(),
     }),
 ]);
 /**
@@ -186,11 +265,13 @@ const bouwVerdictSchema = z.discriminatedUnion('uitkomst', [
         uitkomst: z.literal('klaar'),
         samenvatting: z.string().min(1),
         criteria: z.array(z.object({ criterium: z.string().min(1), bewijs: z.string().min(1) })).min(1),
+        doorloop: doorloopSchema(),
     }),
     z.object({
         uitkomst: z.literal('escalatie'),
         vraag: z.string().min(1),
         advies: z.string().min(1),
+        doorloop: doorloopSchema(),
     }),
 ]);
 /**
@@ -353,6 +434,30 @@ export const BOUW_JSON_SCHEMA = {
                 additionalProperties: false,
             },
         },
+        doorloop: {
+            type: 'array',
+            description: 'verplicht bij klaar én escalatie: per punt van de gesloten lijst uit de onbemand-werken-skill het resultaat van de doorloop',
+            items: {
+                type: 'object',
+                properties: {
+                    sleutel: {
+                        type: 'string',
+                        description: 'de sleutel uit de skill (bijv. buiten-opdracht, datamodel)',
+                    },
+                    waarde: {
+                        type: 'string',
+                        enum: ['niet-gespeeld', 'volgt-uit-de-opdracht', 'gespeeld-doorgegaan', 'geëscaleerd'],
+                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie',
+                    },
+                    waarom: {
+                        type: 'string',
+                        description: 'verplicht bij volgt-uit-de-opdracht; optioneel bij andere waarden',
+                    },
+                },
+                required: ['sleutel', 'waarde'],
+                additionalProperties: false,
+            },
+        },
         vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
         advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },
     },
@@ -385,6 +490,30 @@ export const VERDICT_JSON_SCHEMA = {
         body: {
             type: 'string',
             description: 'alleen bij klaar: de complete nieuwe issue-body in markdown',
+        },
+        doorloop: {
+            type: 'array',
+            description: 'verplicht bij klaar én escalatie: per punt van de gesloten lijst uit de onbemand-werken-skill het resultaat van de doorloop',
+            items: {
+                type: 'object',
+                properties: {
+                    sleutel: {
+                        type: 'string',
+                        description: 'de sleutel uit de skill (bijv. buiten-opdracht, datamodel)',
+                    },
+                    waarde: {
+                        type: 'string',
+                        enum: ['niet-gespeeld', 'volgt-uit-de-opdracht', 'gespeeld-doorgegaan', 'geëscaleerd'],
+                        description: 'niet-gespeeld = kwam niet voor; volgt-uit-de-opdracht = de opdracht vraagt erom (waarom verplicht); gespeeld-doorgegaan = speelde maar valt onder doorgaan mag ook; geëscaleerd = triggert de escalatie',
+                    },
+                    waarom: {
+                        type: 'string',
+                        description: 'verplicht bij volgt-uit-de-opdracht; optioneel bij andere waarden',
+                    },
+                },
+                required: ['sleutel', 'waarde'],
+                additionalProperties: false,
+            },
         },
         vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
         advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },
@@ -615,10 +744,14 @@ export async function draaiWerker(opdracht) {
         // Geen verdict betekent niet "waarschijnlijk gelukt". De geweigerde-rechten-run uit
         // de proef gaf `is_error: false` mét een net excuus in `result` — zonder verdict is
         // er geen bewijs dat er iets gebeurd is.
+        const details = verdict.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+        const weigering = gelezen.basis.weigeringen > 0
+            ? ` (${String(gelezen.basis.weigeringen)}× gereedschap geweigerd)`
+            : '';
         return {
             ...gelezen.basis,
             afloop: 'mislukt',
-            fout: `geen bruikbaar verdict in de uitvoer${gelezen.basis.weigeringen > 0 ? ` (${String(gelezen.basis.weigeringen)}× gereedschap geweigerd)` : ''}`,
+            fout: `geen bruikbaar verdict: ${details}${weigering}`,
         };
     }
     return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };

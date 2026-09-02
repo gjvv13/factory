@@ -8,7 +8,7 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiBouwer, draaiReviewer } from '../werker.js';
+import { draaiBouwer, draaiReviewer, formatDoorloop, } from '../werker.js';
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
@@ -511,7 +511,7 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     const werkmap = bouwWerkplek(item.app, item.issue, wortel);
     if (verdict?.uitkomst === 'escalatie') {
         blokkeer(item, cwd);
-        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', item.app), cwd);
+        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', item.app, verdict.doorloop), cwd);
         ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
         return false;
     }
@@ -569,9 +569,11 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     const mergeRegel = isFastlane
         ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
         : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
+    const doorloopTabel = verdict.doorloop.length > 0 ? `\n\n${formatDoorloop(verdict.doorloop)}` : '';
     plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
         `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
         verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
+        doorloopTabel +
         `\n\n${mergeRegel}\n\n${voetnoot}`, cwd);
     // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
     if (reviewComment !== undefined) {

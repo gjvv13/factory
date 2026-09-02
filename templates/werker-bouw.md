@@ -34,10 +34,22 @@ Je antwoord is gestructureerd; proza eromheen wordt niet gelezen.
   het **bewijs** — welke test het bewaakt (`bestand:testnaam`) of welke commit het
   aantoont. Een criterium waarvoor je geen bewijs kunt noemen is **niet gehaald**; dan
   escaleer je in plaats van het af te vinken. Plus een samenvatting van twee of drie
-  zinnen: wat je deed en wat je aannam.
+  zinnen: wat je deed en wat je aannam. Plus de verplichte `doorloop` (zie hieronder).
 - **Escalatie** (`uitkomst: "escalatie"`): met `vraag` en `advies`, beide concreet genoeg
-  om met één zin op te antwoorden.
+  om met één zin op te antwoorden. Plus de verplichte `doorloop`.
 
 Loop vóór je antwoord de gesloten lijst uit de `onbemand-werken`-skill punt voor punt
 langs. Kwam je er één tegen die je stilzwijgend hebt opgelost, dan is dat alsnog een
 escalatie.
+
+**De doorloop is verplicht.** Je vult per punt van de gesloten lijst (elk punt heeft
+een `<!-- sleutel:… -->`-markering in de skill) een item in je `doorloop`-array in, met
+precies die sleutel en één van vier waarden:
+
+- `niet-gespeeld` — dit punt kwam niet voor tijdens het werk.
+- `volgt-uit-de-opdracht` — de opdracht vraagt hier expliciet om; `waarom` is verplicht.
+- `gespeeld-doorgegaan` — het punt speelde, maar valt onder _Doorgaan mag ook_.
+- `geëscaleerd` — dit punt triggert de escalatie.
+
+Ontbreekt de doorloop of ontbreekt een sleutel, dan is het verdict niet valide en telt
+de run als mislukt.

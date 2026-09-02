@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { skillsDir } from '../src/paths.js';
+import { leesSleutels, leesSleutelsUitTekst } from '../src/werker.js';
 
 /**
  * Het escalatiecontract is de enige rem op een werker die niemand ziet werken. Staat
@@ -63,6 +64,40 @@ describe('onbemand-werken-skill', () => {
     // de regels ook voor haar eigen code gelden zonder een tweede kopie.
     const hier = path.dirname(fileURLToPath(import.meta.url));
     expect(existsSync(path.join(hier, '..', '.claude', 'skills', 'onbemand-werken'))).toBe(true);
+  });
+
+  it('draagt per punt een stabiele sleutel als HTML-comment (#423)', () => {
+    const tekst = skill();
+    const sleutels = leesSleutelsUitTekst(tekst);
+
+    // Elke sleutel hoort bij precies één punt van de gesloten lijst.
+    expect(sleutels.length).toBeGreaterThanOrEqual(9);
+    // Sleutels zijn kebab-case en niet leeg.
+    for (const sleutel of sleutels) {
+      expect(sleutel).toMatch(/^[a-z][-a-z0-9]+$/);
+    }
+    // Geen dubbele sleutels.
+    expect(new Set(sleutels).size).toBe(sleutels.length);
+    // De tekst blijft leesbaar: de HTML-comments zijn onzichtbaar in gerenderde markdown.
+    expect(tekst).toContain('<!-- sleutel:buiten-opdracht -->');
+    expect(tekst).toContain('<!-- sleutel:productie -->');
+  });
+
+  it('leesSleutels() haalt dezelfde sleutels uit de skill als leesSleutelsUitTekst()', () => {
+    // `leesSleutels()` leest van schijf; `leesSleutelsUitTekst()` is de pure variant.
+    // Beide moeten hetzelfde geven — gaat dat uit de pas, dan leest de validatie
+    // een andere bron dan de test.
+    const tekst = skill();
+    expect(leesSleutels()).toEqual(leesSleutelsUitTekst(tekst));
+  });
+
+  it('faalt als de skill en het schema uit de pas lopen (#423)', () => {
+    // Verwijder een sleutel uit de skill-tekst en kijk of het schema dat opmerkt.
+    const tekst = skill();
+    const volledig = leesSleutelsUitTekst(tekst);
+    const zonderEerste = tekst.replace(/<!-- sleutel:[a-z][-a-z0-9]* -->/, '');
+    const resultaat = leesSleutelsUitTekst(zonderEerste);
+    expect(resultaat.length).toBe(volledig.length - 1);
   });
 });
 

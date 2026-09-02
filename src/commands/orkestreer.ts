@@ -48,7 +48,14 @@ import { draaiReeks, meldReeks } from '../reeks.js';
 import { type ReeksKeuze, werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker, type Afloop, type WerkerBasis, type WerkerUitkomst } from '../werker.js';
+import {
+  draaiWerker,
+  formatDoorloop,
+  type Afloop,
+  type DoorloopItem,
+  type WerkerBasis,
+  type WerkerUitkomst,
+} from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 
 /**
@@ -689,12 +696,17 @@ export function escalatieComment(
   werkmap: string,
   soort: EscalatieSoort = 'refine',
   app?: string,
+  doorloop?: readonly DoorloopItem[],
 ): string {
+  const doorloopTabel =
+    doorloop !== undefined && doorloop.length > 0 ? `\n\n${formatDoorloop(doorloop)}\n` : '';
   return (
     `**Escalatie.**\n\n` +
     `${VRAAG_MERK}\n**Vraag:** ${vraag}\n${VRAAG_EIND}\n\n` +
     `${ADVIES_MERK}\n**Advies:** ${advies}\n${ADVIES_EIND}\n\n` +
-    `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
+    `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`` +
+    doorloopTabel +
+    `\n\n` +
     voetnoot(uitkomst, werkmap, soort, app)
   );
 }
@@ -794,7 +806,16 @@ function verwerk(
     blokkeer(item, cwd);
     plaatsComment(
       item.issue,
-      escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap),
+      escalatieComment(
+        item.issue,
+        verdict.vraag,
+        verdict.advies,
+        uitkomst,
+        werkmap,
+        'refine',
+        undefined,
+        verdict.doorloop,
+      ),
       cwd,
     );
     ok(
@@ -866,6 +887,10 @@ function rondAf(
   const doelKolom: Kolom = heeftWachtOp(body) ? 'Wacht op akkoord' : 'Klaar voor Bouwen';
   zetKolom(issue, doelKolom, cwd);
   haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+  const doorloopTabel =
+    uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop.length > 0
+      ? `\n\n${formatDoorloop(uitkomst.verdict.doorloop)}`
+      : '';
   plaatsComment(
     issue,
     `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
@@ -873,6 +898,7 @@ function rondAf(
       (doelKolom === 'Klaar voor Bouwen'
         ? '.'
         : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
+      doorloopTabel +
       `\n\n${voetnoot(uitkomst, werkmap)}`,
     cwd,
   );

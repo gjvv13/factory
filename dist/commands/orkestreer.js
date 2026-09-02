@@ -9,7 +9,7 @@ import { draaiReeks, meldReeks } from '../reeks.js';
 import { werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker } from '../werker.js';
+import { draaiWerker, formatDoorloop, } from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 /**
  * De supervisor: hij pakt het oudste item uit de wachtrij en laat er één onbemande
@@ -475,11 +475,14 @@ const ADVIES_EIND = '<!-- /orkestrator:advies -->';
  * die grenzen zou `status` de vraag uit opgemaakte tekst moeten vissen, en dan breekt
  * het zodra iemand de comment bijwerkt of de opmaak verandert.
  */
-export function escalatieComment(issue, vraag, advies, uitkomst, werkmap, soort = 'refine', app) {
+export function escalatieComment(issue, vraag, advies, uitkomst, werkmap, soort = 'refine', app, doorloop) {
+    const doorloopTabel = doorloop !== undefined && doorloop.length > 0 ? `\n\n${formatDoorloop(doorloop)}\n` : '';
     return (`**Escalatie.**\n\n` +
         `${VRAAG_MERK}\n**Vraag:** ${vraag}\n${VRAAG_EIND}\n\n` +
         `${ADVIES_MERK}\n**Advies:** ${advies}\n${ADVIES_EIND}\n\n` +
-        `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
+        `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`` +
+        doorloopTabel +
+        `\n\n` +
         voetnoot(uitkomst, werkmap, soort, app));
 }
 /**
@@ -559,7 +562,7 @@ function verwerk(item, uitkomst, werkmap, cwd) {
     const verdict = uitkomst.verdict;
     if (verdict?.uitkomst === 'escalatie') {
         blokkeer(item, cwd);
-        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap), cwd);
+        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'refine', undefined, verdict.doorloop), cwd);
         ok(`#${String(item.issue)} geëscaleerd — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
         return 'escalatie';
     }
@@ -601,11 +604,15 @@ function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
     const doelKolom = heeftWachtOp(body) ? 'Wacht op akkoord' : 'Klaar voor Bouwen';
     zetKolom(issue, doelKolom, cwd);
     haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+    const doorloopTabel = uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop.length > 0
+        ? `\n\n${formatDoorloop(uitkomst.verdict.doorloop)}`
+        : '';
     plaatsComment(issue, `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
         `${samenvatting}\n\nHet item staat op **${doelKolom}**` +
         (doelKolom === 'Klaar voor Bouwen'
             ? '.'
             : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
+        doorloopTabel +
         `\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
     ok(`#${String(issue)} uitgewerkt en op ${doelKolom}`);
     return 'klaar';

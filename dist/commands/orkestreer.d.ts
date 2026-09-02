@@ -1,7 +1,7 @@
 import { type BacklogItem } from '../board.js';
 import { type OrkestratorPaden } from '../orkestrator-instellingen.js';
 import { type ReeksKeuze } from './orkestreer-bouw.js';
-import { type WerkerBasis } from '../werker.js';
+import { type DoorloopItem, type WerkerBasis } from '../werker.js';
 /**
  * Probeert het slot te nemen. Schrijft het eigen pid in het slotbestand.
  *
@@ -80,7 +80,7 @@ export interface Escalatie {
  * die grenzen zou `status` de vraag uit opgemaakte tekst moeten vissen, en dan breekt
  * het zodra iemand de comment bijwerkt of de opmaak verandert.
  */
-export declare function escalatieComment(issue: number, vraag: string, advies: string, uitkomst: WerkerBasis, werkmap: string, soort?: EscalatieSoort, app?: string): string;
+export declare function escalatieComment(issue: number, vraag: string, advies: string, uitkomst: WerkerBasis, werkmap: string, soort?: EscalatieSoort, app?: string, doorloop?: readonly DoorloopItem[]): string;
 /**
  * De laatste escalatie op een issue, of undefined.
  *

@@ -116,6 +116,19 @@ function doelwitAntwoord(huidig: string): string {
   });
 }
 
+/** Standaard doorloop: alle punten niet-gespeeld. */
+const DOORLOOP_SCHOON = [
+  { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' },
+  { sleutel: 'datamodel', waarde: 'niet-gespeeld' },
+  { sleutel: 'externe-koppeling', waarde: 'niet-gespeeld' },
+  { sleutel: 'dependency', waarde: 'niet-gespeeld' },
+  { sleutel: 'flag-productie', waarde: 'niet-gespeeld' },
+  { sleutel: 'buiten-bestanden', waarde: 'niet-gespeeld' },
+  { sleutel: 'onleesbare-code', waarde: 'niet-gespeeld' },
+  { sleutel: 'dekking-verlagen', waarde: 'niet-gespeeld' },
+  { sleutel: 'productie', waarde: 'niet-gespeeld' },
+];
+
 /** Een geslaagde werker-envelop met een verdict. */
 function werkerKlaar(): string {
   return JSON.stringify({
@@ -131,6 +144,7 @@ function werkerKlaar(): string {
       samenvatting: 'Premisse getoetst, drie slices.',
       slices: 3,
       body: '# Nieuwe uitwerking\n\nDit is de body.',
+      doorloop: DOORLOOP_SCHOON,
     },
     permission_denials: [],
   });
@@ -150,6 +164,7 @@ function werkerEscaleert(): string {
       uitkomst: 'escalatie',
       vraag: 'WASM of native crypto-SDK?',
       advies: 'WASM — geen native compilatie in de bouw.',
+      doorloop: DOORLOOP_SCHOON,
     },
     permission_denials: [],
   });
@@ -448,6 +463,7 @@ describe('orkestreer', () => {
         samenvatting: 'Uitgewerkt maar wacht op iets.',
         slices: 2,
         body: '# Uitwerking\n\nDeze slice wacht op #100 (de API-laag).',
+        doorloop: DOORLOOP_SCHOON,
       },
       permission_denials: [],
     });
@@ -653,6 +669,39 @@ describe('escalatie-comment', () => {
     expect(escalatieComment(224, 'v', 'a', UITKOMST, '/w', 'bouw', 'assistant')).toContain(
       'factory orkestreer antwoord 224',
     );
+  });
+
+  it('bevat de doorloop als tabel in de comment (#423)', () => {
+    const doorloop = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      {
+        sleutel: 'datamodel',
+        waarde: 'volgt-uit-de-opdracht' as const,
+        waarom: 'het issue vraagt erom',
+      },
+      { sleutel: 'externe-koppeling', waarde: 'geëscaleerd' as const },
+    ];
+
+    const comment = escalatieComment(94, 'v', 'a', UITKOMST, '/w', 'refine', undefined, doorloop);
+
+    // De doorloop staat als leesbare tabel in de comment.
+    expect(comment).toContain('| Doorloop | Punt |');
+    expect(comment).toContain('⚪ niet-gespeeld');
+    expect(comment).toContain('🟢 volgt-uit-de-opdracht');
+    expect(comment).toContain('het issue vraagt erom');
+    expect(comment).toContain('🔴 geëscaleerd');
+    // De tabel breekt de sessie-markering niet.
+    const terug = leesEscalatie(comment);
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
+  });
+
+  it('laat de doorloop-tabel weg als er geen doorloop is', () => {
+    const comment = escalatieComment(94, 'v', 'a', UITKOMST, '/w');
+
+    expect(comment).not.toContain('Doorloop');
+    // Oude comments zonder doorloop zijn nog steeds leesbaar.
+    const terug = leesEscalatie(comment);
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
   });
 });
 

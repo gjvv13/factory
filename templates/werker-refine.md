@@ -54,6 +54,18 @@ Loop die lijst **vlak voordat je je verdict geeft** punt voor punt langs — nie
 hoofd, maar door hem terug te lezen. Kwam je er één tegen die je stilzwijgend hebt
 opgelost, dan is dat alsnog een escalatie.
 
+**De doorloop is verplicht.** Je vult per punt van de gesloten lijst (elk punt heeft
+een `<!-- sleutel:… -->`-markering in de skill) een item in je `doorloop`-array in, met
+precies die sleutel en één van vier waarden:
+
+- `niet-gespeeld` — dit punt kwam niet voor tijdens het werk.
+- `volgt-uit-de-opdracht` — de opdracht vraagt hier expliciet om; `waarom` is verplicht.
+- `gespeeld-doorgegaan` — het punt speelde, maar valt onder _Doorgaan mag ook_.
+- `geëscaleerd` — dit punt triggert de escalatie.
+
+Ontbreekt de doorloop of ontbreekt een sleutel, dan is het verdict niet valide en telt
+de run als mislukt.
+
 Escaleren is geen falen. Eén goede vraag is meer waard dan een uitwerking waarin een
 aanname verstopt zit die niemand meer terugvindt. Je sessie wordt hervat met het
 antwoord erbij, dus je werk tot dan toe blijft staan.
@@ -65,9 +77,10 @@ niet gelezen.
 
 - Ben je klaar: `uitkomst: "klaar"`, met `body` = de **complete nieuwe issue-body**
   (markdown, inclusief de functionele secties die je overnam), `samenvatting` = twee of
-  drie zinnen over wat je deed en wat je aannam, en `slices` = het aantal slices.
-- Escaleer je: `uitkomst: "escalatie"`, met `vraag` = wat je precies wilt weten, en
-  `advies` = wat jij zou doen en waarom. Beide concreet genoeg om met één zin op te
-  antwoorden.
+  drie zinnen over wat je deed en wat je aannam, `slices` = het aantal slices, en
+  `doorloop` = de doorloop van de gesloten lijst (zie hierboven).
+- Escaleer je: `uitkomst: "escalatie"`, met `vraag` = wat je precies wilt weten,
+  `advies` = wat jij zou doen en waarom (beide concreet genoeg om met één zin op te
+  antwoorden), en `doorloop` = de doorloop van de gesloten lijst.
 
 Jij schrijft niets naar GitHub. De factory doet dat met wat jij teruggeeft.
