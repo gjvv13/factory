@@ -977,6 +977,33 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(comment?.argumenten.join(' ')).toMatch(/Bouw-run mislukt/);
   });
 
+  it('behandelt klaar met stil-opgelost als escalatie en levert niet in (#424)', async () => {
+    const { aanroepen, geleverd } = await draai(envelop('claude-bouw-stil-opgelost'));
+
+    // Niets ingeleverd: de code zit in de sessie, niet in een PR.
+    expect(geleverd).toEqual([]);
+    // Escalatie-label en terug naar de bouw-wachtrij.
+    expect(aanroepen.some((a) => a.argumenten.includes('--add-label'))).toBe(true);
+    // De comment noemt het punt en wat de werker besloot.
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).toContain('stil opgelost');
+    expect(tekst).toContain('dependency');
+    expect(tekst).toContain('cheerio toegevoegd voor HTML-parsing');
+  });
+
+  it('behandelt klaar met alleen volgt-uit-de-opdracht als gewoon klaar (#424)', async () => {
+    const { geleverd } = await draai(
+      envelop('claude-bouw-volgt-uit-opdracht'),
+      envelop('claude-review-leeg'),
+    );
+
+    // volgt-uit-de-opdracht is geen escalatie: er wordt gewoon ingeleverd.
+    expect(geleverd.length).toBeGreaterThan(0);
+  });
+
   it('zet de comment met bewijs per criterium op het issue', async () => {
     const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 

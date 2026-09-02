@@ -6,7 +6,12 @@ import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import {
   ACCEPTEER_TOEGESTAAN,
   BOUWER_TOEGESTAAN,
+  doorloopWaarden,
+  draaiBouwer,
   draaiWerker,
+  formatDoorloop,
+  leesSleutels,
+  stilOpgelostPunten,
   werkerArgumenten,
   WERKER_TOEGESTAAN,
   WERKER_VERBODEN,
@@ -257,7 +262,22 @@ describe('draaiWerker', () => {
         num_turns: 9,
         total_cost_usd: 1.2,
         result: 'zie verdict',
-        structured_output: { uitkomst: 'escalatie', vraag: 'welk kanaal?', advies: 'Matrix' },
+        structured_output: {
+          uitkomst: 'escalatie',
+          vraag: 'welk kanaal?',
+          advies: 'Matrix',
+          doorloop: [
+            { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' },
+            { sleutel: 'datamodel', waarde: 'niet-gespeeld' },
+            { sleutel: 'externe-koppeling', waarde: 'niet-gespeeld' },
+            { sleutel: 'dependency', waarde: 'niet-gespeeld' },
+            { sleutel: 'flag-productie', waarde: 'niet-gespeeld' },
+            { sleutel: 'buiten-bestanden', waarde: 'niet-gespeeld' },
+            { sleutel: 'onleesbare-code', waarde: 'niet-gespeeld' },
+            { sleutel: 'dekking-verlagen', waarde: 'niet-gespeeld' },
+            { sleutel: 'productie', waarde: 'niet-gespeeld' },
+          ],
+        },
       }),
     );
 
@@ -266,5 +286,302 @@ describe('draaiWerker', () => {
     // Escaleren is geen falen: het item krijgt een vraag, geen foutmelding.
     expect(uitkomst.afloop).toBe('escalatie');
     expect(uitkomst.fout).toBeUndefined();
+  });
+});
+
+// --- doorloop (#423) --------------------------------------------------------
+
+const SLEUTELS = leesSleutels();
+
+/** Een volledige, geldige doorloop — elk punt niet-gespeeld. */
+function schoneDoorloop(): { sleutel: string; waarde: string; waarom?: string }[] {
+  return SLEUTELS.map((s) => ({ sleutel: s, waarde: 'niet-gespeeld' }));
+}
+
+/** Een werker-envelop met de opgegeven structured_output. */
+function envelop(structured: unknown): string {
+  return JSON.stringify({
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    session_id: OPDRACHT.sessie,
+    num_turns: 5,
+    total_cost_usd: 1.0,
+    result: 'zie verdict',
+    structured_output: structured,
+    permission_denials: [],
+  });
+}
+
+describe('doorloop — refine-verdict (#423)', () => {
+  afterEach(() => {
+    herstelAsyncUitvoerder();
+  });
+
+  it('weigert een verdict zonder doorloop', async () => {
+    metUitvoer(envelop({ uitkomst: 'klaar', samenvatting: 'test', slices: 1, body: '# Test' }));
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('doorloop');
+  });
+
+  it('weigert een doorloop met een ontbrekend punt', async () => {
+    const onvolledig = schoneDoorloop().slice(1); // eerste sleutel ontbreekt
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop: onvolledig,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('doorloop');
+  });
+
+  it('weigert volgt-uit-de-opdracht zonder waarom', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[2] = { sleutel: doorloop[2]!.sleutel, waarde: 'volgt-uit-de-opdracht' };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('volgt-uit-de-opdracht');
+  });
+
+  it('weigert stil-opgelost zonder waarom', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[1] = { sleutel: doorloop[1]!.sleutel, waarde: 'stil-opgelost' };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('stil-opgelost');
+  });
+
+  it('accepteert stil-opgelost met waarom', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[1] = {
+      sleutel: doorloop[1]!.sleutel,
+      waarde: 'stil-opgelost',
+      waarom: 'een veld toegevoegd',
+    };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'test',
+        slices: 1,
+        body: '# Test',
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+  });
+
+  it('accepteert een geldig verdict met volledige doorloop', async () => {
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'alles gedaan',
+        slices: 2,
+        body: '# Uitwerking',
+        doorloop: schoneDoorloop(),
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop).toHaveLength(
+      SLEUTELS.length,
+    );
+  });
+
+  it('accepteert een escalatie-verdict met volledige doorloop', async () => {
+    metUitvoer(
+      envelop({
+        uitkomst: 'escalatie',
+        vraag: 'dit of dat?',
+        advies: 'dit',
+        doorloop: schoneDoorloop(),
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('escalatie');
+  });
+});
+
+describe('doorloop — bouw-verdict (#423)', () => {
+  afterEach(() => {
+    herstelAsyncUitvoerder();
+  });
+
+  it('weigert een bouw-verdict zonder doorloop', async () => {
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'gebouwd',
+        criteria: [{ criterium: 'het werkt', bewijs: 'test.ts' }],
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('doorloop');
+  });
+
+  it('weigert een bouw-verdict met een ontbrekend punt', async () => {
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'gebouwd',
+        criteria: [{ criterium: 'het werkt', bewijs: 'test.ts' }],
+        doorloop: schoneDoorloop().slice(0, -1),
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('doorloop');
+  });
+
+  it('weigert volgt-uit-de-opdracht zonder waarom bij een bouw-verdict', async () => {
+    const doorloop = schoneDoorloop();
+    doorloop[0] = { sleutel: doorloop[0]!.sleutel, waarde: 'volgt-uit-de-opdracht' };
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'gebouwd',
+        criteria: [{ criterium: 'het werkt', bewijs: 'test.ts' }],
+        doorloop,
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('volgt-uit-de-opdracht');
+  });
+
+  it('accepteert een geldig bouw-verdict met volledige doorloop', async () => {
+    metUitvoer(
+      envelop({
+        uitkomst: 'klaar',
+        samenvatting: 'gebouwd',
+        criteria: [{ criterium: 'het werkt', bewijs: 'test.ts' }],
+        doorloop: schoneDoorloop(),
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop).toHaveLength(
+      SLEUTELS.length,
+    );
+  });
+});
+
+describe('formatDoorloop (#423)', () => {
+  it('formatteert een doorloop als leesbare tabel', () => {
+    const items = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      {
+        sleutel: 'datamodel',
+        waarde: 'volgt-uit-de-opdracht' as const,
+        waarom: 'het issue vraagt om een migratie',
+      },
+      { sleutel: 'externe-koppeling', waarde: 'gespeeld-doorgegaan' as const },
+      { sleutel: 'productie', waarde: 'geëscaleerd' as const },
+    ];
+
+    const tabel = formatDoorloop(items);
+
+    expect(tabel).toContain('| Doorloop | Punt |');
+    expect(tabel).toContain('⚪ niet-gespeeld');
+    expect(tabel).toContain('🟢 volgt-uit-de-opdracht');
+    expect(tabel).toContain('het issue vraagt om een migratie');
+    expect(tabel).toContain('🟡 gespeeld-doorgegaan');
+    expect(tabel).toContain('🔴 geëscaleerd');
+  });
+
+  it('kent alle vijf de waarden', () => {
+    expect(doorloopWaarden).toHaveLength(5);
+    expect(doorloopWaarden).toContain('niet-gespeeld');
+    expect(doorloopWaarden).toContain('volgt-uit-de-opdracht');
+    expect(doorloopWaarden).toContain('gespeeld-doorgegaan');
+    expect(doorloopWaarden).toContain('stil-opgelost');
+    expect(doorloopWaarden).toContain('geëscaleerd');
+  });
+
+  it('toont 🟠 voor stil-opgelost', () => {
+    const items = [
+      {
+        sleutel: 'dependency',
+        waarde: 'stil-opgelost' as const,
+        waarom: 'cheerio toegevoegd',
+      },
+    ];
+
+    const tabel = formatDoorloop(items);
+
+    expect(tabel).toContain('🟠 stil-opgelost');
+    expect(tabel).toContain('cheerio toegevoegd');
+  });
+});
+
+describe('stilOpgelostPunten (#424)', () => {
+  it('geeft alleen items met waarde stil-opgelost terug', () => {
+    const items = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      { sleutel: 'datamodel', waarde: 'stil-opgelost' as const, waarom: 'veld toegevoegd' },
+      { sleutel: 'dependency', waarde: 'volgt-uit-de-opdracht' as const, waarom: 'issue' },
+      { sleutel: 'productie', waarde: 'geëscaleerd' as const },
+    ];
+
+    const resultaat = stilOpgelostPunten(items);
+
+    expect(resultaat).toHaveLength(1);
+    expect(resultaat[0]!.sleutel).toBe('datamodel');
+  });
+
+  it('geeft een lege lijst als niets stil is opgelost', () => {
+    const items = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      { sleutel: 'datamodel', waarde: 'volgt-uit-de-opdracht' as const, waarom: 'issue' },
+    ];
+
+    expect(stilOpgelostPunten(items)).toHaveLength(0);
   });
 });

@@ -22,7 +22,11 @@
     ],
     "doorloop": [
       { "sleutel": "buiten-opdracht", "waarde": "niet-gespeeld" },
-      { "sleutel": "datamodel", "waarde": "niet-gespeeld" },
+      {
+        "sleutel": "datamodel",
+        "waarde": "volgt-uit-de-opdracht",
+        "waarom": "het issue vraagt om een migratie"
+      },
       { "sleutel": "externe-koppeling", "waarde": "niet-gespeeld" },
       { "sleutel": "dependency", "waarde": "niet-gespeeld" },
       { "sleutel": "flag-productie", "waarde": "niet-gespeeld" },

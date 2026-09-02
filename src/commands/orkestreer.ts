@@ -48,7 +48,15 @@ import { draaiReeks, meldReeks } from '../reeks.js';
 import { type ReeksKeuze, werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker, type Afloop, type WerkerBasis, type WerkerUitkomst } from '../werker.js';
+import {
+  draaiWerker,
+  formatDoorloop,
+  stilOpgelostPunten,
+  type Afloop,
+  type DoorloopItem,
+  type WerkerBasis,
+  type WerkerUitkomst,
+} from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 
 /**
@@ -689,12 +697,17 @@ export function escalatieComment(
   werkmap: string,
   soort: EscalatieSoort = 'refine',
   app?: string,
+  doorloop?: readonly DoorloopItem[],
 ): string {
+  const doorloopTabel =
+    doorloop !== undefined && doorloop.length > 0 ? `\n\n${formatDoorloop(doorloop)}\n` : '';
   return (
     `**Escalatie.**\n\n` +
     `${VRAAG_MERK}\n**Vraag:** ${vraag}\n${VRAAG_EIND}\n\n` +
     `${ADVIES_MERK}\n**Advies:** ${advies}\n${ADVIES_EIND}\n\n` +
-    `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`\n\n` +
+    `Antwoorden: \`factory orkestreer antwoord ${String(issue)} "<jouw keuze>"\`` +
+    doorloopTabel +
+    `\n\n` +
     voetnoot(uitkomst, werkmap, soort, app)
   );
 }
@@ -794,7 +807,16 @@ function verwerk(
     blokkeer(item, cwd);
     plaatsComment(
       item.issue,
-      escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap),
+      escalatieComment(
+        item.issue,
+        verdict.vraag,
+        verdict.advies,
+        uitkomst,
+        werkmap,
+        'refine',
+        undefined,
+        verdict.doorloop,
+      ),
       cwd,
     );
     ok(
@@ -808,6 +830,36 @@ function verwerk(
     // alternatief is stil doorgaan met een lege body.
     waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
     return 'mislukt';
+  }
+
+  // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
+  // oploste, mag dat niet zelf afvinken: de supervisor behandelt het als escalatie,
+  // zodat een mens oordeelt of de keuze mag (#424). De body wordt niet geschreven;
+  // het werk zit in de sessie en `orkestreer antwoord` hervat hem.
+  const stilOpgelost = stilOpgelostPunten(verdict.doorloop);
+  if (stilOpgelost.length > 0) {
+    blokkeer(item, cwd);
+    const punten = stilOpgelost
+      .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
+      .join('\n- ');
+    plaatsComment(
+      item.issue,
+      escalatieComment(
+        item.issue,
+        `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`,
+        verdict.samenvatting,
+        uitkomst,
+        werkmap,
+        'refine',
+        undefined,
+        verdict.doorloop,
+      ),
+      cwd,
+    );
+    ok(
+      `#${String(item.issue)} geëscaleerd (stil opgelost) — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`,
+    );
+    return 'escalatie';
   }
 
   return rondAf(
@@ -866,6 +918,10 @@ function rondAf(
   const doelKolom: Kolom = heeftWachtOp(body) ? 'Wacht op akkoord' : 'Klaar voor Bouwen';
   zetKolom(issue, doelKolom, cwd);
   haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+  const doorloopTabel =
+    uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop.length > 0
+      ? `\n\n${formatDoorloop(uitkomst.verdict.doorloop)}`
+      : '';
   plaatsComment(
     issue,
     `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
@@ -873,6 +929,7 @@ function rondAf(
       (doelKolom === 'Klaar voor Bouwen'
         ? '.'
         : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
+      doorloopTabel +
       `\n\n${voetnoot(uitkomst, werkmap)}`,
     cwd,
   );

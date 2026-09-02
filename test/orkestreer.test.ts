@@ -116,6 +116,19 @@ function doelwitAntwoord(huidig: string): string {
   });
 }
 
+/** Standaard doorloop: alle punten niet-gespeeld. */
+const DOORLOOP_SCHOON = [
+  { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' },
+  { sleutel: 'datamodel', waarde: 'niet-gespeeld' },
+  { sleutel: 'externe-koppeling', waarde: 'niet-gespeeld' },
+  { sleutel: 'dependency', waarde: 'niet-gespeeld' },
+  { sleutel: 'flag-productie', waarde: 'niet-gespeeld' },
+  { sleutel: 'buiten-bestanden', waarde: 'niet-gespeeld' },
+  { sleutel: 'onleesbare-code', waarde: 'niet-gespeeld' },
+  { sleutel: 'dekking-verlagen', waarde: 'niet-gespeeld' },
+  { sleutel: 'productie', waarde: 'niet-gespeeld' },
+];
+
 /** Een geslaagde werker-envelop met een verdict. */
 function werkerKlaar(): string {
   return JSON.stringify({
@@ -131,6 +144,7 @@ function werkerKlaar(): string {
       samenvatting: 'Premisse getoetst, drie slices.',
       slices: 3,
       body: '# Nieuwe uitwerking\n\nDit is de body.',
+      doorloop: DOORLOOP_SCHOON,
     },
     permission_denials: [],
   });
@@ -150,6 +164,7 @@ function werkerEscaleert(): string {
       uitkomst: 'escalatie',
       vraag: 'WASM of native crypto-SDK?',
       advies: 'WASM — geen native compilatie in de bouw.',
+      doorloop: DOORLOOP_SCHOON,
     },
     permission_denials: [],
   });
@@ -448,6 +463,7 @@ describe('orkestreer', () => {
         samenvatting: 'Uitgewerkt maar wacht op iets.',
         slices: 2,
         body: '# Uitwerking\n\nDeze slice wacht op #100 (de API-laag).',
+        doorloop: DOORLOOP_SCHOON,
       },
       permission_denials: [],
     });
@@ -461,6 +477,99 @@ describe('orkestreer', () => {
     // Eerst naar Technisch refinen (begin werkAf), dan naar Wacht op akkoord (rondAf).
     expect(opties).toContain('optie-wacht-akkoord');
     expect(opties).not.toContain('optie-bouwen');
+  });
+
+  it('behandelt klaar met stil-opgelost als escalatie (#424)', async () => {
+    const doorloopMetStil = DOORLOOP_SCHOON.map((d) =>
+      d.sleutel === 'datamodel'
+        ? {
+            sleutel: 'datamodel',
+            waarde: 'stil-opgelost',
+            waarom: 'een veld toegevoegd aan de tabel',
+          }
+        : d,
+    );
+    const stilVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Alles gedaan inclusief migratie.',
+        slices: 2,
+        body: '# Uitwerking\n\nDit is de body.',
+        doorloop: doorloopMetStil,
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: stilVerdict }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // Geen body geschreven: de uitwerking gaat niet naar het issue.
+    expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(false);
+    // Wel een escalatie-label en terug naar de wachtrij-kolom.
+    expect(ghArgs(aanroepen)).toContainEqual(
+      expect.arrayContaining(['issue', 'edit', '51', '--add-label', 'escalatie']),
+    );
+    // De comment noemt het punt en wat de werker besloot.
+    const commentArgs = ghArgs(aanroepen).find(
+      (a) => a[0] === 'issue' && a[1] === 'comment' && a[2] === '51',
+    );
+    expect(commentArgs).toBeDefined();
+    const commentBody = commentArgs?.[commentArgs.indexOf('--body') + 1] ?? '';
+    expect(commentBody).toContain('stil opgelost');
+    expect(commentBody).toContain('datamodel');
+    expect(commentBody).toContain('een veld toegevoegd aan de tabel');
+  });
+
+  it('behandelt klaar met alleen volgt-uit-de-opdracht als gewoon klaar (#424)', async () => {
+    const doorloopMetVolgt = DOORLOOP_SCHOON.map((d) =>
+      d.sleutel === 'datamodel'
+        ? {
+            sleutel: 'datamodel',
+            waarde: 'volgt-uit-de-opdracht',
+            waarom: 'het issue vraagt om een migratie',
+          }
+        : d,
+    );
+    const volgtVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Premisse getoetst, twee slices.',
+        slices: 2,
+        body: '# Uitwerking\n\nDit is de body.',
+        doorloop: doorloopMetVolgt,
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: volgtVerdict }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    // De body is wel geschreven: volgt-uit-de-opdracht is geen escalatie.
+    expect(ghArgs(aanroepen).some((a) => a.includes('--body-file'))).toBe(true);
+    // Geen escalatie-label.
+    expect(
+      ghArgs(aanroepen).some(
+        (a) =>
+          a[0] === 'issue' &&
+          a[1] === 'edit' &&
+          a.includes('--add-label') &&
+          a.includes('escalatie'),
+      ),
+    ).toBe(false);
   });
 
   it('rekent een run met is_error als mislukt, ook bij exitcode 0', async () => {
@@ -653,6 +762,39 @@ describe('escalatie-comment', () => {
     expect(escalatieComment(224, 'v', 'a', UITKOMST, '/w', 'bouw', 'assistant')).toContain(
       'factory orkestreer antwoord 224',
     );
+  });
+
+  it('bevat de doorloop als tabel in de comment (#423)', () => {
+    const doorloop = [
+      { sleutel: 'buiten-opdracht', waarde: 'niet-gespeeld' as const },
+      {
+        sleutel: 'datamodel',
+        waarde: 'volgt-uit-de-opdracht' as const,
+        waarom: 'het issue vraagt erom',
+      },
+      { sleutel: 'externe-koppeling', waarde: 'geëscaleerd' as const },
+    ];
+
+    const comment = escalatieComment(94, 'v', 'a', UITKOMST, '/w', 'refine', undefined, doorloop);
+
+    // De doorloop staat als leesbare tabel in de comment.
+    expect(comment).toContain('| Doorloop | Punt |');
+    expect(comment).toContain('⚪ niet-gespeeld');
+    expect(comment).toContain('🟢 volgt-uit-de-opdracht');
+    expect(comment).toContain('het issue vraagt erom');
+    expect(comment).toContain('🔴 geëscaleerd');
+    // De tabel breekt de sessie-markering niet.
+    const terug = leesEscalatie(comment);
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
+  });
+
+  it('laat de doorloop-tabel weg als er geen doorloop is', () => {
+    const comment = escalatieComment(94, 'v', 'a', UITKOMST, '/w');
+
+    expect(comment).not.toContain('Doorloop');
+    // Oude comments zonder doorloop zijn nog steeds leesbaar.
+    const terug = leesEscalatie(comment);
+    expect(terug?.sessie).toBe(UITKOMST.sessie);
   });
 });
 

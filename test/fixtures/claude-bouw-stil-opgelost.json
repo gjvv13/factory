@@ -9,22 +9,22 @@
   "result": "zie verdict",
   "structured_output": {
     "uitkomst": "klaar",
-    "samenvatting": "Promote gebruikt nu een niet-interactieve pnpm-aanroep; twee tests dekken het gedrag. Aangenomen dat de node_modules-opruiming alleen bij een versiewissel speelt.",
+    "samenvatting": "Gebouwd inclusief extra dependency voor parsing.",
     "criteria": [
       {
         "criterium": "promote faalt niet meer zonder TTY",
         "bewijs": "test/promote.test.ts:'draait pnpm zonder interactieve prompt'"
-      },
-      {
-        "criterium": "de bestaande promote-weg verandert niet",
-        "bewijs": "test/promote.test.ts:'rolt een tag uit zoals voorheen' (ongewijzigd, groen)"
       }
     ],
     "doorloop": [
       { "sleutel": "buiten-opdracht", "waarde": "niet-gespeeld" },
       { "sleutel": "datamodel", "waarde": "niet-gespeeld" },
       { "sleutel": "externe-koppeling", "waarde": "niet-gespeeld" },
-      { "sleutel": "dependency", "waarde": "niet-gespeeld" },
+      {
+        "sleutel": "dependency",
+        "waarde": "stil-opgelost",
+        "waarom": "cheerio toegevoegd voor HTML-parsing"
+      },
       { "sleutel": "flag-productie", "waarde": "niet-gespeeld" },
       { "sleutel": "buiten-bestanden", "waarde": "niet-gespeeld" },
       { "sleutel": "onleesbare-code", "waarde": "niet-gespeeld" },
