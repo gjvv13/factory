@@ -989,6 +989,32 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(tekst).toContain('zonder auto-merge');
   });
 
+  it('toont de keuze-notitie in de bouw-comment als de werker er een meegaf', async () => {
+    // Verrijk de fixture met een keuzeNotitie door de JSON met de hand aan te passen.
+    const basis = JSON.parse(envelop('claude-bouw-klaar')) as Record<string, unknown>;
+    const so = basis['structured_output'] as Record<string, unknown>;
+    so['keuzeNotitie'] = 'Fastify-plugin gekozen — past beter bij de app.';
+    const metKeuze = JSON.stringify(basis);
+    const { aanroepen } = await draai(metKeuze, envelop('claude-review-leeg'));
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).toContain('**Keuze-notitie:**');
+    expect(tekst).toContain('Fastify-plugin gekozen');
+  });
+
+  it('laat de keuze-notitie weg als de bouw-werker er geen meegaf', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).not.toContain('Keuze-notitie');
+  });
+
   it('weigert --dry en --eenmalig samen', async () => {
     zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar')));
 

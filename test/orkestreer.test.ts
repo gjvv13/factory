@@ -463,6 +463,42 @@ describe('orkestreer', () => {
     expect(opties).not.toContain('optie-bouwen');
   });
 
+  it('toont de keuze-notitie in de comment als de werker er een meegaf', async () => {
+    const keuzeVerdict = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+      num_turns: 12,
+      total_cost_usd: 1.25,
+      result: 'zie verdict',
+      structured_output: {
+        uitkomst: 'klaar',
+        samenvatting: 'Uitgewerkt met een keuze.',
+        slices: 2,
+        body: '# Uitwerking\n\nAlles klaar.',
+        keuzeNotitie: 'Zod v4 gekozen — het project staat er al op.',
+      },
+      permission_denials: [],
+    });
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: keuzeVerdict }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    expect(comment).toContain('**Keuze-notitie:**');
+    expect(comment).toContain('Zod v4 gekozen');
+  });
+
+  it('laat de keuze-notitie weg als de werker er geen meegaf', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler());
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    expect(comment).not.toContain('Keuze-notitie');
+  });
+
   it('rekent een run met is_error als mislukt, ook bij exitcode 0', async () => {
     const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerMislukt() }));
 

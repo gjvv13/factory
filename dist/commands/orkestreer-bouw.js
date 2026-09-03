@@ -569,10 +569,11 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     const mergeRegel = isFastlane
         ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
         : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
+    const keuzeBlok = verdict.keuzeNotitie !== undefined ? `\n\n**Keuze-notitie:** ${verdict.keuzeNotitie}` : '';
     plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
         `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
         verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-        `\n\n${mergeRegel}\n\n${voetnoot}`, cwd);
+        `${keuzeBlok}\n\n${mergeRegel}\n\n${voetnoot}`, cwd);
     // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
     if (reviewComment !== undefined) {
         if (!plaatsPrComment(item, reviewComment)) {
