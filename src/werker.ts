@@ -178,6 +178,7 @@ const verdictSchema = z.discriminatedUnion('uitkomst', [
     samenvatting: z.string().min(1),
     slices: z.number().int().nonnegative(),
     body: z.string().min(1),
+    keuzeNotitie: z.string().optional(),
   }),
   z.object({
     uitkomst: z.literal('escalatie'),
@@ -199,6 +200,7 @@ const bouwVerdictSchema = z.discriminatedUnion('uitkomst', [
     uitkomst: z.literal('klaar'),
     samenvatting: z.string().min(1),
     criteria: z.array(z.object({ criterium: z.string().min(1), bewijs: z.string().min(1) })).min(1),
+    keuzeNotitie: z.string().optional(),
   }),
   z.object({
     uitkomst: z.literal('escalatie'),
@@ -382,6 +384,11 @@ export const BOUW_JSON_SCHEMA = {
         additionalProperties: false,
       },
     },
+    keuzeNotitie: {
+      type: 'string',
+      description:
+        'alleen bij klaar: optionele toelichting op een eigen-gedragen keuze die de werker maakte zonder te escaleren',
+    },
     vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
     advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },
   },
@@ -415,6 +422,11 @@ export const VERDICT_JSON_SCHEMA = {
     body: {
       type: 'string',
       description: 'alleen bij klaar: de complete nieuwe issue-body in markdown',
+    },
+    keuzeNotitie: {
+      type: 'string',
+      description:
+        'alleen bij klaar: optionele toelichting op een eigen-gedragen keuze die de werker maakte zonder te escaleren',
     },
     vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
     advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },

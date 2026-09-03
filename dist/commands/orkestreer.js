@@ -569,7 +569,7 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitwerking.`);
         return 'mislukt';
     }
-    return rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd);
+    return rondAf(item.issue, verdict.body, verdict.samenvatting, verdict.slices, uitkomst, werkmap, cwd, verdict.keuzeNotitie);
 }
 /** Zet een item stil: terug in de wachtrij-kolom, met het label dat het overslaat. */
 function blokkeer(item, cwd) {
@@ -584,7 +584,7 @@ export function heeftWachtOp(body) {
     return /wacht op #\d+/i.test(body);
 }
 /** Schrijft de uitwerking weg en zet het item op de juiste kolom. */
-function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
+function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd, keuzeNotitie) {
     const tijdelijk = mkdtempSync(path.join(os.tmpdir(), 'factory-orkestreer-'));
     const bodyBestand = path.join(tijdelijk, 'body.md');
     writeFileSync(bodyBestand, body.endsWith('\n') ? body : `${body}\n`);
@@ -601,8 +601,9 @@ function rondAf(issue, body, samenvatting, slices, uitkomst, werkmap, cwd) {
     const doelKolom = heeftWachtOp(body) ? 'Wacht op akkoord' : 'Klaar voor Bouwen';
     zetKolom(issue, doelKolom, cwd);
     haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+    const keuzeBlok = keuzeNotitie !== undefined ? `\n\n**Keuze-notitie:** ${keuzeNotitie}` : '';
     plaatsComment(issue, `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
-        `${samenvatting}\n\nHet item staat op **${doelKolom}**` +
+        `${samenvatting}${keuzeBlok}\n\nHet item staat op **${doelKolom}**` +
         (doelKolom === 'Klaar voor Bouwen'
             ? '.'
             : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
