@@ -610,10 +610,12 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWe
         : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
     const wrijvingSectie = maakWrijvingSectie(verdict.wrijving, logWeigeringen, uitkomst);
     const doorloopTabel = verdict.doorloop.length > 0 ? `\n\n${formatDoorloop(verdict.doorloop)}` : '';
+    const keuzeBlok = verdict.keuzeNotitie !== undefined ? `\n\n**Keuze-notitie:** ${verdict.keuzeNotitie}` : '';
     plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
         `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
         verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
         doorloopTabel +
+        keuzeBlok +
         `\n\n${mergeRegel}` +
         (wrijvingSectie !== undefined ? `\n\n${wrijvingSectie}` : '') +
         `\n\n${voetnoot}`, cwd);

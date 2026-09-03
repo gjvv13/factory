@@ -333,6 +333,114 @@ describe('draaiWerker', () => {
     expect(uitkomst.afloop).toBe('escalatie');
     expect(uitkomst.fout).toBeUndefined();
   });
+
+  it('accepteert klaar met een keuzeNotitie', async () => {
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        num_turns: 10,
+        total_cost_usd: 1.0,
+        result: 'zie verdict',
+        structured_output: {
+          uitkomst: 'klaar',
+          samenvatting: 'Uitgewerkt.',
+          slices: 2,
+          body: '# Body',
+          doorloop: schoneDoorloop(),
+          keuzeNotitie: 'Zod v4 gekozen boven v3 — het project staat er al op.',
+        },
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.keuzeNotitie).toBe(
+      'Zod v4 gekozen boven v3 — het project staat er al op.',
+    );
+  });
+
+  it('accepteert klaar zonder keuzeNotitie', async () => {
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        num_turns: 10,
+        total_cost_usd: 1.0,
+        result: 'zie verdict',
+        structured_output: {
+          uitkomst: 'klaar',
+          samenvatting: 'Uitgewerkt.',
+          slices: 2,
+          body: '# Body',
+          doorloop: schoneDoorloop(),
+        },
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.keuzeNotitie).toBeUndefined();
+  });
+
+  it('accepteert een bouw-verdict met keuzeNotitie', async () => {
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        num_turns: 15,
+        total_cost_usd: 5.0,
+        result: 'zie verdict',
+        structured_output: {
+          uitkomst: 'klaar',
+          samenvatting: 'Gebouwd en getest.',
+          criteria: [{ criterium: 'Route geeft 200', bewijs: 'test/e2e:geeft 200' }],
+          doorloop: schoneDoorloop(),
+          keuzeNotitie: 'Fastify-plugin in plaats van middleware — past beter bij de app.',
+        },
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.keuzeNotitie).toBe(
+      'Fastify-plugin in plaats van middleware — past beter bij de app.',
+    );
+  });
+
+  it('accepteert een bouw-verdict zonder keuzeNotitie', async () => {
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        num_turns: 15,
+        total_cost_usd: 5.0,
+        result: 'zie verdict',
+        structured_output: {
+          uitkomst: 'klaar',
+          samenvatting: 'Gebouwd en getest.',
+          criteria: [{ criterium: 'Route geeft 200', bewijs: 'test/e2e:geeft 200' }],
+          doorloop: schoneDoorloop(),
+        },
+      }),
+    );
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    expect(uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.keuzeNotitie).toBeUndefined();
+  });
 });
 
 // --- doorloop (#423) --------------------------------------------------------

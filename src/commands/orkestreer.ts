@@ -921,6 +921,7 @@ function verwerk(
     uitkomst,
     werkmap,
     cwd,
+    verdict.keuzeNotitie,
   );
 }
 
@@ -947,6 +948,7 @@ function rondAf(
   uitkomst: WerkerUitkomst,
   werkmap: string,
   cwd: string,
+  keuzeNotitie?: string,
 ): Afloop {
   const tijdelijk = mkdtempSync(path.join(os.tmpdir(), 'factory-orkestreer-'));
   const bodyBestand = path.join(tijdelijk, 'body.md');
@@ -973,10 +975,11 @@ function rondAf(
     uitkomst.verdict?.uitkomst === 'klaar' && uitkomst.verdict.doorloop.length > 0
       ? `\n\n${formatDoorloop(uitkomst.verdict.doorloop)}`
       : '';
+  const keuzeBlok = keuzeNotitie !== undefined ? `\n\n**Keuze-notitie:** ${keuzeNotitie}` : '';
   plaatsComment(
     issue,
     `**Technisch uitgewerkt** (${String(slices)} slice${slices === 1 ? '' : 's'}).\n\n` +
-      `${samenvatting}\n\nHet item staat op **${doelKolom}**` +
+      `${samenvatting}${keuzeBlok}\n\nHet item staat op **${doelKolom}**` +
       (doelKolom === 'Klaar voor Bouwen'
         ? '.'
         : '; de body bevat een open afhankelijkheid, dus het wacht op je akkoord.') +
