@@ -435,7 +435,7 @@ const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
         status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         prioriteit: fieldValueByName(name:"Prioriteit"){ ... on ProjectV2ItemFieldNumberValue { number } }
-        content{ ... on Issue { number title state createdAt
+        content{ ... on Issue { number title state createdAt updatedAt
           labels(first:20){ nodes{ name } }
           parent{ number } } } } } } }
 }`;
@@ -529,6 +529,7 @@ export function bordItems(cwd) {
             const app = knoop.app?.name;
             const ouder = inhoud.parent?.number;
             const prioriteit = knoop.prioriteit?.number;
+            const bijgewerkt = inhoud.updatedAt;
             const labels = (inhoud.labels?.nodes ?? [])
                 .map((label) => label?.name)
                 .filter((naam) => naam !== undefined);
@@ -541,6 +542,7 @@ export function bordItems(cwd) {
                 ...(app === undefined ? {} : { app }),
                 ...(ouder === undefined ? {} : { ouder }),
                 ...(prioriteit === undefined ? {} : { prioriteit }),
+                ...(bijgewerkt === undefined ? {} : { bijgewerkt }),
             });
         }
         const volgende = items.pageInfo?.endCursor;

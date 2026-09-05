@@ -2,6 +2,7 @@
 import { afronden } from './commands/afronden.js';
 import { backup } from './commands/backup.js';
 import { board } from './commands/board.js';
+import { brief } from './commands/brief.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
@@ -53,6 +54,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
   factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
   factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
+  factory brief                          beslis-gericht overzicht over alle apps (regie-brief, #404)
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
@@ -223,6 +225,9 @@ async function main(argumenten) {
             prioriteit(positioneel[0], positioneel[1]);
             return;
         }
+        case 'brief':
+            brief();
+            return;
         case 'board': {
             const { positioneel } = leesArgumenten(rest);
             board(positioneel[0], positioneel[1]);

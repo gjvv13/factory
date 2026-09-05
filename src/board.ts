@@ -569,6 +569,12 @@ export interface BacklogItem {
    * FIFO-volgorde — alsof het getal oneindig is (#438).
    */
   readonly prioriteit?: number;
+  /**
+   * Het moment van de laatste wijziging aan het issue (label, comment, kolom, …).
+   * Proxy voor "stil": GitHub biedt geen kolom-wijzigingsdatum, maar `updatedAt`
+   * bewijst dat er iets gebeurde (#404).
+   */
+  readonly bijgewerkt?: string;
 }
 
 const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
@@ -580,7 +586,7 @@ const WACHTRIJ_QUERY = `query($eigenaar:String!,$project:Int!,$na:String){
         status: fieldValueByName(name:"Status"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         app: fieldValueByName(name:"App"){ ... on ProjectV2ItemFieldSingleSelectValue { name } }
         prioriteit: fieldValueByName(name:"Prioriteit"){ ... on ProjectV2ItemFieldNumberValue { number } }
-        content{ ... on Issue { number title state createdAt
+        content{ ... on Issue { number title state createdAt updatedAt
           labels(first:20){ nodes{ name } }
           parent{ number } } } } } } }
 }`;
@@ -603,6 +609,7 @@ interface WachtrijAntwoord {
               title?: string;
               state?: string;
               createdAt?: string;
+              updatedAt?: string;
               labels?: { nodes?: ({ name?: string } | null)[] } | null;
               parent?: { number?: number } | null;
             } | null;
@@ -711,6 +718,7 @@ export function bordItems(cwd?: string): BacklogItem[] | undefined {
       const app = knoop.app?.name;
       const ouder = inhoud.parent?.number;
       const prioriteit = knoop.prioriteit?.number;
+      const bijgewerkt = inhoud.updatedAt;
       const labels = (inhoud.labels?.nodes ?? [])
         .map((label) => label?.name)
         .filter((naam): naam is string => naam !== undefined);
@@ -723,6 +731,7 @@ export function bordItems(cwd?: string): BacklogItem[] | undefined {
         ...(app === undefined ? {} : { app }),
         ...(ouder === undefined ? {} : { ouder }),
         ...(prioriteit === undefined ? {} : { prioriteit }),
+        ...(bijgewerkt === undefined ? {} : { bijgewerkt }),
       });
     }
     const volgende = items.pageInfo?.endCursor;
