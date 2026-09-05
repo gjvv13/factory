@@ -33,6 +33,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
 | `factory prioriteit <issue> [getal]`                  | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                  |
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
+| `factory brief`                                       | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                               |
 | `factory opruimen [--dry]`                            | Gemergede branches opruimen: lokaal en op de remote                                                       |
 | `factory orkestreer <--dry\|--eenmalig>`              | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |
 | `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |

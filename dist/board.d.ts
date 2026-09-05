@@ -179,6 +179,12 @@ export interface BacklogItem {
      * FIFO-volgorde — alsof het getal oneindig is (#438).
      */
     readonly prioriteit?: number;
+    /**
+     * Het moment van de laatste wijziging aan het issue (label, comment, kolom, …).
+     * Proxy voor "stil": GitHub biedt geen kolom-wijzigingsdatum, maar `updatedAt`
+     * bewijst dat er iets gebeurde (#404).
+     */
+    readonly bijgewerkt?: string;
 }
 /** Alle open items in één kolom, oudste eerst. Een filter op `bordItems`. */
 export declare function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefined;
