@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
@@ -229,12 +229,19 @@ export function verify(opties = {}) {
     // Coverage draait alleen bij een volledige poort; --snel en --pre-commit slaan
     // het over zodat lokaal en de pre-commit hook snel blijven.
     const metCoverage = opties.snel !== true && opties.preCommit !== true;
+    // Ruim stale coverage-bestanden op vóór de testloop, zodat de merge nooit
+    // resultaten uit een vorige run meeneemt. De map is .gitignore'd en wordt
+    // door de testruns opnieuw aangemaakt.
+    if (metCoverage) {
+        rmSync(path.join(repoDir, 'coverage'), { recursive: true, force: true });
+    }
     if (opties.preCommit === true) {
         kop('pre-commit: opmaak, lint, types, unit tests');
     }
     let gedraaid = 0;
     const overgeslagen = [];
     const dekkingen = [];
+    const gedraaideCoverageNamen = [];
     for (const stap of STAPPEN) {
         if (!aanwezig.has(stap.script)) {
             continue;
@@ -252,6 +259,7 @@ export function verify(opties = {}) {
         const dekkingNaam = metCoverage ? stap.coverageNaam : undefined;
         draaiScript(stap.script, repoDir, dekkingNaam === undefined ? undefined : { ...process.env, FACTORY_COVERAGE: '1' });
         if (dekkingNaam !== undefined) {
+            gedraaideCoverageNamen.push(dekkingNaam);
             const pct = leesDekking(repoDir, dekkingNaam);
             if (pct !== undefined) {
                 dekkingen.push(pct);
@@ -265,8 +273,13 @@ export function verify(opties = {}) {
     }
     if (metCoverage) {
         // Voeg de per-soort istanbul-maps samen tot één gecombineerd cijfer; dat is de
-        // eerlijke basis voor de drempel (i.p.v. de hoogste losse soort).
-        const gecombineerd = schrijfGecombineerdeDekking(repoDir);
+        // eerlijke basis voor de drempel (i.p.v. de hoogste losse soort). De verwachtlijst
+        // zorgt dat alleen de daadwerkelijk gedraaide soorten meekomen en dat een ontbrekend
+        // rapport undefined oplevert i.p.v. een misleidend laag getal.
+        const gecombineerd = schrijfGecombineerdeDekking(repoDir, gedraaideCoverageNamen);
+        if (gecombineerd === undefined && gedraaideCoverageNamen.length > 0) {
+            waarschuwing('Gecombineerde dekking overgeslagen: niet elke gedraaide soort leverde een coverage-final.json.');
+        }
         const dekkingsConfig = leesDekkingsConfig(repoDir);
         const minimum = dekkingsConfig?.dekkingsMinimum;
         // De vaste bodem toetst tegen de regeldekking; de ratchet (hieronder) bewaakt alle vier.
