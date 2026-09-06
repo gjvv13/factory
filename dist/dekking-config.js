@@ -14,6 +14,7 @@ const dekkingsConfigSchema = z.object({
     dekkingsMinimum: z.number().min(0).max(100).optional(),
     dekkingsRatchet: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
     dekkingsTolerantie: z.number().min(0).max(5).default(0.5),
+    diffDekkingsMinimum: z.number().min(0).max(100).default(80),
 });
 /**
  * Leest de dekkingsconfiguratie uit de repo. Zoekt eerst `factory.json` (de volledige
@@ -30,6 +31,7 @@ export function leesDekkingsConfig(repoDir) {
             dekkingsMinimum: appConfig.dekkingsMinimum,
             dekkingsRatchet: appConfig.dekkingsRatchet,
             dekkingsTolerantie: appConfig.dekkingsTolerantie,
+            diffDekkingsMinimum: appConfig.diffDekkingsMinimum,
         };
     }
     // Pad 2: lichtere dekking-only config (dekking.json) — de factory zelf.

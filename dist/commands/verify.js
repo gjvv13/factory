@@ -4,6 +4,7 @@ import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { schrijfGecombineerdeDekking } from '../coverage-merge.js';
 import { beoordeelRatchet, leesBasislijn, schrijfBasislijn, BASISLIJN_BESTAND, } from '../dekking-basislijn.js';
 import { leesDekkingsConfig } from '../dekking-config.js';
+import { berekenDiffDekking, parseDiffRegels } from '../diff-dekking.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
 import { toetsFlagVerloop } from '../flag-verloop.js';
 import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout, OmgevingsFout, } from '../shell.js';
@@ -97,12 +98,13 @@ function beschrijfVerschil(verschil) {
  * De dekkings-ratchet: vergelijkt de gemeten dekking met de vastgelegde basislijn (het hoogste
  * niveau dat de app ooit haalde) en houdt die bij. Zo kan de dekking niet stil wegzakken tot de
  * vaste `dekkingsMinimum`-bodem. Zonder eerdere basislijn is dit een bootstrap: vastleggen zonder
- * oordeel. Een regressie waarschuwt (`waarschuw`) of laat verify falen (`blokkeer`); winst schuift
- * de basislijn omhoog. De aanroeper heeft `dekkingsRatchet === 'uit'` al uitgesloten.
+ * oordeel. De ratchet is altijd informatief — hij meldt, maar blokkeert nooit (#516). Winst
+ * schuift de basislijn omhoog, zodat de trend zichtbaar blijft. De aanroeper heeft
+ * `dekkingsRatchet === 'uit'` al uitgesloten.
  */
 function pasRatchetToe(config, nu) {
     const oordeel = beoordeelRatchet(nu, leesBasislijn(config.dir), config.dekkingsTolerantie);
-    kop('Dekkings-ratchet');
+    kop('Dekkings-ratchet (informatief)');
     if (oordeel.bootstrap) {
         if (oordeel.nieuweBasislijn !== undefined) {
             schrijfBasislijn(config.dir, oordeel.nieuweBasislijn);
@@ -114,10 +116,7 @@ function pasRatchetToe(config, nu) {
         const melding = `Dekking zakt onder de basislijn: ${oordeel.regressies
             .map(beschrijfVerschil)
             .join(', ')} (${BASISLIJN_BESTAND}).`;
-        // Bij een regressie leggen we geen winst vast: een run die óók zakt mag de lat niet verzetten.
-        if (config.dekkingsRatchet === 'blokkeer') {
-            throw new GebruikersFout(melding);
-        }
+        // Altijd informatief: de aggregaat-basislijn blokkeert nooit (#516).
         waarschuwing(melding);
         return;
     }
@@ -127,6 +126,84 @@ function pasRatchetToe(config, nu) {
         return;
     }
     process.stdout.write(`  op niveau (lines ${String(nu.lines)}%)\n`);
+}
+/**
+ * Bepaalt de merge-base met `main` en levert de diff-uitvoer, of `undefined` als
+ * we op `main` zitten of er geen merge-base bestaat (bijv. een shallow clone).
+ */
+export function leesDiffTegenMain(repoDir) {
+    const branchResult = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+        cwd: repoDir,
+        capture: true,
+        toleranter: true,
+    });
+    if (branchResult.code !== 0) {
+        return undefined;
+    }
+    const branch = branchResult.stdout.trim();
+    if (branch === 'main' || branch === 'HEAD') {
+        return undefined;
+    }
+    const mergeBaseResult = run('git', ['merge-base', 'HEAD', 'main'], {
+        cwd: repoDir,
+        capture: true,
+        toleranter: true,
+    });
+    if (mergeBaseResult.code !== 0) {
+        return undefined;
+    }
+    const mergeBase = mergeBaseResult.stdout.trim();
+    const diffResult = run('git', ['diff', '--unified=0', '--diff-filter=ACMR', mergeBase, 'HEAD'], {
+        cwd: repoDir,
+        capture: true,
+        toleranter: true,
+    });
+    if (diffResult.code !== 0) {
+        return undefined;
+    }
+    return diffResult.stdout;
+}
+/**
+ * Toetst de diff-dekking op een branch: welk percentage van de gewijzigde regels is gedekt?
+ * Meldt het percentage, de drempel en per bestand de ongedekte regelnummers. Afhankelijk van
+ * `dekkingsRatchet` is het een waarschuwing of een blokkade. Op `main` of zonder merge-base
+ * wordt de stap overgeslagen.
+ */
+export function toetsDiffDekking(repoDir, config, coverageMap) {
+    const diffUitvoer = leesDiffTegenMain(repoDir);
+    if (diffUitvoer === undefined) {
+        return;
+    }
+    const gewijzigdeRegels = parseDiffRegels(diffUitvoer);
+    if (gewijzigdeRegels.size === 0) {
+        return;
+    }
+    const resultaat = berekenDiffDekking(gewijzigdeRegels, coverageMap, repoDir);
+    if (resultaat.percentage === undefined) {
+        // Alle gewijzigde regels zijn niet-uitvoerbaar; geen oordeel.
+        return;
+    }
+    kop('Diff-dekking');
+    const drempel = config.diffDekkingsMinimum;
+    const onder = resultaat.percentage < drempel;
+    // Toon percentage en drempel.
+    const pctTekst = `${String(resultaat.percentage)}% van ${String(resultaat.totaalRegels)} gewijzigde regels gedekt`;
+    if (onder) {
+        // Toon per bestand de ongedekte regels.
+        const bestandRegels = [];
+        for (const [bestand, regels] of resultaat.ongedektPerBestand) {
+            bestandRegels.push(`  ${bestand}: regels ${regels.join(', ')}`);
+        }
+        const details = bestandRegels.length > 0 ? `\n${bestandRegels.join('\n')}` : '';
+        const melding = `Diff-dekking te laag: ${pctTekst} (drempel ${String(drempel)}%).${details}`;
+        if (config.dekkingsRatchet === 'blokkeer') {
+            throw new GebruikersFout(melding);
+        }
+        waarschuwing(melding);
+    }
+    else {
+        process.stdout.write(`  ${pctTekst} ≥ ${String(drempel)}%\n`);
+    }
 }
 /**
  * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
@@ -300,6 +377,13 @@ export function verify(opties = {}) {
             dekkingsConfig !== undefined &&
             dekkingsConfig.dekkingsRatchet !== 'uit') {
             pasRatchetToe(dekkingsConfig, gecombineerd);
+        }
+        // Diff-dekking: op een branch toetsen welk percentage van de gewijzigde regels
+        // gedekt is. Op main of zonder merge-base wordt de stap overgeslagen.
+        if (gecombineerdResultaat !== undefined &&
+            dekkingsConfig !== undefined &&
+            dekkingsConfig.dekkingsRatchet !== 'uit') {
+            toetsDiffDekking(repoDir, dekkingsConfig, gecombineerdResultaat.coverageMap);
         }
         const appConfig = appConfigVanRepo(repoDir);
         const flagStand = appConfig?.flagVerloop ?? 'waarschuw';

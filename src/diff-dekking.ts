@@ -49,6 +49,33 @@ export function parseDiffRegels(diffUitvoer: string): Map<string, Set<number>> {
   return resultaat;
 }
 
+/**
+ * Bepaalt of een gewijzigd bestand überhaupt meetbaar is voor dekking. Alleen
+ * instrumenteerbare bronbestanden (`.ts`/`.tsx`) tellen mee; gegenereerde output
+ * (`dist/`), type-declaraties (`.d.ts`), sourcemaps, testbestanden en niet-code
+ * (docs, json, configs) blijven buiten de diff-dekkingstelling. Zonder deze filter
+ * scoort elke PR die z'n `dist/` meecommit vals als "ongedekt".
+ */
+export function isMeetbaarBronbestand(relatief: string): boolean {
+  const segmenten = relatief.split('/');
+  if (
+    segmenten.includes('dist') ||
+    segmenten.includes('node_modules') ||
+    segmenten.includes('test') ||
+    segmenten.includes('tests') ||
+    segmenten.includes('__tests__')
+  ) {
+    return false;
+  }
+  if (/\.d\.ts$/.test(relatief)) {
+    return false;
+  }
+  if (/\.(test|spec)\.tsx?$/.test(relatief)) {
+    return false;
+  }
+  return /\.tsx?$/.test(relatief);
+}
+
 /** Het resultaat van de diff-dekkingsberekening. */
 export interface DiffDekkingsResultaat {
   /** Percentage gedekte regels, of undefined bij een lege diff of nul meetbare regels. */
@@ -65,10 +92,13 @@ export interface DiffDekkingsResultaat {
  * Kruist de diff met een istanbul CoverageMap en berekent welk percentage van de
  * gewijzigde regels gedekt is.
  *
+ * - Niet-meetbare bestanden (dist/, .d.ts, sourcemaps, tests, docs) worden volledig
+ *   overgeslagen — zie {@link isMeetbaarBronbestand}.
  * - Niet-uitvoerbare regels (wel in de diff, maar niet in de coverage-map van een
  *   wél gemeten bestand) worden uitgesloten van de telling.
- * - Bestanden in de diff maar niet in de coverage-map tellen als volledig ongedekt.
- * - Een lege diff (geen gewijzigde bestanden) geeft `undefined` percentage.
+ * - Meetbare bronbestanden in de diff maar niet in de coverage-map tellen als
+ *   volledig ongedekt.
+ * - Een lege diff (geen meetbare gewijzigde regels) geeft `undefined` percentage.
  */
 export function berekenDiffDekking(
   gewijzigdeRegels: Map<string, Set<number>>,
@@ -90,6 +120,11 @@ export function berekenDiffDekking(
   const coverageBestanden = new Set(coverageMap.files());
 
   for (const [relatief, regels] of gewijzigdeRegels) {
+    if (!isMeetbaarBronbestand(relatief)) {
+      // Gegenereerde output, declaraties, tests of docs: niet meetbaar, niet meetellen.
+      continue;
+    }
+
     const absoluut = path.resolve(repoDir, relatief);
 
     if (!coverageBestanden.has(absoluut)) {

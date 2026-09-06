@@ -21,6 +21,12 @@ const appConfigSchema = z.object({
     /** Optionele ondergrens (0–100) waaronder `factory verify` faalt op te weinig dekking. */
     dekkingsMinimum: z.number().min(0).max(100).optional(),
     /**
+     * Drempel (0–100) voor de diff-dekking op een branch: welk percentage van de
+     * gewijzigde regels gedekt moet zijn. `dekkingsRatchet` bepaalt of het een
+     * waarschuwing of een blokkerend oordeel is. Default 80.
+     */
+    diffDekkingsMinimum: z.number().min(0).max(100).default(80),
+    /**
      * Gedrag van de dekkings-ratchet: de bewegende lat die de dekking vergelijkt met het
      * hoogste punt dat de app ooit haalde (vastgelegd in `dekking-basislijn.json`). `waarschuw`
      * meldt een daling geel maar laat de poort groen; `blokkeer` laat `verify` falen; `uit` zet

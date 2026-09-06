@@ -16,6 +16,7 @@ const dekkingsConfigSchema = z.object({
   dekkingsMinimum: z.number().min(0).max(100).optional(),
   dekkingsRatchet: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
   dekkingsTolerantie: z.number().min(0).max(5).default(0.5),
+  diffDekkingsMinimum: z.number().min(0).max(100).default(80),
 });
 
 /**
@@ -29,6 +30,8 @@ export interface DekkingsConfig {
   readonly dekkingsMinimum?: number | undefined;
   readonly dekkingsRatchet: 'uit' | 'waarschuw' | 'blokkeer';
   readonly dekkingsTolerantie: number;
+  /** Drempel (0–100) voor de diff-dekking op een branch. Default 80. */
+  readonly diffDekkingsMinimum: number;
 }
 
 /**
@@ -46,6 +49,7 @@ export function leesDekkingsConfig(repoDir: string): DekkingsConfig | undefined 
       dekkingsMinimum: appConfig.dekkingsMinimum,
       dekkingsRatchet: appConfig.dekkingsRatchet,
       dekkingsTolerantie: appConfig.dekkingsTolerantie,
+      diffDekkingsMinimum: appConfig.diffDekkingsMinimum,
     };
   }
 
