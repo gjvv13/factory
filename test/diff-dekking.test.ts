@@ -3,7 +3,7 @@ import path from 'node:path';
 import libCoverage from 'istanbul-lib-coverage';
 import type { CoverageMapData } from 'istanbul-lib-coverage';
 import { describe, expect, it } from 'vitest';
-import { berekenDiffDekking, parseDiffRegels } from '../src/diff-dekking.js';
+import { berekenDiffDekking, isMeetbaarBronbestand, parseDiffRegels } from '../src/diff-dekking.js';
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures', 'diff');
 
@@ -104,6 +104,40 @@ describe('parseDiffRegels', () => {
 });
 
 // ---------------------------------------------------------------------------
+// isMeetbaarBronbestand
+// ---------------------------------------------------------------------------
+
+describe('isMeetbaarBronbestand', () => {
+  it('accepteert bronbestanden (.ts / .tsx)', () => {
+    expect(isMeetbaarBronbestand('src/diff-dekking.ts')).toBe(true);
+    expect(isMeetbaarBronbestand('app/src/components/Knop.tsx')).toBe(true);
+  });
+
+  it('weigert gegenereerde output onder dist/', () => {
+    expect(isMeetbaarBronbestand('dist/app-config.js')).toBe(false);
+    expect(isMeetbaarBronbestand('dist/commands/verify.js')).toBe(false);
+  });
+
+  it('weigert type-declaraties en sourcemaps', () => {
+    expect(isMeetbaarBronbestand('dist/commands/verify.d.ts')).toBe(false);
+    expect(isMeetbaarBronbestand('src/foo.d.ts')).toBe(false);
+    expect(isMeetbaarBronbestand('dist/foo.js.map')).toBe(false);
+  });
+
+  it('weigert testbestanden', () => {
+    expect(isMeetbaarBronbestand('test/diff-dekking.test.ts')).toBe(false);
+    expect(isMeetbaarBronbestand('src/foo.spec.ts')).toBe(false);
+    expect(isMeetbaarBronbestand('src/__tests__/foo.ts')).toBe(false);
+  });
+
+  it('weigert niet-code (docs, json, configs)', () => {
+    expect(isMeetbaarBronbestand('docs/adr/003.md')).toBe(false);
+    expect(isMeetbaarBronbestand('package.json')).toBe(false);
+    expect(isMeetbaarBronbestand('configs/coverage.js')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // berekenDiffDekking
 // ---------------------------------------------------------------------------
 
@@ -196,6 +230,29 @@ describe('berekenDiffDekking', () => {
     expect(result.gedekteRegels).toBe(1);
     expect(result.ongedektPerBestand.get('src/gemeten.ts')).toEqual([2]);
     expect(result.ongedektPerBestand.get('src/niet-gemeten.ts')).toEqual([10, 11]);
+  });
+
+  it('slaat niet-meetbare bestanden (dist/, .d.ts, test) volledig over', () => {
+    const absoluut = path.resolve(REPO, 'src/foo.ts');
+    const coverageData = maakCoverageData(absoluut, { 1: 1, 2: 0 });
+    const map = libCoverage.createCoverageMap(coverageData);
+
+    // Naast de bronwijziging staan er gegenereerde/niet-meetbare bestanden in de diff.
+    const diff = new Map([
+      ['src/foo.ts', new Set([1, 2])],
+      ['dist/foo.js', new Set([1, 2, 3, 4, 5])],
+      ['dist/foo.d.ts', new Set([1, 2, 3])],
+      ['test/foo.test.ts', new Set([1, 2, 3])],
+    ]);
+    const result = berekenDiffDekking(diff, map, REPO);
+
+    // Alleen src/foo.ts telt: 1 van 2 → 50%. De dist/- en test-regels doen niet mee.
+    expect(result.percentage).toBe(50);
+    expect(result.totaalRegels).toBe(2);
+    expect(result.gedekteRegels).toBe(1);
+    expect(result.ongedektPerBestand.has('dist/foo.js')).toBe(false);
+    expect(result.ongedektPerBestand.has('dist/foo.d.ts')).toBe(false);
+    expect(result.ongedektPerBestand.has('test/foo.test.ts')).toBe(false);
   });
 
   it('geeft undefined percentage als alle gewijzigde regels niet-uitvoerbaar zijn', () => {
