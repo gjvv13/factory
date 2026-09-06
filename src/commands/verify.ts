@@ -358,8 +358,9 @@ export function verify(opties: VerifyOpties = {}): void {
     // eerlijke basis voor de drempel (i.p.v. de hoogste losse soort). De verwachtlijst
     // zorgt dat alleen de daadwerkelijk gedraaide soorten meekomen en dat een ontbrekend
     // rapport undefined oplevert i.p.v. een misleidend laag getal.
-    const gecombineerd = schrijfGecombineerdeDekking(repoDir, gedraaideCoverageNamen);
-    if (gecombineerd === undefined && gedraaideCoverageNamen.length > 0) {
+    const gecombineerdResultaat = schrijfGecombineerdeDekking(repoDir, gedraaideCoverageNamen);
+    const gecombineerd = gecombineerdResultaat?.cijfers;
+    if (gecombineerdResultaat === undefined && gedraaideCoverageNamen.length > 0) {
       waarschuwing(
         'Gecombineerde dekking overgeslagen: niet elke gedraaide soort leverde een coverage-final.json.',
       );
