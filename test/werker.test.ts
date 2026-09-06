@@ -2,14 +2,15 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { leesAgentFrontmatter } from './agent-definitie.js';
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import {
-  ACCEPTEER_TOEGESTAAN,
-  BOUWER_TOEGESTAAN,
+  AGENT_ACCEPTEERDER,
+  AGENT_BOUWER,
+  AGENT_REFINER,
+  AGENT_REVIEWER,
   draaiWerker,
   werkerArgumenten,
-  WERKER_TOEGESTAAN,
-  WERKER_VERBODEN,
   type WerkerOpdracht,
 } from '../src/werker.js';
 import { maakAsyncUitvoerderOpnemer } from './helpers.js';
@@ -31,7 +32,7 @@ const OPDRACHT: WerkerOpdracht = {
   sessie: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
   extraMappen: ['/Users/x/OrkestratorWerk/factory'],
   budgetUsd: 4,
-  model: 'claude-opus-4-6',
+  agent: AGENT_REFINER,
 };
 
 /** Laat `claude` de opgegeven uitvoer teruggeven, met de opgegeven exitcode. */
@@ -61,32 +62,15 @@ describe('werkerArgumenten', () => {
     expect(schema).toContain('escalatie');
   });
 
-  it('geeft de werker geen enkel schrijfrecht', () => {
+  it('geeft --agent mee in plaats van --allowedTools/--disallowedTools/--model', () => {
     const args = werkerArgumenten(OPDRACHT);
 
-    // De toestemmingslijst is de grens. Alleen `Write` en `Edit` verbieden is niet
-    // genoeg: het model wijkt dan uit naar `Bash(echo … > bestand)`, en dat deed het
-    // in de proefrun ook echt.
-    expect(WERKER_TOEGESTAAN).not.toContain('Write');
-    expect(WERKER_TOEGESTAAN.some((recht) => recht.startsWith('Bash(gh issue edit'))).toBe(false);
-    expect(WERKER_VERBODEN).toContain('Write');
-    for (const recht of WERKER_TOEGESTAAN) {
-      expect(args).toContain(recht);
-    }
-    for (const verbod of WERKER_VERBODEN) {
-      expect(args).toContain(verbod);
-    }
-  });
-
-  it('geeft geen enkele werker `gh api` — dat kan via de REST-API muteren (#338)', () => {
-    // `gh api` staat op geen enkele toestemmingslijst: het kan met `-X POST` comments
-    // plaatsen of labels zetten en omzeilt daarmee de expliciete verbodslijst (waar
-    // `gh issue edit`/`gh project` wél op staan). Geen werker heeft het nodig — ze lezen
-    // het issue via `gh issue view`, code via Read/Grep en acc via curl. Deze pin houdt
-    // het uit alle drie de lijsten, zoals de grenzen voor `rm` en `git -C` dat doen.
-    for (const lijst of [WERKER_TOEGESTAAN, BOUWER_TOEGESTAAN, ACCEPTEER_TOEGESTAAN]) {
-      expect(lijst).not.toContain('Bash(gh api:*)');
-    }
+    expect(args).toContain('--agent');
+    expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_REFINER);
+    // De oude vlaggen mogen er niet meer staan: de definitie draagt ze.
+    expect(args).not.toContain('--allowedTools');
+    expect(args).not.toContain('--disallowedTools');
+    expect(args).not.toContain('--model');
   });
 
   it('geeft --effort mee als de opdracht een effort heeft, en laat het weg zonder', () => {
@@ -101,6 +85,61 @@ describe('werkerArgumenten', () => {
     const args = werkerArgumenten(OPDRACHT);
 
     expect(args[args.indexOf('--add-dir') + 1]).toBe('/Users/x/OrkestratorWerk/factory');
+  });
+});
+
+describe('agent-definities — grenstesten', () => {
+  it('geeft de refiner geen enkel schrijfrecht', () => {
+    const def = leesAgentFrontmatter(AGENT_REFINER);
+
+    expect(def.allowedTools).not.toContain('Write');
+    expect(def.allowedTools.some((t) => t.startsWith('Bash(gh issue edit'))).toBe(false);
+    expect(def.disallowedTools).toContain('Write');
+  });
+
+  it('geeft geen enkele agent `gh api` — dat kan via de REST-API muteren (#338)', () => {
+    // `gh api` staat op geen enkele toestemmingslijst: het kan met `-X POST` comments
+    // plaatsen of labels zetten en omzeilt daarmee de expliciete verbodslijst.
+    for (const naam of [AGENT_REFINER, AGENT_BOUWER, AGENT_REVIEWER, AGENT_ACCEPTEERDER]) {
+      const def = leesAgentFrontmatter(naam);
+      expect(def.allowedTools).not.toContain('Bash(gh api:*)');
+    }
+  });
+
+  it('geeft de bouwer geen push, geen PR, geen rm, geen git -C', () => {
+    const def = leesAgentFrontmatter(AGENT_BOUWER);
+
+    // Geen push: de PR is de grens tussen voorstellen en landen.
+    expect(def.disallowedTools).toContain('Bash(git push:*)');
+    // Geen PR openen.
+    expect(def.disallowedTools).toContain('Bash(gh pr:*)');
+    // Geen rm: kan de spiegel van een andere app wissen (#217).
+    expect(def.allowedTools).not.toContain('Bash(rm:*)');
+    // Geen git -C: zou `git -C <pad> push` toestaan en de grens omzeilen.
+    expect(def.allowedTools).not.toContain('Bash(git -C:*)');
+  });
+
+  it('geeft de reviewer dezelfde lees-alleen-rechten als de refiner', () => {
+    const refiner = leesAgentFrontmatter(AGENT_REFINER);
+    const reviewer = leesAgentFrontmatter(AGENT_REVIEWER);
+
+    expect(reviewer.allowedTools).toEqual(refiner.allowedTools);
+    expect(reviewer.disallowedTools).toEqual(refiner.disallowedTools);
+  });
+
+  it('geeft de accepteerder curl maar geen schrijfrecht', () => {
+    const def = leesAgentFrontmatter(AGENT_ACCEPTEERDER);
+
+    expect(def.allowedTools).toContain('Bash(curl:*)');
+    expect(def.allowedTools).not.toContain('Write');
+    expect(def.disallowedTools).toContain('Write');
+  });
+
+  it('elke definitie heeft een model', () => {
+    for (const naam of [AGENT_REFINER, AGENT_BOUWER, AGENT_REVIEWER, AGENT_ACCEPTEERDER]) {
+      const def = leesAgentFrontmatter(naam);
+      expect(def.model).toBeDefined();
+    }
   });
 });
 

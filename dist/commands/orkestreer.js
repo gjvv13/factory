@@ -9,7 +9,7 @@ import { draaiReeks, meldReeks } from '../reeks.js';
 import { werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiWerker } from '../werker.js';
+import { AGENT_REFINER, draaiWerker, } from '../werker.js';
 import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.js';
 /**
  * De supervisor: hij pakt het oudste item uit de wachtrij en laat er één onbemande
@@ -24,8 +24,6 @@ const WACHTRIJ_KOLOM = 'Klaar voor technische refinement';
 /** Waar het item tijdens en na de run staat; daar wacht het op het akkoord. */
 const WERK_KOLOM = 'Technisch refinen';
 const EIGENAAR = 'gjvv13';
-/** Eén model voor alle refinements — gemeten, zie het modelkeuze-besluit in #104. */
-const MODEL = 'claude-opus-4-6';
 // --- Lock: één orkestrator-run tegelijk, zelfde patroon als `factory integreer` ---
 const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
 const LOCK_VERVALT_MS = 60 * 60 * 1000;
@@ -460,7 +458,7 @@ async function werkAf(item, cwd, wortel, draai, apps = []) {
             extraMappen: [factoryMap],
             budgetUsd: draai.budgetUsd,
             ...(draai.timeoutMs === undefined ? {} : { timeoutMs: draai.timeoutMs }),
-            model: MODEL,
+            agent: AGENT_REFINER,
             ...(draai.effort === undefined ? {} : { effort: draai.effort }),
             ...(draai.env === undefined ? {} : { env: draai.env }),
         });
@@ -820,7 +818,7 @@ async function werkAntwoordAf(issue, tekst, escalatie, opties, cwd) {
     const uitkomst = await draaiWerker({
         ...opdracht,
         budgetUsd: instellingen.budgetPerRun,
-        model: MODEL,
+        agent: AGENT_REFINER,
         effort: instellingen.werkerEffort,
     });
     if (uitkomst.sessieWeg === true) {

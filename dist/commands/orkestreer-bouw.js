@@ -8,7 +8,7 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiBouwer, draaiReviewer } from '../werker.js';
+import { AGENT_BOUWER, AGENT_REVIEWER, draaiBouwer, draaiReviewer, } from '../werker.js';
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
@@ -27,8 +27,6 @@ const GECLAIMD_KOLOM = 'Bouwen';
 /** Alleen kleine klussen. Een epic is geen bouwopdracht, en een slice hoort bij zijn epic. */
 const BOUWBARE_SOORTEN = ['type:bug', 'type:task'];
 const EIGENAAR = 'gjvv13';
-/** Eén model voor alle onbemande werkers — zie het modelkeuze-besluit in #104. */
-const MODEL = 'claude-opus-4-6';
 /**
  * Waar de bouw-werker zijn worktree neerzet.
  *
@@ -426,7 +424,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
             sessie: randomUUID(),
             extraMappen: [factoryMap, ...bronMappen],
             budgetUsd,
-            model: MODEL,
+            agent: AGENT_BOUWER,
             effort,
             ...(env === undefined ? {} : { env }),
             ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -468,7 +466,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
                 sessie: randomUUID(),
                 extraMappen: [factoryMap],
                 budgetUsd: reviewBudgetUsd,
-                model: MODEL,
+                agent: AGENT_REVIEWER,
                 effort,
                 ...(env === undefined ? {} : { env }),
                 ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -716,7 +714,7 @@ export async function werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd) {
     const uitkomst = await draaiBouwer({
         ...opdracht,
         budgetUsd: instellingen.bouwBudgetPerRun,
-        model: MODEL,
+        agent: AGENT_BOUWER,
         effort: instellingen.werkerEffort,
     });
     if (uitkomst.sessieWeg === true) {
@@ -751,7 +749,7 @@ export async function werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd) {
             sessie: randomUUID(),
             extraMappen: [factoryMap],
             budgetUsd: instellingen.reviewBudgetPerRun,
-            model: MODEL,
+            agent: AGENT_REVIEWER,
             effort: instellingen.werkerEffort,
         });
     }

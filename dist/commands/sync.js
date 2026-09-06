@@ -1,7 +1,7 @@
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
-import { claudeCommandsDir, factoryPakketDir, hooksDir, skillsDir, syncBestanden, workflowsDir, } from '../paths.js';
+import { agentsDir, claudeCommandsDir, factoryPakketDir, hooksDir, skillsDir, syncBestanden, workflowsDir, } from '../paths.js';
 import { GebruikersFout, git, kop, ok, waarschuwing } from '../shell.js';
 /**
  * Een spiegel: een bronmap in de factory en de plek in de app-repo waar hij
@@ -14,6 +14,7 @@ function syncSpiegels() {
         { bronDir: skillsDir, doelBasis: path.join('.claude', 'skills') },
         { bronDir: workflowsDir, doelBasis: path.join('.github', 'workflows') },
         { bronDir: hooksDir, doelBasis: '.githooks' },
+        { bronDir: agentsDir, doelBasis: path.join('.claude', 'agents') },
     ];
 }
 /** Alle bestandspaden onder een map, relatief aan die map. Leeg als de map ontbreekt. */

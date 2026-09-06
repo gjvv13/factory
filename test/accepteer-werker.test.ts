@@ -3,8 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
-import { draaiAccepteerder, ACCEPTEER_TOEGESTAAN, WERKER_VERBODEN } from '../src/werker.js';
+import { AGENT_ACCEPTEERDER, draaiAccepteerder } from '../src/werker.js';
 import { maakAsyncUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
+import { leesAgentFrontmatter } from './agent-definitie.js';
 
 const hier = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +38,7 @@ describe('accepteer-werker contracttest: groene run', () => {
       werkmap: '/tmp/test',
       sessie: 'test-sessie',
       budgetUsd: 3,
-      model: 'claude-opus-4-6',
+      agent: AGENT_ACCEPTEERDER,
     });
 
     expect(uitkomst.afloop).toBe('klaar');
@@ -59,7 +60,7 @@ describe('accepteer-werker contracttest: groene run', () => {
       werkmap: '/tmp/test',
       sessie: 'test-sessie',
       budgetUsd: 3,
-      model: 'claude-opus-4-6',
+      agent: AGENT_ACCEPTEERDER,
     });
 
     expect(uitkomst.kosten).toBe(1.23);
@@ -77,7 +78,7 @@ describe('accepteer-werker contracttest: is_error-variant', () => {
       werkmap: '/tmp/test',
       sessie: 'test-sessie',
       budgetUsd: 3,
-      model: 'claude-opus-4-6',
+      agent: AGENT_ACCEPTEERDER,
     });
 
     // De val uit #153: is_error: true bij exit 0 is een mislukking, geen succes.
@@ -124,7 +125,7 @@ describe('accepteer-werker contracttest: waargenomen zonder bewijs', () => {
       werkmap: '/tmp/test',
       sessie: 'test-sessie',
       budgetUsd: 3,
-      model: 'claude-opus-4-6',
+      agent: AGENT_ACCEPTEERDER,
     });
 
     // Een waargenomen zonder bewijs is geen klaar, maar een mislukking.
@@ -144,7 +145,7 @@ describe('accepteer-werker contracttest: gemengde uitkomst met escalatie-criteri
       werkmap: '/tmp/test',
       sessie: 'test-sessie',
       budgetUsd: 3,
-      model: 'claude-opus-4-6',
+      agent: AGENT_ACCEPTEERDER,
     });
 
     expect(uitkomst.afloop).toBe('klaar');
@@ -171,22 +172,21 @@ describe('accepteer-werker contracttest: gemengde uitkomst met escalatie-criteri
 
 describe('accepteer-werker permissions', () => {
   it('bevat geen schrijf-gereedschappen in de toestemmingslijst', () => {
-    // De accepteer-werker mag alleen HTTP-aanroepen doen, niet schrijven naar de
-    // database of schijf. Dit pint die eigenschap vast.
+    const def = leesAgentFrontmatter(AGENT_ACCEPTEERDER);
     const schrijfGereedschappen = ['Write', 'Edit', 'NotebookEdit'];
     for (const gereedschap of schrijfGereedschappen) {
-      expect(ACCEPTEER_TOEGESTAAN).not.toContain(gereedschap);
+      expect(def.allowedTools).not.toContain(gereedschap);
     }
   });
 
   it('bevat curl voor HTTP-aanroepen naar acc', () => {
-    expect(ACCEPTEER_TOEGESTAAN).toContain('Bash(curl:*)');
+    const def = leesAgentFrontmatter(AGENT_ACCEPTEERDER);
+    expect(def.allowedTools).toContain('Bash(curl:*)');
   });
 
   it('verbiedt dezelfde dingen als de refine-werker', () => {
-    // De verbodslijst is dezelfde als die van de refine-werker: geen Write, Edit,
-    // git push, gh pr, etc.
-    expect(WERKER_VERBODEN).toContain('Write');
-    expect(WERKER_VERBODEN).toContain('Edit');
+    const def = leesAgentFrontmatter(AGENT_ACCEPTEERDER);
+    expect(def.disallowedTools).toContain('Write');
+    expect(def.disallowedTools).toContain('Edit');
   });
 });

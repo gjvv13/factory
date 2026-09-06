@@ -18,113 +18,17 @@ import { runAsync, waarschuwing } from './shell.js';
  * "hij kan niets kapotmaken" geen belofte maar een eigenschap van de aanroep.
  */
 /**
- * Wat de werker mag. Bewust een toestemmingslijst en niet alleen een verbodslijst:
- * met alléén `Write` en `Edit` verboden schrijft het model gewoon via
- * `Bash(echo … > bestand)` — dat is precies wat de proefrun deed. In een `-p`-sessie
- * kan niets goedgekeurd worden wat hier niet in staat, dus deze lijst ís de grens.
- */
-export const WERKER_TOEGESTAAN = [
-    'Read',
-    'Grep',
-    'Glob',
-    'Bash(gh issue view:*)',
-    'Bash(git log:*)',
-    'Bash(git show:*)',
-    'Bash(git diff:*)',
-    'Bash(git status:*)',
-];
-/**
- * Wat een **bouw**-werker mag (#183). Wél schrijven — dat is de opdracht — maar niet
- * pushen en geen PR openen: de supervisor levert in met `factory inleveren
- * --geen-automerge`, zodat het openen van een PR een beslissing van de factory blijft en
- * niet van het model. Committen mag wel; zonder commit is er niets in te leveren.
- */
-export const BOUWER_TOEGESTAAN = [
-    'Read',
-    'Grep',
-    'Glob',
-    'Write',
-    'Edit',
-    // De lees- en tmp-werkwoorden (#217). Ze geven geen macht die `Write` en `Edit` niet
-    // al geven, en zonder deze zocht de werker omwegen: de eerste bouw-run (#87) liep
-    // negen keer tegen een weigering aan, waarvan zes op `mkdir`, `cd` en `echo`. Die
-    // omwegen zaten in zijn 58 beurten.
-    'Bash(ls:*)',
-    'Bash(cat:*)',
-    'Bash(head:*)',
-    'Bash(tail:*)',
-    'Bash(wc:*)',
-    'Bash(grep:*)',
-    'Bash(echo:*)',
-    'Bash(mkdir:*)',
-    'Bash(mktemp:*)',
-    'Bash(git add:*)',
-    'Bash(git commit:*)',
-    'Bash(git diff:*)',
-    'Bash(git log:*)',
-    'Bash(git show:*)',
-    'Bash(git status:*)',
-    'Bash(git restore:*)',
-    'Bash(pnpm:*)',
-    'Bash(npx:*)',
-    'Bash(node:*)',
-    'Bash(gh issue view:*)',
-];
-/**
- * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
- * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
- * supervisor is. En `git checkout`/`switch`/`rebase` niet: hij werkt op één branch in
- * zijn eigen worktree, en van branch wisselen is per definitie buiten de opdracht.
+ * De namen van de agent-definities in `agents/`. Elke definitie draagt zijn eigen
+ * toolset en model; de orkestrator geeft alleen de naam mee via `--agent`.
  *
- * **`rm` staat hier bewust niet bij de toegestane werkwoorden** (#217), anders dan de
- * andere tmp-hulpmiddelen. `Write` kan alleen bestanden maken of overschrijven binnen de
- * werkmap; `rm -rf <pad>` kan de spiegel van een ándere applicatie wissen. "Alleen in
- * zijn eigen tmp-map" is niet in een patroon uit te drukken, want dat pad is per sessie
- * anders. Hij mag zijn rommel in tmp laten staan — het besturingssysteem ruimt die op.
- *
- * **`git -C` ook niet**: `Bash(git -C:*)` zou `git -C <pad> push` toestaan en daarmee
- * precies de grens omzeilen die hierboven staat. Git in zijn eigen werkmap kan hij wel.
+ * Voorheen stonden de toolsets hier als hardcoded constanten; die zijn verhuisd naar
+ * de `.md`-bestanden in `agents/`, zodat ze via `factory sync` naar de apps propageren
+ * en op één plek te onderhouden zijn (#365).
  */
-export const BOUWER_VERBODEN = [
-    'Bash(git push:*)',
-    'Bash(git checkout:*)',
-    'Bash(git switch:*)',
-    'Bash(git rebase:*)',
-    'Bash(git reset:*)',
-    'Bash(gh pr:*)',
-    'Bash(gh issue edit:*)',
-    'Bash(gh issue close:*)',
-    'Bash(gh project:*)',
-    'Bash(gh release:*)',
-];
-/**
- * Wat een **accepteer**-werker mag (#178). Lees-alleen, met `curl` voor HTTP-aanroepen
- * naar acc — dat is de enige manier waarop hij criteria uitoefent. Geen `Write`, geen
- * `Edit`, geen `git commit`: hij observeert, hij muteert niet.
- */
-export const ACCEPTEER_TOEGESTAAN = [
-    'Read',
-    'Grep',
-    'Glob',
-    'Bash(gh issue view:*)',
-    'Bash(curl:*)',
-    'Bash(git log:*)',
-    'Bash(git show:*)',
-    'Bash(git diff:*)',
-    'Bash(git status:*)',
-];
-/** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
-export const WERKER_VERBODEN = [
-    'Write',
-    'Edit',
-    'NotebookEdit',
-    'Bash(git push:*)',
-    'Bash(git commit:*)',
-    'Bash(gh pr:*)',
-    'Bash(gh issue edit:*)',
-    'Bash(gh issue close:*)',
-    'Bash(gh project:*)',
-];
+export const AGENT_REFINER = 'refiner';
+export const AGENT_BOUWER = 'bouwer';
+export const AGENT_REVIEWER = 'reviewer';
+export const AGENT_ACCEPTEERDER = 'accepteerder';
 /**
  * De envelop die `claude --output-format json` teruggeeft, zoals hij er op
  * 2026-08-19 echt uitzag (zie `test/fixtures/claude-run*.json`, opgenomen runs).
@@ -403,17 +307,13 @@ export function werkerArgumenten(opdracht) {
         '--output-format',
         'json',
         ...(opdracht.hervat === true ? [] : ['--session-id', opdracht.sessie]),
-        '--model',
-        opdracht.model,
+        '--agent',
+        opdracht.agent,
         ...(opdracht.effort === undefined ? [] : ['--effort', opdracht.effort]),
         '--max-budget-usd',
         String(opdracht.budgetUsd),
         '--json-schema',
         JSON.stringify(opdracht.jsonSchema ?? VERDICT_JSON_SCHEMA),
-        '--allowedTools',
-        ...(opdracht.toegestaan ?? WERKER_TOEGESTAAN),
-        '--disallowedTools',
-        ...(opdracht.verboden ?? WERKER_VERBODEN),
         ...(opdracht.extraMappen ?? []).flatMap((map) => ['--add-dir', map]),
     ];
 }
@@ -530,8 +430,6 @@ async function leesEnvelop(opdracht) {
 export async function draaiBouwer(opdracht) {
     const gelezen = await leesEnvelop({
         ...opdracht,
-        toegestaan: opdracht.toegestaan ?? BOUWER_TOEGESTAAN,
-        verboden: opdracht.verboden ?? BOUWER_VERBODEN,
         jsonSchema: opdracht.jsonSchema ?? BOUW_JSON_SCHEMA,
     });
     if (gelezen.soort === 'mislukt') {
@@ -561,8 +459,6 @@ export async function draaiBouwer(opdracht) {
 export async function draaiReviewer(opdracht) {
     const gelezen = await leesEnvelop({
         ...opdracht,
-        toegestaan: opdracht.toegestaan ?? WERKER_TOEGESTAAN,
-        verboden: opdracht.verboden ?? WERKER_VERBODEN,
         jsonSchema: opdracht.jsonSchema ?? REVIEW_JSON_SCHEMA,
     });
     if (gelezen.soort === 'mislukt') {
@@ -588,8 +484,6 @@ export async function draaiReviewer(opdracht) {
 export async function draaiAccepteerder(opdracht) {
     const gelezen = await leesEnvelop({
         ...opdracht,
-        toegestaan: opdracht.toegestaan ?? ACCEPTEER_TOEGESTAAN,
-        verboden: opdracht.verboden ?? WERKER_VERBODEN,
         jsonSchema: opdracht.jsonSchema ?? ACCEPTEER_JSON_SCHEMA,
     });
     if (gelezen.soort === 'mislukt') {
