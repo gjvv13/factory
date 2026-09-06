@@ -51,8 +51,8 @@ architectuur indeelt).
    - Formuleer ze genummerd, elk met een aanbevolen keuze en onderbouwing.
    - Escaleer via het bestaande mechanisme (`uitkomst: "escalatie"`, `vraag` +
      `advies`). De frontier is de inhoud van de escalatie.
-   Verzin nooit zelf functionele besluiten. Feiten zoek je op; besluiten zijn van de
-   gebruiker.
+     Verzin nooit zelf functionele besluiten. Feiten zoek je op; besluiten zijn van de
+     gebruiker.
 
 4. Houd het kort. Een goede uitwerking is 120–180 regels. Langer betekent bijna altijd
    dat er beschrijving in staat die de code al geeft.

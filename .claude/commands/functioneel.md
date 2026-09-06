@@ -25,9 +25,12 @@ Doe dit zo:
    bestaande namen, routes, gedrag, "de huidige praktijk is X" — nog met wat je in de
    code ziet? Wijkt het af, meld de discrepantie dan met bewijs (bestand/regel) en
    vraag om richting vóór je verder gaat. Een backlog-item kan verouderd zijn.
-4. Stel de vragen die je nodig hebt, maar niet meer dan drie per ronde, en alleen
-   als het antwoord echt niet uit het issue volgt. Vraag naar wat ik wil, niet naar
-   hoe het gebouwd moet worden — dat is de volgende stap.
+4. Werk de vragen uit met het **frontier-patroon** uit de `functioneel-grilling`-skill
+   (`skills/functioneel-grilling/SKILL.md`): bouw de frontier van álle nu-beslisbare
+   vragen, presenteer ze genummerd — elk mét jouw aanbeveling en onderbouwing — wacht
+   op de antwoorden en herbereken de frontier tot die leeg is. Geen maximum per ronde.
+   Vraag alleen naar besluiten (wat ik wil, waar de grens ligt); feiten zoek je zelf
+   op, en het hoe komt in de volgende stap.
 5. Vul **alleen de functionele secties** uit de template: `Samenvatting`, en onder
    `Functionele architectuur` de secties `Gedrag`, `Natuurlijke taal`,
    `Regels en randgevallen` en `Wat het expliciet níet doet`. Laat de technische
@@ -38,6 +41,10 @@ Doe dit zo:
      `coding-guidelines`-skill. Wijk je daarvan af, motiveer dat dan onder
      _Wat het expliciet níet doet_.
    - `Wat het expliciet níet doet` mag niet leeg blijven. Grenzen zijn hier het punt.
+   - Schrijf daarnaast het `## Functionele besluiten (BINDEND — met <wie>, <datum>)`-blok
+     zoals de `functioneel-grilling`-skill beschrijft: de genummerde keuzes uit het
+     interview. Dit blok staat náást de functionele secties — het vervangt ze niet — en
+     is wat de refine-gate later als bewijs van functionele uitwerking accepteert.
 6. Schrijf de tekst naar een tijdelijk bestand en werk het issue bij, en zet daarna
    de kolom op **Klaar voor technische refinement** — daar wacht het op een werker:
    `gh issue edit <nummer> -R gjvv13/factory --body-file <tijdelijk bestand>`

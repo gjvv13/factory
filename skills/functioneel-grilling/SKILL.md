@@ -52,6 +52,7 @@ De vragen gaan de chat in; de gebruiker antwoordt inline. Het transport is de
 chat zelf — er verandert niets aan het mechanisme.
 
 Rondevolgorde:
+
 1. Bouw de eerste frontier.
 2. Presenteer de vragen als genummerde lijst met aanbevelingen.
 3. Wacht op de antwoorden van de gebruiker.
