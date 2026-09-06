@@ -1,0 +1,10 @@
+diff --git a/src/nieuw.ts b/src/nieuw.ts
+new file mode 100644
+index 0000000..abcdefg
+--- /dev/null
++++ b/src/nieuw.ts
+@@ -0,0 +1,4 @@
++export function hallo(): string {
++  return 'wereld';
++}
++

@@ -43,7 +43,7 @@ describe('schrijfGecombineerdeDekking', () => {
     schrijfFinal(app, 'unit', finalVoor(bestand, [1, 0, 0]));
     schrijfFinal(app, 'e2e', finalVoor(bestand, [1, 1, 0]));
 
-    const cijfers = schrijfGecombineerdeDekking(app);
+    const resultaat = schrijfGecombineerdeDekking(app);
 
     // 2 van 3 regels gedekt na de merge (regel 1 door beide, niet dubbel geteld).
     const summary = JSON.parse(
@@ -51,7 +51,7 @@ describe('schrijfGecombineerdeDekking', () => {
     ) as { total: { lines: { total: number; covered: number; pct: number } } };
     expect(summary.total.lines.total).toBe(3);
     expect(summary.total.lines.covered).toBe(2);
-    expect(cijfers?.lines).toBeCloseTo(66.67, 1);
+    expect(resultaat?.cijfers.lines).toBeCloseTo(66.67, 1);
   });
 
   it('met verwacht en alle bestanden aanwezig merget correct', () => {
@@ -60,11 +60,11 @@ describe('schrijfGecombineerdeDekking', () => {
     schrijfFinal(app, 'unit', finalVoor(bestand, [1, 0, 0]));
     schrijfFinal(app, 'e2e', finalVoor(bestand, [1, 1, 0]));
 
-    const cijfers = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
+    const resultaat = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
 
-    expect(cijfers).toBeDefined();
+    expect(resultaat).toBeDefined();
     // 2 van 3 regels gedekt
-    expect(cijfers?.lines).toBeCloseTo(66.67, 1);
+    expect(resultaat?.cijfers.lines).toBeCloseTo(66.67, 1);
   });
 
   it('met verwacht en één ontbrekend bestand geeft undefined', () => {
@@ -73,9 +73,9 @@ describe('schrijfGecombineerdeDekking', () => {
     schrijfFinal(app, 'unit', finalVoor(bestand, [1, 1]));
     // e2e coverage-final.json ontbreekt
 
-    const cijfers = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
+    const resultaat = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
 
-    expect(cijfers).toBeUndefined();
+    expect(resultaat).toBeUndefined();
   });
 
   it('met verwacht negeert een coverage-bestand van een niet-verwachte soort', () => {
@@ -86,11 +86,11 @@ describe('schrijfGecombineerdeDekking', () => {
     // stale e2e data die niet in verwacht staat en het cijfer zou verlagen
     schrijfFinal(app, 'e2e', finalVoor(bestand, [0, 0, 0]));
 
-    const cijfers = schrijfGecombineerdeDekking(app, ['unit']);
+    const resultaat = schrijfGecombineerdeDekking(app, ['unit']);
 
-    expect(cijfers).toBeDefined();
+    expect(resultaat).toBeDefined();
     // Alleen unit: 3/3 = 100%
-    expect(cijfers?.statements).toBe(100);
+    expect(resultaat?.cijfers.statements).toBe(100);
   });
 
   it('zonder verwacht behoudt het bestaande gedrag: alle SOORTEN, ontbrekende overslaan', () => {
@@ -99,11 +99,23 @@ describe('schrijfGecombineerdeDekking', () => {
     // Alleen unit aanwezig; contract en e2e ontbreken
     schrijfFinal(app, 'unit', finalVoor(bestand, [1, 1]));
 
-    const cijfers = schrijfGecombineerdeDekking(app);
+    const resultaat = schrijfGecombineerdeDekking(app);
 
     // Geen undefined, want zonder verwacht worden ontbrekende soorten overgeslagen
-    expect(cijfers).toBeDefined();
-    expect(cijfers?.lines).toBe(100);
+    expect(resultaat).toBeDefined();
+    expect(resultaat?.cijfers.lines).toBe(100);
+  });
+
+  it('geeft de onderliggende CoverageMap terug naast de cijfers', () => {
+    const app = maakApp();
+    const bestand = path.join(app, 'app', 'src', 'foo.ts');
+    schrijfFinal(app, 'unit', finalVoor(bestand, [1, 0]));
+
+    const resultaat = schrijfGecombineerdeDekking(app);
+
+    expect(resultaat).toBeDefined();
+    expect(resultaat!.coverageMap.files()).toContain(bestand);
+    expect(resultaat!.cijfers.lines).toBe(50);
   });
 
   it('schrijft een gecombineerd rapport op de vaste plek', () => {

@@ -112,8 +112,8 @@ describe('e2e-coverage', () => {
 
       // clients/net.ts is alleen door de e2e-server uitgevoerd, niet door unit of contract.
       // In de gecombineerde merge moet het verschijnen met >0% dekking.
-      const cijfers = schrijfGecombineerdeDekking(app);
-      expect(cijfers).toBeDefined();
+      const resultaat = schrijfGecombineerdeDekking(app);
+      expect(resultaat).toBeDefined();
 
       const combinedSummary = JSON.parse(
         readFileSync(path.join(app, 'coverage', 'combined', 'coverage-summary.json'), 'utf8'),
