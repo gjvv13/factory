@@ -1,0 +1,27 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "gate-review-1",
+  "num_turns": 4,
+  "total_cost_usd": 0.09,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "bevindingen": [
+      {
+        "bestand": "src/commands/promote.ts",
+        "regel": 42,
+        "ernst": "hoog",
+        "bevinding": "De timeout ontbreekt op de health-check; bij een trage start hangt het script oneindig."
+      },
+      {
+        "bestand": "src/commands/promote.ts",
+        "regel": 88,
+        "ernst": "midden",
+        "bevinding": "De variabele `versie` kan undefined zijn na een mislukte parse, maar wordt zonder check doorgegeven."
+      }
+    ],
+    "oordeel": "Twee correctheid-problemen gevonden die de tests niet vangen."
+  }
+}

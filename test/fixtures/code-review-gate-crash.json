@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "error_max_turns",
+  "is_error": true,
+  "session_id": "gate-review-3",
+  "num_turns": 1,
+  "total_cost_usd": 0.02,
+  "permission_denials": [],
+  "result": "Fout bij het verwerken van de review."
+}

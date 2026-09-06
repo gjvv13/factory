@@ -1,0 +1,14 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "gate-review-2",
+  "num_turns": 3,
+  "total_cost_usd": 0.07,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "bevindingen": [],
+    "oordeel": "De diff ziet er goed uit. Geen correctheid-problemen of onnodige complexiteit gevonden."
+  }
+}
