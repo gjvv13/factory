@@ -1,9 +1,9 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
-import { syncBestanden } from '../src/paths.js';
+import { skillsDir, syncBestanden } from '../src/paths.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
 
@@ -52,14 +52,18 @@ describe('sync', () => {
     const bijgewerkt = syncNaarApp(app);
 
     expect(existsSync(path.join(app, '.claude', 'commands', 'bouw.md'))).toBe(true);
-    expect(existsSync(path.join(app, '.claude', 'skills', 'coding-guidelines', 'SKILL.md'))).toBe(
-      true,
-    );
-    // Het onbemand-werken-contract moet mee naar élke app: een latere bouw-werker
-    // erft dan dezelfde escalatieregels zonder dat er iets herontworpen wordt (#104).
-    expect(existsSync(path.join(app, '.claude', 'skills', 'onbemand-werken', 'SKILL.md'))).toBe(
-      true,
-    );
+    // Elke skill in skills/ moet na een sync als SKILL.md in de app staan.
+    // Generiek: nieuwe skills breken de test niet, en vergeten hem ook niet (#366).
+    const skills = readdirSync(skillsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+    expect(skills.length).toBeGreaterThan(0);
+    for (const skill of skills) {
+      expect(
+        existsSync(path.join(app, '.claude', 'skills', skill, 'SKILL.md')),
+        `skill "${skill}" ontbreekt na sync`,
+      ).toBe(true);
+    }
     expect(existsSync(path.join(app, '.github', 'workflows', 'ci.yml'))).toBe(true);
     expect(existsSync(path.join(app, '.github', 'workflows', 'dependabot-auto-merge.yml'))).toBe(
       true,
