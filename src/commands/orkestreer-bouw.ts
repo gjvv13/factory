@@ -59,7 +59,6 @@ import {
   werkplaatsWortel,
 } from '../werkplaats.js';
 import { inleveren, type InleverenOpties } from './inleveren.js';
-import { stuurOchtendmelding, type FastlaneResultaat } from '../ochtendmelding.js';
 import { werkplek } from './werkplek.js';
 
 /**
@@ -1323,7 +1322,6 @@ async function draaiNachtBouw(
     }
 
     // Fastlane-baan (#400): eigen cap, eigen teller.
-    const fastlaneGemergd: FastlaneResultaat[] = [];
     if (!fastlaneKlaar) {
       kop('Fastlane-baan');
       const flUitkomst = await draaiReeks({
@@ -1350,23 +1348,6 @@ async function draaiNachtBouw(
             draaiOpties.timeoutMs,
             'fastlane',
           );
-          if (resultaat.bouw.afloop === 'klaar') {
-            // De PR-URL achterhalen: de branch is voorspelbaar, de PR is net geopend.
-            const prUrl = uitvoerVan('gh', [
-              'pr',
-              'view',
-              bouwBranch(item.issue),
-              '--repo',
-              `${EIGENAAR}/${item.app}`,
-              '--json',
-              'url',
-              '--jq',
-              '.url',
-            ]);
-            if (prUrl !== undefined && prUrl !== '') {
-              fastlaneGemergd.push({ issue: item.issue, app: item.app, prUrl });
-            }
-          }
           return resultaat;
         },
         beschrijf: beschrijfBouw,
@@ -1383,10 +1364,6 @@ async function draaiNachtBouw(
         ok('niets nieuws meer in de fastlane-wachtrij.');
       }
     }
-
-    // Ochtendmelding (#401): één POST met alle fastlane-items die vannacht vanzelf
-    // gemergd zijn. Geen items → geen melding (geen ruis).
-    await stuurOchtendmelding(fastlaneGemergd, instellingen.notifyUrl, instellingen.notifyToken);
   } finally {
     geefLockVrij();
   }
