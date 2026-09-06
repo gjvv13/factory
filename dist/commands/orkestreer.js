@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, leesIssueBody, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
 import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
@@ -404,9 +404,31 @@ async function draaiNacht(cwd, wortel, paden, nu) {
         geefLockVrij();
     }
 }
+/**
+ * Of een issue-body functionele secties bevat. Geëxporteerd voor tests (#364).
+ *
+ * Een issue hoeft alleen functionele secties te bevatten als het ook technische
+ * secties heeft: een kaal idee zonder `## Technische architectuur` is immers
+ * nog niet bij de technische stap.
+ */
+export function heeftFunctioneleSecties(body) {
+    if (!/^## Technische architectuur/im.test(body)) {
+        // Geen technische secties: er valt niets te bewaken.
+        return true;
+    }
+    return /^## Functionele architectuur/im.test(body) || /^## Functionele besluiten/im.test(body);
+}
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
 async function werkAf(item, cwd, wortel, draai, apps = []) {
     kop(`#${String(item.issue)} — ${item.titel}`);
+    // Gate (#364): weiger een refine-run op een issue zonder functionele secties.
+    // De Claude-hook bewaakt het interactieve pad; dit bewaakt het onbemande pad,
+    // dat buiten Claude Code draait en de hook dus niet raakt.
+    const body = leesIssueBody(item.issue, cwd);
+    if (body !== undefined && !heeftFunctioneleSecties(body)) {
+        waarschuwing(`#${String(item.issue)} heeft technische secties zonder functionele secties — overgeslagen.`);
+        return { afloop: 'mislukt' };
+    }
     zorgVoorEscalatieLabel(cwd);
     const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
     // De factory-spiegel gaat mee als leesmap: daar staan de templates, WORKFLOW.md en
