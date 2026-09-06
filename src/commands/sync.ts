@@ -2,6 +2,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSy
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import {
+  agentsDir,
   claudeCommandsDir,
   factoryPakketDir,
   hooksDir,
@@ -31,6 +32,7 @@ function syncSpiegels(): { bronDir: string; doelBasis: string }[] {
     { bronDir: skillsDir, doelBasis: path.join('.claude', 'skills') },
     { bronDir: workflowsDir, doelBasis: path.join('.github', 'workflows') },
     { bronDir: hooksDir, doelBasis: '.githooks' },
+    { bronDir: agentsDir, doelBasis: path.join('.claude', 'agents') },
   ];
 }
 
