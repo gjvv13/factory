@@ -11,6 +11,7 @@ declare const appConfigSchema: z.ZodObject<{
     envRoot: z.ZodString;
     syncNegeer: z.ZodOptional<z.ZodArray<z.ZodString>>;
     dekkingsMinimum: z.ZodOptional<z.ZodNumber>;
+    diffDekkingsMinimum: z.ZodDefault<z.ZodNumber>;
     dekkingsRatchet: z.ZodDefault<z.ZodEnum<{
         uit: "uit";
         waarschuw: "waarschuw";

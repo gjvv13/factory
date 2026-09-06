@@ -10,6 +10,8 @@ export interface DekkingsConfig {
     readonly dekkingsMinimum?: number | undefined;
     readonly dekkingsRatchet: 'uit' | 'waarschuw' | 'blokkeer';
     readonly dekkingsTolerantie: number;
+    /** Drempel (0–100) voor de diff-dekking op een branch. Default 80. */
+    readonly diffDekkingsMinimum: number;
 }
 /**
  * Leest de dekkingsconfiguratie uit de repo. Zoekt eerst `factory.json` (de volledige

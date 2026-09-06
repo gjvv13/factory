@@ -80,5 +80,31 @@ describe('leesDekkingsConfig', () => {
     expect(config).toBeDefined();
     expect(config!.dekkingsRatchet).toBe('waarschuw');
     expect(config!.dekkingsTolerantie).toBe(0.5);
+    expect(config!.diffDekkingsMinimum).toBe(80);
+  });
+
+  it('leest diffDekkingsMinimum uit factory.json', () => {
+    const map = maakMap();
+    schrijfJson(map, 'factory.json', {
+      naam: 'proef',
+      poorten: { dev: 3001, acc: 3002, prod: 3000 },
+      envRoot: '~/AppEnvs/proef',
+      diffDekkingsMinimum: 50,
+    });
+    const config = leesDekkingsConfig(map);
+    expect(config!.diffDekkingsMinimum).toBe(50);
+  });
+
+  it('leest diffDekkingsMinimum uit dekking.json', () => {
+    const map = maakMap();
+    schrijfJson(map, 'dekking.json', { diffDekkingsMinimum: 60 });
+    const config = leesDekkingsConfig(map);
+    expect(config!.diffDekkingsMinimum).toBe(60);
+  });
+
+  it('past diffDekkingsMinimum default 80 toe als de sleutel ontbreekt', () => {
+    const map = maakMap();
+    schrijfJson(map, 'dekking.json', {});
+    expect(leesDekkingsConfig(map)!.diffDekkingsMinimum).toBe(80);
   });
 });

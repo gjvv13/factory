@@ -1,3 +1,5 @@
+import type { CoverageMap } from 'istanbul-lib-coverage';
+import type { DekkingsConfig } from '../dekking-config.js';
 interface Stap {
     readonly script: string;
     readonly titel: string;
@@ -13,6 +15,18 @@ interface Stap {
  */
 export declare const STAPPEN: readonly Stap[];
 export declare function beschikbareScripts(repoDir: string): Set<string>;
+/**
+ * Bepaalt de merge-base met `main` en levert de diff-uitvoer, of `undefined` als
+ * we op `main` zitten of er geen merge-base bestaat (bijv. een shallow clone).
+ */
+export declare function leesDiffTegenMain(repoDir: string): string | undefined;
+/**
+ * Toetst de diff-dekking op een branch: welk percentage van de gewijzigde regels is gedekt?
+ * Meldt het percentage, de drempel en per bestand de ongedekte regelnummers. Afhankelijk van
+ * `dekkingsRatchet` is het een waarschuwing of een blokkade. Op `main` of zonder merge-base
+ * wordt de stap overgeslagen.
+ */
+export declare function toetsDiffDekking(repoDir: string, config: DekkingsConfig, coverageMap: CoverageMap): void;
 /**
  * Bepaalt of de gemeten dekking onder de drempel zakt. De "totaal" is bij voorkeur het
  * gemergede cijfer (de echte gecombineerde dekking); ontbreekt dat, dan valt hij terug op

@@ -1,15 +1,25 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import libCoverage from 'istanbul-lib-coverage';
+import type { CoverageMapData } from 'istanbul-lib-coverage';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   beoordeelDekking,
   beschikbareScripts,
+  leesDiffTegenMain,
   STAPPEN,
   telKwetsbaarheden,
+  toetsDiffDekking,
   verify,
 } from '../src/commands/verify.js';
-import { herstelUitvoerder, OmgevingsFout, stelUitvoerderIn } from '../src/shell.js';
+import type { DekkingsConfig } from '../src/dekking-config.js';
+import {
+  GebruikersFout,
+  herstelUitvoerder,
+  OmgevingsFout,
+  stelUitvoerderIn,
+} from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
 /** Maakt een tmp-map met een minimale package.json die de standaard verify-scripts bevat. */
@@ -228,5 +238,222 @@ describe('beschikbareScripts — OmgevingsFout (#383)', () => {
   it('gooit OmgevingsFout bij een onbestaande map, niet GebruikersFout', () => {
     const onbestaand = path.join(tmpdir(), 'bestaat-niet-' + String(Date.now()));
     expect(() => beschikbareScripts(onbestaand)).toThrow(OmgevingsFout);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// leesDiffTegenMain — git-interactie
+// ---------------------------------------------------------------------------
+
+describe('leesDiffTegenMain', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('levert de diff-uitvoer op een branch met merge-base', () => {
+    const verwachteDiff = 'diff --git a/foo.ts b/foo.ts\n';
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'slice/516-1\n' };
+      if (args.includes('merge-base')) return { code: 0, stdout: 'abc123\n' };
+      if (args.includes('diff')) return { code: 0, stdout: verwachteDiff };
+      return { code: 0, stdout: '' };
+    });
+    expect(leesDiffTegenMain('/repo')).toBe(verwachteDiff);
+  });
+
+  it('geeft undefined op main', () => {
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'main\n' };
+      return { code: 0, stdout: '' };
+    });
+    expect(leesDiffTegenMain('/repo')).toBeUndefined();
+  });
+
+  it('geeft undefined bij een detached HEAD', () => {
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'HEAD\n' };
+      return { code: 0, stdout: '' };
+    });
+    expect(leesDiffTegenMain('/repo')).toBeUndefined();
+  });
+
+  it('geeft undefined als merge-base faalt (geen common ancestor)', () => {
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'feature\n' };
+      if (args.includes('merge-base')) return { code: 1, stdout: '' };
+      return { code: 0, stdout: '' };
+    });
+    expect(leesDiffTegenMain('/repo')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toetsDiffDekking — de gate in verify
+// ---------------------------------------------------------------------------
+
+/**
+ * Bouwt een istanbul CoverageMapData voor één bestand. `regels` is een record van
+ * regelnummer → hitcount; regels die ontbreken tellen als niet-uitvoerbaar.
+ */
+function maakCoverageData(absoluutPad: string, regels: Record<number, number>): CoverageMapData {
+  const statementMap: Record<string, unknown> = {};
+  const s: Record<string, number> = {};
+  let idx = 0;
+  for (const [regel, hits] of Object.entries(regels)) {
+    const key = String(idx++);
+    const line = Number(regel);
+    statementMap[key] = {
+      start: { line, column: 0 },
+      end: { line, column: 10 },
+    };
+    s[key] = hits;
+  }
+  return {
+    [absoluutPad]: {
+      path: absoluutPad,
+      statementMap,
+      fnMap: {},
+      branchMap: {},
+      s,
+      f: {},
+      b: {},
+    },
+  } as unknown as CoverageMapData;
+}
+
+function maakConfig(ratchet: 'uit' | 'waarschuw' | 'blokkeer', diffMin = 80): DekkingsConfig {
+  return {
+    dir: '/tmp/test',
+    dekkingsRatchet: ratchet,
+    dekkingsTolerantie: 0.5,
+    diffDekkingsMinimum: diffMin,
+  };
+}
+
+describe('toetsDiffDekking', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  /** Stub die git-aanroepen beantwoordt met een diff van src/foo.ts regels 1-3. */
+  function stubGitDiff(): void {
+    const diff = [
+      'diff --git a/src/foo.ts b/src/foo.ts',
+      '--- a/src/foo.ts',
+      '+++ b/src/foo.ts',
+      '@@ -0,0 +1,3 @@',
+    ].join('\n');
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'slice/516-1\n' };
+      if (args.includes('merge-base')) return { code: 0, stdout: 'abc\n' };
+      if (args.includes('diff')) return { code: 0, stdout: diff };
+      return { code: 0, stdout: '' };
+    });
+  }
+
+  it('gooit GebruikersFout als diff-dekking onder drempel zakt bij blokkeer', () => {
+    stubGitDiff();
+    const absoluut = path.resolve('/repo', 'src/foo.ts');
+    // Regel 1 gedekt, regels 2 en 3 ongedekt → 33%
+    const data = maakCoverageData(absoluut, { 1: 1, 2: 0, 3: 0 });
+    const map = libCoverage.createCoverageMap(data);
+
+    expect(() => {
+      toetsDiffDekking('/repo', maakConfig('blokkeer'), map);
+    }).toThrow(GebruikersFout);
+  });
+
+  it('waarschuwt maar gooit niet bij waarschuw als diff-dekking onder drempel zakt', () => {
+    stubGitDiff();
+    const absoluut = path.resolve('/repo', 'src/foo.ts');
+    const data = maakCoverageData(absoluut, { 1: 1, 2: 0, 3: 0 });
+    const map = libCoverage.createCoverageMap(data);
+
+    // Mag niet gooien.
+    expect(() => {
+      toetsDiffDekking('/repo', maakConfig('waarschuw'), map);
+    }).not.toThrow();
+  });
+
+  it('gooit niet als diff-dekking boven de drempel zit', () => {
+    stubGitDiff();
+    const absoluut = path.resolve('/repo', 'src/foo.ts');
+    // Alle 3 regels gedekt → 100%
+    const data = maakCoverageData(absoluut, { 1: 1, 2: 1, 3: 1 });
+    const map = libCoverage.createCoverageMap(data);
+
+    expect(() => {
+      toetsDiffDekking('/repo', maakConfig('blokkeer'), map);
+    }).not.toThrow();
+  });
+
+  it('slaat over op main', () => {
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('--abbrev-ref')) return { code: 0, stdout: 'main\n' };
+      return { code: 0, stdout: '' };
+    });
+    const map = libCoverage.createCoverageMap({});
+
+    // Op main: geen fout, zelfs bij blokkeer met lege coverage.
+    expect(() => {
+      toetsDiffDekking('/repo', maakConfig('blokkeer'), map);
+    }).not.toThrow();
+  });
+
+  it('meldt ongedekte regelnummers per bestand in de foutmelding', () => {
+    stubGitDiff();
+    const absoluut = path.resolve('/repo', 'src/foo.ts');
+    const data = maakCoverageData(absoluut, { 1: 1, 2: 0, 3: 0 });
+    const map = libCoverage.createCoverageMap(data);
+
+    try {
+      toetsDiffDekking('/repo', maakConfig('blokkeer'), map);
+      expect.unreachable('had moeten gooien');
+    } catch (e) {
+      expect(e).toBeInstanceOf(GebruikersFout);
+      const melding = (e as GebruikersFout).message;
+      expect(melding).toContain('src/foo.ts');
+      expect(melding).toContain('2');
+      expect(melding).toContain('3');
+      expect(melding).toContain('33.33');
+      expect(melding).toContain('80');
+    }
+  });
+
+  it('respecteert een afwijkende diffDekkingsMinimum', () => {
+    stubGitDiff();
+    const absoluut = path.resolve('/repo', 'src/foo.ts');
+    // 1 van 3 gedekt → 33%; drempel op 30 → groen
+    const data = maakCoverageData(absoluut, { 1: 1, 2: 0, 3: 0 });
+    const map = libCoverage.createCoverageMap(data);
+
+    expect(() => {
+      toetsDiffDekking('/repo', maakConfig('blokkeer', 30), map);
+    }).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Aggregaat-ratchet is altijd informatief (#516)
+// ---------------------------------------------------------------------------
+
+describe('verify — aggregaat-ratchet is altijd informatief', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('gooit geen GebruikersFout bij een ratchet-regressie met blokkeer', () => {
+    // De aggregaat-ratchet is altijd informatief (#516). We verifiëren dat
+    // pasRatchetToe nooit een fout gooit door de broncode te inspecteren:
+    // de functie mag geen `throw` of `GebruikersFout` bevatten.
+    const bron = readFileSync(
+      path.join(import.meta.dirname, '..', 'src', 'commands', 'verify.ts'),
+      'utf8',
+    );
+    const start = bron.indexOf('function pasRatchetToe');
+    const einde = bron.indexOf('\n}\n', start);
+    const functie = bron.slice(start, einde + 2);
+    expect(functie).not.toContain('throw');
+    expect(functie).not.toContain('GebruikersFout');
   });
 });
