@@ -1,0 +1,9 @@
+diff --git a/src/bestaand.ts b/src/bestaand.ts
+index 1234567..abcdefg 100644
+--- a/src/bestaand.ts
++++ b/src/bestaand.ts
+@@ -3,0 +4,2 @@ export function foo(): void {
++  const x = 1;
++  console.log(x);
+@@ -10,0 +13 @@ export function bar(): void {
++  return;

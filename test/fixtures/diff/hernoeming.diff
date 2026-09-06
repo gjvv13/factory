@@ -1,0 +1,9 @@
+diff --git a/src/oud.ts b/src/nieuw-naam.ts
+similarity index 80%
+rename from src/oud.ts
+rename to src/nieuw-naam.ts
+index 1234567..abcdefg 100644
+--- a/src/oud.ts
++++ b/src/nieuw-naam.ts
+@@ -5,0 +6,1 @@ export function renamed(): void {
++  // toegevoegd bij hernoeming
