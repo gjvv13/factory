@@ -88,11 +88,11 @@ describe('draaiBouwer', () => {
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(BOUW_JSON_SCHEMA));
-    // De agent-definitie draagt de toolset; de CLI krijgt alleen --agent.
+    // De agent-definitie is de bron; de werker geeft haar grens expliciet mee (#547).
     expect(args).toContain('--agent');
     expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_BOUWER);
-    expect(args).not.toContain('--allowedTools');
-    expect(args).not.toContain('--disallowedTools');
+    expect(args).toContain('--allowedTools');
+    expect(args).toContain('--disallowedTools');
   });
 
   it('mag lezen en een tmp-map maken, zonder extra macht', () => {
@@ -185,10 +185,11 @@ describe('draaiReviewer', () => {
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(REVIEW_JSON_SCHEMA));
-    // De reviewer krijgt zijn eigen agent-definitie; die is lees-alleen.
+    // De reviewer krijgt zijn eigen agent-definitie; die is lees-alleen — de grens
+    // gaat expliciet mee zodat het subagent-formaat hem niet stil verruimt (#547).
     expect(args).toContain('--agent');
     expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_REVIEWER);
-    expect(args).not.toContain('--allowedTools');
-    expect(args).not.toContain('--disallowedTools');
+    expect(args).toContain('--allowedTools');
+    expect(args).toContain('--disallowedTools');
   });
 });
