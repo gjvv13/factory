@@ -2,6 +2,12 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { heeftLabel, issueUitBranch, plaatsComment, zetKolom } from '../board.js';
+import {
+  draaiCodeReview,
+  maakGateComment,
+  type CodeReviewInstelling,
+  type ReviewGateResultaat,
+} from '../code-review.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
@@ -53,6 +59,11 @@ export interface InleverenOpties {
    * gezet zijn (veiligste default).
    */
   readonly fastlane?: boolean;
+  /**
+   * Slaat de AI-code-review-gate over, ongeacht de `codeReview`-instelling in
+   * `factory.json`. Escape hatch voor situaties waar de review niet gewenst is.
+   */
+  readonly geenReview?: boolean;
   /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
   readonly cwd?: string;
   /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
@@ -179,6 +190,22 @@ export function inleveren(opties: InleverenOpties = {}): void {
   // zodat de branch schoon blijft en de verhoogde lat met de PR meereist.
   commitAlsGewijzigd(repoDir, BASISLIJN_BESTAND, 'verhoog dekking-basislijn');
 
+  // Code-review gate (#368): draait na verify, vóór de push. De instelling komt uit
+  // factory.json; zonder factory.json (de factory zelf) geldt `waarschuw`.
+  let reviewVerdict: ReviewGateResultaat | undefined;
+  if (opties.geenReview !== true) {
+    const appDir = zoekAppDir(repoDir);
+    const reviewConfig = appDir === undefined ? undefined : leesAppConfig(appDir);
+    const instelling: CodeReviewInstelling = reviewConfig?.codeReview ?? 'waarschuw';
+    reviewVerdict = draaiCodeReview(instelling, repoDir);
+    if (!reviewVerdict.doorgaan) {
+      throw new GebruikersFout(
+        `Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
+          '  Los de bevindingen op of lever in met --geen-review.',
+      );
+    }
+  }
+
   kop('Branch pushen');
   git(['push', '-q', '-u', 'origin', branch], repoDir);
   ok(`${branch} gepusht`);
@@ -230,6 +257,13 @@ export function inleveren(opties: InleverenOpties = {}): void {
           : 'Kon geen PR aanmaken of vinden met gh.';
       throw new GebruikersFout(reden);
     }
+  }
+
+  // Review-bevindingen als PR-comment posten, zodat ze ook bij `waarschuw` zichtbaar
+  // blijven voor de ochtend-review (#368). Moet na de PR-creatie, want we hebben de URL nodig.
+  if (reviewVerdict?.verdict !== undefined && reviewVerdict.verdict.bevindingen.length >= 0) {
+    const comment = maakGateComment(reviewVerdict.verdict);
+    run('gh', ['pr', 'comment', prUrl, '--body', comment], { cwd: repoDir, toleranter: true });
   }
 
   // Het item schuift zelf mee (#128). Vanaf hier wacht de slice op de merge — de
