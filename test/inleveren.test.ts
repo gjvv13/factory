@@ -945,4 +945,127 @@ describe('inleveren', () => {
       expect(aanroepen.some((a) => a.argumenten[0] === 'worktree')).toBe(false);
     });
   });
+
+  describe('code-review gate (#368)', () => {
+    /** Fixture met bevindingen, alsof `claude -p` dit teruggeeft. */
+    const REVIEW_MET_BEVINDINGEN = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: 'gate-1',
+      structured_output: {
+        bevindingen: [{ bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'bug' }],
+        oordeel: 'Eén bug gevonden.',
+      },
+    });
+
+    const REVIEW_SCHOON = JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: 'gate-2',
+      structured_output: { bevindingen: [], oordeel: 'Ziet er goed uit.' },
+    });
+
+    /** Bepaler die de code-review-gate laat draaien met een diff en een claude-antwoord. */
+    function metReview(reviewUitvoer: string): UitkomstBepaler {
+      return (aanroep, index) => {
+        // claude --version → slaagt
+        if (aanroep.commando === 'claude' && aanroep.argumenten[0] === '--version')
+          return { stdout: '2.3.0' };
+        // git rev-parse --verify origin/main → bestaat
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'rev-parse' &&
+          aanroep.argumenten.includes('--verify')
+        )
+          return { stdout: 'abc123' };
+        // git diff origin/main...HEAD → niet-lege diff
+        if (
+          aanroep.commando === 'git' &&
+          aanroep.argumenten[0] === 'diff' &&
+          aanroep.argumenten[1] === 'origin/main...HEAD'
+        )
+          return { stdout: '--- a/foo\n+++ b/foo\n-old\n+new' };
+        // De echte review-call
+        if (aanroep.commando === 'claude' && aanroep.argumenten.includes('-p'))
+          return { stdout: reviewUitvoer };
+        return gelukkig(aanroep, index);
+      };
+    }
+
+    it('slaat de review over met --geen-review', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ geenReview: true });
+
+      // Geen claude-aanroep, ook niet voor --version.
+      expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+      // Wel de hele gelukkige weg: verify, push, PR.
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('blokkeert bij bevindingen en codeReview=blokkeer in factory.json', () => {
+      const repo = maakRepo();
+      writeFileSync(
+        path.join(repo, 'factory.json'),
+        JSON.stringify({
+          naam: 'proefapp',
+          poorten: { dev: 3001, acc: 3002, prod: 3000 },
+          envRoot: path.join(repo, 'envs'),
+          codeReview: 'blokkeer',
+        }),
+      );
+      process.chdir(repo);
+      stelUitvoerderIn(maakUitvoerderOpnemer(metReview(REVIEW_MET_BEVINDINGEN)).uitvoerder);
+
+      expect(() => {
+        inleveren();
+      }).toThrow(/geblokkeerd/);
+    });
+
+    it('waarschuwt bij bevindingen en default instelling (waarschuw) en levert door', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metReview(REVIEW_MET_BEVINDINGEN));
+      stelUitvoerderIn(uitvoerder);
+
+      // Zonder factory.json geldt `waarschuw` als default → gaat door.
+      inleveren();
+
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(true);
+    });
+
+    it('post een PR-comment met bevindingen na een geslaagd inleveren', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metReview(REVIEW_SCHOON));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      const prComment = aanroepen.find(
+        (a) => a.commando === 'gh' && a.argumenten[0] === 'pr' && a.argumenten[1] === 'comment',
+      );
+      expect(prComment).toBeDefined();
+      expect(prComment!.argumenten[2]).toBe(PR_URL);
+      const body = prComment!.argumenten[4];
+      expect(body).toContain('Code-review gate (inleveren)');
+    });
+
+    it('doorloopt de fastlane-gate op dezelfde manier', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metReview(REVIEW_SCHOON));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ fastlane: true });
+
+      // De review draaide (claude -p werd aangeroepen).
+      expect(aanroepen.some((a) => a.commando === 'claude' && a.argumenten.includes('-p'))).toBe(
+        true,
+      );
+      // Auto-merge is ook aangezet.
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+    });
+  });
 });

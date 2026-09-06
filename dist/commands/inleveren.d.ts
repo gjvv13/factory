@@ -31,6 +31,11 @@ export interface InleverenOpties {
      * gezet zijn (veiligste default).
      */
     readonly fastlane?: boolean;
+    /**
+     * Slaat de AI-code-review-gate over, ongeacht de `codeReview`-instelling in
+     * `factory.json`. Escape hatch voor situaties waar de review niet gewenst is.
+     */
+    readonly geenReview?: boolean;
     /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
     readonly cwd?: string;
     /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
