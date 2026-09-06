@@ -72,6 +72,14 @@ const appConfigSchema = z.object({
    * groen; `blokkeer` laat verify falen; `uit` slaat de stap over.
    */
   configSleutels: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
+  /**
+   * Gedrag van de AI-code-review-gate in `factory inleveren`. De gate draait `claude -p`
+   * op de diff en meldt correctheid-bugs en onnodige complexiteit. `waarschuw` (default)
+   * meldt bevindingen geel en laat het inleveren doorgaan; `blokkeer` stopt vóór de push;
+   * `uit` slaat de stap over. Advies-eerst: een false positive mag een nachtelijke run
+   * niet stilleggen voordat de gate zich bewezen heeft.
+   */
+  codeReview: z.enum(['uit', 'waarschuw', 'blokkeer']).default('waarschuw'),
   /** Vanaf welke ernst de audit meetelt. Default `high`: lager is in de praktijk ruis. */
   auditNiveau: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
   /**
