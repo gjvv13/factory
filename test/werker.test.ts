@@ -62,15 +62,22 @@ describe('werkerArgumenten', () => {
     expect(schema).toContain('escalatie');
   });
 
-  it('geeft --agent mee in plaats van --allowedTools/--disallowedTools/--model', () => {
+  it('geeft --agent mee én borgt de grens uit de definitie (#547)', () => {
     const args = werkerArgumenten(OPDRACHT);
+    const def = leesAgentFrontmatter(AGENT_REFINER);
 
     expect(args).toContain('--agent');
     expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_REFINER);
-    // De oude vlaggen mogen er niet meer staan: de definitie draagt ze.
-    expect(args).not.toContain('--allowedTools');
-    expect(args).not.toContain('--disallowedTools');
-    expect(args).not.toContain('--model');
+    // `--agent` levert de rol + het prompt, maar het subagent-formaat kan geen
+    // fijnmazige Bash-verboden. De grens en het model komen daarom expliciet uit
+    // de definitie mee — anders draait de werker zonder guardrails (#547).
+    expect(args).toContain('--allowedTools');
+    expect(args).toContain('--disallowedTools');
+    expect(args[args.indexOf('--model') + 1]).toBe(def.model);
+    // De verbodslijst uit de definitie staat écht op de aanroep.
+    for (const verbod of def.disallowedTools) {
+      expect(args).toContain(verbod);
+    }
   });
 
   it('geeft --effort mee als de opdracht een effort heeft, en laat het weg zonder', () => {

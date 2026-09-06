@@ -1,4 +1,5 @@
 ---
+name: reviewer
 description: >-
   Onbemande reviewer die het werk van de bouw-werker beoordeelt. Lees-alleen:
   hij toetst per acceptatiecriterium en jaagt op bugs in de diff.

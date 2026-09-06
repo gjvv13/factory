@@ -1,4 +1,5 @@
 ---
+name: bouwer
 description: >-
   Onbemande werker die een slice bouwt. Mag schrijven, maar niet pushen en geen
   PR openen: de supervisor levert in met factory inleveren.

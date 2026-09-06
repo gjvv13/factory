@@ -931,15 +931,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(werker?.argumenten[werker.argumenten.indexOf('--max-budget-usd') + 1]).toBe('10');
   });
 
-  it('gebruikt --agent bouwer in plaats van losse toolsets', async () => {
+  it('gebruikt --agent bouwer én borgt de grens uit de definitie (#547)', async () => {
     const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
     const args = aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? [];
-    // De toolset zit in de agent-definitie; de CLI krijgt alleen --agent.
+    // De agent-definitie is de bron; de fijnmazige grens gaat expliciet mee, want
+    // het subagent-formaat kan geen Bash(git push:*)-verbod uitdrukken.
     expect(args).toContain('--agent');
     expect(args[args.indexOf('--agent') + 1]).toBe('bouwer');
-    expect(args).not.toContain('--allowedTools');
-    expect(args).not.toContain('--disallowedTools');
+    expect(args).toContain('--allowedTools');
+    expect(args).toContain('--disallowedTools');
   });
 
   it('escaleert een criterium zonder bewijs in plaats van het af te vinken', async () => {
@@ -1024,12 +1025,13 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     const claudes = aanroepen.filter((a) => a.commando === 'claude');
     expect(claudes).toHaveLength(2);
 
-    // De tweede aanroep is de review: via --agent reviewer, niet --allowedTools.
+    // De tweede aanroep is de review: via --agent reviewer, met de lees-alleen-grens
+    // uit de definitie expliciet meegegeven (#547).
     const reviewArgLijst = claudes[1]?.argumenten ?? [];
     expect(reviewArgLijst).toContain('--agent');
     expect(reviewArgLijst[reviewArgLijst.indexOf('--agent') + 1]).toBe('reviewer');
-    expect(reviewArgLijst).not.toContain('--allowedTools');
-    expect(reviewArgLijst).not.toContain('--disallowedTools');
+    expect(reviewArgLijst).toContain('--allowedTools');
+    expect(reviewArgLijst).toContain('--disallowedTools');
     // Reviewbudget is $3 (default), niet $10.
     const budgetIndex = reviewArgLijst.indexOf('--max-budget-usd');
     expect(reviewArgLijst[budgetIndex + 1]).toBe('3');

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { runAsync, waarschuwing } from './shell.js';
+import { leesAgentGrenzen } from './agent-definitie.js';
 /**
  * De onbemande werker: één `claude -p`-aanroep, en de vertaling van zijn uitvoer naar
  * een uitkomst waar de orkestrator op kan sturen (#104).
@@ -298,6 +299,11 @@ export const VERDICT_JSON_SCHEMA = {
 };
 /** De argumenten voor de `claude`-aanroep. Apart, zodat een test ze kan nalopen. */
 export function werkerArgumenten(opdracht) {
+    // `--agent` ontdekt de rol aan het `name:`-veld en levert het rol-systeemprompt,
+    // maar het subagent-formaat kan geen fijnmazige `Bash(git push:*)`-verboden. De
+    // grens en het model borgen we daarom expliciet uit de definitie (#547): zo is de
+    // agent-def de enige bron van waarheid én blijft de grens hard.
+    const grenzen = leesAgentGrenzen(opdracht.agent);
     return [
         // Hervatten of beginnen: `--resume` neemt de sessie-id van de bestaande sessie,
         // `--session-id` kent hem toe aan een nieuwe.
@@ -309,6 +315,11 @@ export function werkerArgumenten(opdracht) {
         ...(opdracht.hervat === true ? [] : ['--session-id', opdracht.sessie]),
         '--agent',
         opdracht.agent,
+        ...(grenzen.model === undefined ? [] : ['--model', grenzen.model]),
+        ...(grenzen.allowedTools.length === 0 ? [] : ['--allowedTools', ...grenzen.allowedTools]),
+        ...(grenzen.disallowedTools.length === 0
+            ? []
+            : ['--disallowedTools', ...grenzen.disallowedTools]),
         ...(opdracht.effort === undefined ? [] : ['--effort', opdracht.effort]),
         '--max-budget-usd',
         String(opdracht.budgetUsd),

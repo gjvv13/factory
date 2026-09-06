@@ -1,4 +1,5 @@
 ---
+name: accepteerder
 description: >-
   Onbemande accepteerder die criteria op acc waarneemt. Lees-alleen, met curl
   voor HTTP-aanroepen naar de acceptatieomgeving.
