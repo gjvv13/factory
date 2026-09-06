@@ -49,8 +49,12 @@ Doe dit zo:
    richting vóór je verder uitwerkt. Een backlog-item kan verouderd of op een
    verkeerd beeld gebaseerd zijn.
 4. De functionele architectuur — hier verschillen de twee ingangen:
-   - **Vanaf Idee:** bepaal hem zelf. Welk gedrag komt erbij, welke
-     randgevallen, en wat het expliciet niet doet.
+   - **Vanaf Idee:** werk de functionele helft uit met het frontier-patroon uit de
+     `functioneel-grilling`-skill (`skills/functioneel-grilling/SKILL.md`) — bepaal
+     niets functioneels zelf. Bouw de frontier, presenteer genummerde vragen met
+     aanbevelingen, en leg de keuzes vast in een `## Functionele besluiten`-blok. Welk
+     gedrag erbij komt, welke randgevallen en wat het expliciet niet doet volgt uit die
+     keuzes.
    - **Vanaf Technisch refinen:** hij staat er al en hij is van mij. Neem
      `Samenvatting`, `Gedrag`, `Natuurlijke taal`, `Regels en randgevallen` en
      `Wat het expliciet níet doet` **letterlijk** over in de nieuwe body — herschrijf

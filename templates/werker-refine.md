@@ -41,6 +41,19 @@ architectuur indeelt).
    besluiten. De functionele secties (_Gedrag_, _Natuurlijke taal_, _Regels en
    randgevallen_, _Wat het expliciet níet doet_) neem je **letterlijk over**; die zijn
    niet van jou. Wijk je daarvan af, dan is dat per definitie een escalatie.
+
+   **Functionele vragen in frontier-formaat.** Kom je een functionele vraag tegen die
+   niet beantwoord is — iets wat de gebruiker moet beslissen — bouw dan de frontier
+   volgens de `functioneel-grilling`-skill
+   (`{{FACTORY_MAP}}/skills/functioneel-grilling/SKILL.md`):
+   - Identificeer alle openstaande functionele vragen waarvan de voorwaarden vervuld
+     zijn.
+   - Formuleer ze genummerd, elk met een aanbevolen keuze en onderbouwing.
+   - Escaleer via het bestaande mechanisme (`uitkomst: "escalatie"`, `vraag` +
+     `advies`). De frontier is de inhoud van de escalatie.
+     Verzin nooit zelf functionele besluiten. Feiten zoek je op; besluiten zijn van de
+     gebruiker.
+
 4. Houd het kort. Een goede uitwerking is 120–180 regels. Langer betekent bijna altijd
    dat er beschrijving in staat die de code al geeft.
 
