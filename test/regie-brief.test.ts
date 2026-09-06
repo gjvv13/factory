@@ -86,22 +86,25 @@ describe('bouwBrief', () => {
     expect(tekst).toBe('Niets te melden — alles stil.');
   });
 
-  it('toont de sectie "wacht op akkoord" voor items op akkoord-kolommen, zonder escalaties', () => {
+  it('toont de sectie "wacht op akkoord" alleen voor akkoord-/merge-kolommen, zonder escalaties of refine', () => {
     const items: BacklogItem[] = [
-      maakItem({ issue: 42, kolom: 'Technisch refinen', app: 'beheer' }),
+      maakItem({ issue: 42, kolom: 'Wacht op merge', app: 'beheer' }),
       maakItem({ issue: 43, kolom: 'Wacht op akkoord' }),
       // Escalatie: mag niet in deze sectie
-      maakItem({ issue: 44, kolom: 'Technisch refinen', labels: ['escalatie'] }),
+      maakItem({ issue: 44, kolom: 'Wacht op akkoord', labels: ['escalatie'] }),
+      // Technisch refinen wacht op de nacht-refiner, niet op de gebruiker (#404-terugkoppeling)
+      maakItem({ issue: 45, kolom: 'Technisch refinen' }),
     ];
     const tekst = bouwBrief(maakBronnen({ items, escalatieNummers: new Set([44]) }));
 
     expect(tekst).toContain('Wacht op jouw akkoord');
-    expect(tekst).toContain('#42');
-    expect(tekst).toContain('#43');
-    // #44 is geëscaleerd en hoort niet in de akkoord-sectie
     const akkoordSectie = tekst.split('###').find((s) => s.includes('Wacht op jouw akkoord'));
     expect(akkoordSectie).toBeDefined();
+    expect(akkoordSectie).toContain('#42');
+    expect(akkoordSectie).toContain('#43');
+    // #44 is geëscaleerd en #45 staat op Technisch refinen — beide horen hier niet
     expect(akkoordSectie).not.toContain('#44');
+    expect(akkoordSectie).not.toContain('#45');
   });
 
   it('toont de sectie "geëscaleerd" met vraag en advies', () => {

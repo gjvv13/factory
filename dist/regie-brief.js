@@ -14,14 +14,14 @@ const ISSUE_URL = 'https://github.com/gjvv13/factory/issues';
 /** Kolommen waar actief aan gewerkt wordt; stilstand hier is een signaal. */
 const WERK_KOLOMMEN = new Set(['Bouwen', 'Wacht op merge', 'Uitrollen']);
 /**
- * Kolommen waarvan items "wacht op akkoord" zijn: iemand moet een besluit nemen.
- * Items met het escalatie-label komen in een aparte sectie.
+ * Kolommen waarvan items écht op een besluit van de gebruiker wachten: `Wacht op
+ * akkoord` (bouw-/besluit-akkoord) en `Wacht op merge` (mergen is de knop van de
+ * gebruiker). `Technisch refinen` hoort hier bewust NIET bij — die items wachten op
+ * de nacht-refiner, niet op de gebruiker; ze meenemen maakt de sectie 's ochtends een
+ * wolf-lijst (#404-terugkoppeling). Items met het escalatie-label komen in een aparte
+ * sectie.
  */
-const AKKOORD_KOLOMMEN = new Set([
-    'Technisch refinen',
-    'Wacht op akkoord',
-    'Wacht op merge',
-]);
+const AKKOORD_KOLOMMEN = new Set(['Wacht op akkoord', 'Wacht op merge']);
 function issueLink(issue, titel) {
     const label = titel !== undefined ? `#${String(issue)} ${titel}` : `#${String(issue)}`;
     return `[${label}](${ISSUE_URL}/${String(issue)})`;
