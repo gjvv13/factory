@@ -36,8 +36,22 @@ function leesFinal(repoDir, soort) {
  * wordt telt als geraakt — niet dubbel. Is er geen enkele `coverage-final.json`, dan
  * undefined: verify valt dan terug op de losse cijfers.
  */
-export function schrijfGecombineerdeDekking(repoDir) {
-    const maps = SOORTEN.map((soort) => leesFinal(repoDir, soort)).filter((map) => map !== undefined);
+export function schrijfGecombineerdeDekking(repoDir, verwacht) {
+    const soorten = verwacht !== undefined && verwacht.length > 0 ? verwacht : SOORTEN;
+    // Bij een expliciete verwachtlijst moet elke soort een coverage-final.json hebben;
+    // ontbreekt er één, dan is het cijfer onvolledig en geven we undefined terug zodat
+    // de ratchet niet oordeelt op een misleidend laag getal.
+    if (verwacht !== undefined && verwacht.length > 0) {
+        for (const soort of verwacht) {
+            const map = leesFinal(repoDir, soort);
+            if (map === undefined) {
+                return undefined;
+            }
+        }
+    }
+    const maps = soorten
+        .map((soort) => leesFinal(repoDir, soort))
+        .filter((map) => map !== undefined);
     if (maps.length === 0) {
         return undefined;
     }

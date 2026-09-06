@@ -54,6 +54,58 @@ describe('schrijfGecombineerdeDekking', () => {
     expect(cijfers?.lines).toBeCloseTo(66.67, 1);
   });
 
+  it('met verwacht en alle bestanden aanwezig merget correct', () => {
+    const app = maakApp();
+    const bestand = path.join(app, 'app', 'src', 'foo.ts');
+    schrijfFinal(app, 'unit', finalVoor(bestand, [1, 0, 0]));
+    schrijfFinal(app, 'e2e', finalVoor(bestand, [1, 1, 0]));
+
+    const cijfers = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
+
+    expect(cijfers).toBeDefined();
+    // 2 van 3 regels gedekt
+    expect(cijfers?.lines).toBeCloseTo(66.67, 1);
+  });
+
+  it('met verwacht en één ontbrekend bestand geeft undefined', () => {
+    const app = maakApp();
+    const bestand = path.join(app, 'app', 'src', 'foo.ts');
+    schrijfFinal(app, 'unit', finalVoor(bestand, [1, 1]));
+    // e2e coverage-final.json ontbreekt
+
+    const cijfers = schrijfGecombineerdeDekking(app, ['unit', 'e2e']);
+
+    expect(cijfers).toBeUndefined();
+  });
+
+  it('met verwacht negeert een coverage-bestand van een niet-verwachte soort', () => {
+    const app = maakApp();
+    const bestand = path.join(app, 'app', 'src', 'foo.ts');
+    // unit: alle 3 regels gedekt
+    schrijfFinal(app, 'unit', finalVoor(bestand, [1, 1, 1]));
+    // stale e2e data die niet in verwacht staat en het cijfer zou verlagen
+    schrijfFinal(app, 'e2e', finalVoor(bestand, [0, 0, 0]));
+
+    const cijfers = schrijfGecombineerdeDekking(app, ['unit']);
+
+    expect(cijfers).toBeDefined();
+    // Alleen unit: 3/3 = 100%
+    expect(cijfers?.statements).toBe(100);
+  });
+
+  it('zonder verwacht behoudt het bestaande gedrag: alle SOORTEN, ontbrekende overslaan', () => {
+    const app = maakApp();
+    const bestand = path.join(app, 'app', 'src', 'foo.ts');
+    // Alleen unit aanwezig; contract en e2e ontbreken
+    schrijfFinal(app, 'unit', finalVoor(bestand, [1, 1]));
+
+    const cijfers = schrijfGecombineerdeDekking(app);
+
+    // Geen undefined, want zonder verwacht worden ontbrekende soorten overgeslagen
+    expect(cijfers).toBeDefined();
+    expect(cijfers?.lines).toBe(100);
+  });
+
   it('schrijft een gecombineerd rapport op de vaste plek', () => {
     const app = maakApp();
     schrijfFinal(app, 'unit', finalVoor(path.join(app, 'app', 'src', 'foo.ts'), [1, 1]));

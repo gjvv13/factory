@@ -12,4 +12,4 @@ export interface Dekkingscijfers {
  * wordt telt als geraakt — niet dubbel. Is er geen enkele `coverage-final.json`, dan
  * undefined: verify valt dan terug op de losse cijfers.
  */
-export declare function schrijfGecombineerdeDekking(repoDir: string): Dekkingscijfers | undefined;
+export declare function schrijfGecombineerdeDekking(repoDir: string, verwacht?: readonly string[]): Dekkingscijfers | undefined;
