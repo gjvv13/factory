@@ -125,6 +125,22 @@ export declare function parseOuderAntwoord(ruw: string): number | undefined;
  * goedkoper dan de GraphQL-variant én het telt tegen de andere pot — zie #104.
  */
 export declare function ouderVan(issue: number, cwd?: string): number | undefined;
+/** De jq-expressie waarmee `heeftLabel` de labels van een issue leest. */
+export declare const JQ_LABELS = "[.labels[].name]";
+/**
+ * Of een issue een bepaald label draagt. Eén REST-aanroep — goedkoper dan de
+ * board-lezing en voldoende voor een puntcheck.
+ */
+export declare function heeftLabel(issue: number, label: string, cwd?: string): boolean;
+/** Parset de jq-uitvoer van `JQ_LABELS` tot een string[]. Geëxporteerd voor tests. */
+export declare function parseLabelsAntwoord(ruw: string): string[];
+/** De jq-expressie waarmee `leesIssueBody` de body van een issue leest. */
+export declare const JQ_BODY = ".body";
+/**
+ * Leest de body van een backlog-issue, of undefined als het niet lukt.
+ * Eén REST-aanroep — dezelfde kosten als `ouderVan`.
+ */
+export declare function leesIssueBody(issue: number, cwd?: string): string | undefined;
 /**
  * De jq-expressie waarmee `alleKinderenDicht` de voortgang van een epic leest.
  * De interpolatie (`\(…)`) moet escapen naar `\\(…)` in de TypeScript-string zodat

@@ -359,6 +359,41 @@ export function ouderVan(issue, cwd) {
     }
     return parseOuderAntwoord(url);
 }
+// --- Label- en body-opzoeking per issue (#364) --------------------------------
+/** De jq-expressie waarmee `heeftLabel` de labels van een issue leest. */
+export const JQ_LABELS = '[.labels[].name]';
+/**
+ * Of een issue een bepaald label draagt. Eén REST-aanroep — goedkoper dan de
+ * board-lezing en voldoende voor een puntcheck.
+ */
+export function heeftLabel(issue, label, cwd) {
+    const ruw = issueVeld(issue, JQ_LABELS, cwd);
+    if (ruw === undefined) {
+        return false;
+    }
+    return parseLabelsAntwoord(ruw).includes(label);
+}
+/** Parset de jq-uitvoer van `JQ_LABELS` tot een string[]. Geëxporteerd voor tests. */
+export function parseLabelsAntwoord(ruw) {
+    try {
+        const parsed = JSON.parse(ruw);
+        if (!Array.isArray(parsed))
+            return [];
+        return parsed.filter((v) => typeof v === 'string');
+    }
+    catch {
+        return [];
+    }
+}
+/** De jq-expressie waarmee `leesIssueBody` de body van een issue leest. */
+export const JQ_BODY = '.body';
+/**
+ * Leest de body van een backlog-issue, of undefined als het niet lukt.
+ * Eén REST-aanroep — dezelfde kosten als `ouderVan`.
+ */
+export function leesIssueBody(issue, cwd) {
+    return issueVeld(issue, JQ_BODY, cwd);
+}
 /**
  * De jq-expressie waarmee `alleKinderenDicht` de voortgang van een epic leest.
  * De interpolatie (`\(…)`) moet escapen naar `\\(…)` in de TypeScript-string zodat

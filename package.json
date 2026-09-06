@@ -45,6 +45,8 @@
     "hooks",
     "workflows",
     "skills",
+    "claude-hooks",
+    ".claude",
     "dependabot.yml"
   ],
   "scripts": {

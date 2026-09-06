@@ -12,6 +12,7 @@ export const claudeCommandsDir = path.join(factoryPakketDir, 'claude-commands');
 export const hooksDir = path.join(factoryPakketDir, 'hooks');
 export const workflowsDir = path.join(factoryPakketDir, 'workflows');
 export const skillsDir = path.join(factoryPakketDir, 'skills');
+export const claudeHooksDir = path.join(factoryPakketDir, 'claude-hooks');
 /**
  * Bestanden die `factory sync` als losse 1:1-kopie naar een app zet, naast de
  * directory-spiegels. Bron is relatief aan de factory-pakketwortel, doel is
@@ -20,5 +21,6 @@ export const skillsDir = path.join(factoryPakketDir, 'skills');
  */
 export const syncBestanden = [
     { bron: 'dependabot.yml', doel: path.join('.github', 'dependabot.yml') },
+    { bron: path.join('.claude', 'settings.json'), doel: path.join('.claude', 'settings.json') },
 ];
 //# sourceMappingURL=paths.js.map

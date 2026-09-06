@@ -60,6 +60,14 @@ interface Opdrachtitem extends BacklogItem {
 export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryMap: string, apps?: readonly string[]): string;
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
+/**
+ * Of een issue-body functionele secties bevat. Geëxporteerd voor tests (#364).
+ *
+ * Een issue hoeft alleen functionele secties te bevatten als het ook technische
+ * secties heeft: een kaal idee zonder `## Technische architectuur` is immers
+ * nog niet bij de technische stap.
+ */
+export declare function heeftFunctioneleSecties(body: string): boolean;
 /** Het soort werker dat escaleerde — bepaalt welk pad `antwoord` neemt. */
 export type EscalatieSoort = 'refine' | 'bouw';
 /** Wat er uit een escalatie-comment terug te lezen valt. */
