@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
-import { issueUitBranch, plaatsComment, zetKolom } from '../board.js';
+import { heeftLabel, issueUitBranch, plaatsComment, zetKolom } from '../board.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
@@ -58,6 +58,13 @@ export interface InleverenOpties {
   /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
   readonly reeksInfo?: ReeksInfo;
 }
+
+/**
+ * Het label dat de fastlane-baan aandrijft (ADR 009, #401). Hergebruikt uit
+ * `orkestreer-bouw.ts` maar gedupliceerd om een circulaire import te voorkomen:
+ * `orkestreer-bouw` importeert `inleveren`, dus de omgekeerde richting mag niet.
+ */
+const FASTLANE_LABEL = 'fastlane';
 
 /** Committeert een gewijzigd bestand met een korte melding; slaat over als het niet wijzigde. */
 function commitAlsGewijzigd(repoDir: string, bestand: string, melding: string): boolean {
@@ -249,6 +256,16 @@ export function inleveren(opties: InleverenOpties = {}): void {
     // Fastlane (#401): auto-merge aanzetten, ongeacht of het een lokale of GitHub-
     // merge-queue-app is. De fastlane is de bewuste afwijking van akkoord-voor-
     // inleveren: de poort is de enige gate, en de PR merget zichzelf op groen.
+    //
+    // Tweedelijns-beveiliging (#364): het issue moet het `fastlane`-label dragen.
+    // Dat label kan alleen een mens zetten (ADR 009); zonder label is de fastlane
+    // niet toegestaan, ook al liet de hook het commando door.
+    if (issue !== undefined && !heeftLabel(issue, FASTLANE_LABEL, repoDir)) {
+      throw new GebruikersFout(
+        `--fastlane vereist het label '${FASTLANE_LABEL}' op #${String(issue)}.\n` +
+          `  Zet het label eerst: gh issue edit ${String(issue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`,
+      );
+    }
     if (lokaal) {
       zorgVoorWachtrijLabel(repoDir);
       run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });

@@ -19,6 +19,7 @@ import {
   kolomVan,
   isBacklogRepo,
   haalLabelWeg,
+  leesIssueBody,
   orkestratorComments,
   plaatsComment,
   schrijfBody,
@@ -585,6 +586,21 @@ interface DraaiOpties {
   readonly timeoutMs?: number;
 }
 
+/**
+ * Of een issue-body functionele secties bevat. Geëxporteerd voor tests (#364).
+ *
+ * Een issue hoeft alleen functionele secties te bevatten als het ook technische
+ * secties heeft: een kaal idee zonder `## Technische architectuur` is immers
+ * nog niet bij de technische stap.
+ */
+export function heeftFunctioneleSecties(body: string): boolean {
+  if (!/^## Technische architectuur/im.test(body)) {
+    // Geen technische secties: er valt niets te bewaken.
+    return true;
+  }
+  return /^## Functionele architectuur/im.test(body) || /^## Functionele besluiten/im.test(body);
+}
+
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
 async function werkAf(
   item: Opdrachtitem,
@@ -594,6 +610,18 @@ async function werkAf(
   apps: readonly string[] = [],
 ): Promise<RunUitkomst> {
   kop(`#${String(item.issue)} — ${item.titel}`);
+
+  // Gate (#364): weiger een refine-run op een issue zonder functionele secties.
+  // De Claude-hook bewaakt het interactieve pad; dit bewaakt het onbemande pad,
+  // dat buiten Claude Code draait en de hook dus niet raakt.
+  const body = leesIssueBody(item.issue, cwd);
+  if (body !== undefined && !heeftFunctioneleSecties(body)) {
+    waarschuwing(
+      `#${String(item.issue)} heeft technische secties zonder functionele secties — overgeslagen.`,
+    );
+    return { afloop: 'mislukt' };
+  }
+
   zorgVoorEscalatieLabel(cwd);
   const werkmap = versWerkplaats(item.app, EIGENAAR, wortel);
   // De factory-spiegel gaat mee als leesmap: daar staan de templates, WORKFLOW.md en
