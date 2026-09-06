@@ -90,6 +90,23 @@ naar de issue-body:
 - Dit blok volstaat voor de gate: `heeftFunctioneleSecties` in `orkestreer.ts`
   en `gate-refine.sh` accepteren `## Functionele besluiten`.
 
+## CONTEXT.md-onderhoud
+
+Na elke afgeronde grill onderhoud je `CONTEXT.md` in de repo-root van de app.
+
+1. **Lees bij aanvang.** Als `CONTEXT.md` bestaat, lees het — het bevat het
+   glossarium, de invarianten en de open vragen van deze applicatie.
+2. **Werk bij na afronding.** Loop de besluiten langs:
+   - Nieuwe termen die in de besluiten voorkomen → voeg toe aan **Glossarium**.
+   - Besluiten die een invariant vastleggen → voeg toe aan **Invarianten** met
+     verwijzing naar het issuenummer.
+   - Functionele vragen die niet in deze grill beantwoord zijn → voeg toe aan
+     **Open vragen**.
+3. **Maak aan als het niet bestaat.** Gebruik het format met drie koppen
+   (Glossarium, Invarianten, Open vragen) uit de conventie.
+4. **Houd het dun.** Geen proza, geen duplicatie van de issue-body. Eén regel per
+   term, één bullet per invariant. CONTEXT.md is een index, geen document.
+
 Het besluiten-blok staat naast de bestaande functionele secties (`Gedrag`,
 `Natuurlijke taal`, `Regels en randgevallen`, `Wat het expliciet níet doet`) —
 het vervangt ze niet. De secties beschrijven het ontwerp; het blok registreert

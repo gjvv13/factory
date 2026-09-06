@@ -11,6 +11,10 @@ niemand kijkt mee.
 
 ## Wat je doet
 
+Als `{{WERKMAP}}/CONTEXT.md` bestaat, lees het als domeincontext. Als je werk een
+nieuw domeinbegrip of een bevestigde invariant oplevert, werk `CONTEXT.md` bij en
+commit het mee.
+
 1. Lees het issue: `gh issue view {{ISSUE}} -R gjvv13/factory`. De acceptatiecriteria
    zijn je opdracht; de slice-beschrijving zegt hoe.
 2. Laad de `coding-guidelines`-skill en de `onbemand-werken`-skill uit de factory-map en
