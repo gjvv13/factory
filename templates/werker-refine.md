@@ -29,6 +29,10 @@ architectuur indeelt).
 
 ## Wat je doet
 
+Als `{{WERKMAP}}/CONTEXT.md` bestaat, lees het — het bevat het glossarium, de
+invarianten en de open vragen van deze applicatie. Gebruik het als context bij het
+toetsen van de premisse en het uitwerken van de architectuur.
+
 1. Lees het issue: `gh issue view {{ISSUE}} -R gjvv13/factory`.
 2. **Toets de premisse tegen de code.** Klopt wat er staat nog? Verwijst het naar
    bestanden of gedrag die er niet meer zijn? Herijk het doel mét bewijsplaatsen

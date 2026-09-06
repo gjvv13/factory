@@ -2,19 +2,19 @@
 
 ## Glossarium
 
-| Term | Betekenis |
-| --- | --- |
-| slice | Een zelfstandig afleverbaar stuk werk met eigen acceptatiecriteria; een epic wordt opgesplitst in slices via child-issues (ADR 006) |
-| grill | Een gestructureerd interview (frontier-patroon) dat functionele besluiten vastlegt vóór de technische uitwerking begint |
-| frontier | De verzameling openstaande vragen waarvan alle voorwaarden vervuld zijn — het algoritme achter de grill |
-| ratchet | De dekkings-basislijn die alleen omhoog schuift: het hoogste gemeten niveau wordt vastgelegd en mag niet meer dalen |
-| poort | `factory verify` — de kwaliteitspoort die opmaak, lint, types, tests, build, dekking en audit toetst |
-| spiegel | Een verse kloon van `origin/main` onder `~/OrkestratorWerk/` waarop een onbemande werker draait; wordt vóór elke run hard teruggezet |
-| werkplek | Een git-worktree naast de spiegel (`factory werkplek <issue>`), de geïsoleerde werkmap van een bouw-werker |
-| orkestrator | De supervisor (`factory orkestreer`) die het board leest, een werker start en het resultaat op GitHub zet |
-| refine-werker | Onbemande werker die de technische helft van een refinement schrijft; leest alleen, schrijft niets naar het bestandssysteem |
-| bouw-werker | Onbemande werker die een slice bouwt in een worktree; mag schrijven maar niet pushen of een PR openen |
-| escalatie | Een werker stopt met een vraag en advies; het item gaat terug naar de wachtrij met het label `escalatie` tot iemand antwoordt |
+| Term          | Betekenis                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| slice         | Een zelfstandig afleverbaar stuk werk met eigen acceptatiecriteria; een epic wordt opgesplitst in slices via child-issues (ADR 006)  |
+| grill         | Een gestructureerd interview (frontier-patroon) dat functionele besluiten vastlegt vóór de technische uitwerking begint              |
+| frontier      | De verzameling openstaande vragen waarvan alle voorwaarden vervuld zijn — het algoritme achter de grill                              |
+| ratchet       | De dekkings-basislijn die alleen omhoog schuift: het hoogste gemeten niveau wordt vastgelegd en mag niet meer dalen                  |
+| poort         | `factory verify` — de kwaliteitspoort die opmaak, lint, types, tests, build, dekking en audit toetst                                 |
+| spiegel       | Een verse kloon van `origin/main` onder `~/OrkestratorWerk/` waarop een onbemande werker draait; wordt vóór elke run hard teruggezet |
+| werkplek      | Een git-worktree naast de spiegel (`factory werkplek <issue>`), de geïsoleerde werkmap van een bouw-werker                           |
+| orkestrator   | De supervisor (`factory orkestreer`) die het board leest, een werker start en het resultaat op GitHub zet                            |
+| refine-werker | Onbemande werker die de technische helft van een refinement schrijft; leest alleen, schrijft niets naar het bestandssysteem          |
+| bouw-werker   | Onbemande werker die een slice bouwt in een worktree; mag schrijven maar niet pushen of een PR openen                                |
+| escalatie     | Een werker stopt met een vraag en advies; het item gaat terug naar de wachtrij met het label `escalatie` tot iemand antwoordt        |
 
 ## Invarianten
 
