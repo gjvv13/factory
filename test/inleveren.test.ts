@@ -55,6 +55,10 @@ const gelukkig: UitkomstBepaler = ({ commando, argumenten }) => {
   if (commando === 'git' && argumenten[0] === 'status') return { stdout: '' };
   if (commando === 'gh' && argumenten[1] === 'view') return { code: 1 }; // nog geen PR
   if (commando === 'gh' && argumenten[1] === 'create') return { stdout: PR_URL };
+  // heeftLabel (#364): de label-check voor --fastlane. Geeft het fastlane-label mee
+  // zodat de bestaande fastlane-tests de gate passeren.
+  if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/issues/'))
+    return { stdout: '["type:task","fastlane"]' };
   return {};
 };
 
