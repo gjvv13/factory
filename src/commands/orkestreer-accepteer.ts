@@ -20,7 +20,7 @@ import { GebruikersFout, kop, ok, uitvoerVan, waarschuwing } from '../shell.js';
 import { ESCALATIE_LABEL } from '../board.js';
 import { versWerkplaats, werkplaatsWortel } from '../werkplaats.js';
 import { versieUitHealth } from './promote.js';
-import { draaiAccepteerder, type AccepteerUitkomst } from '../werker.js';
+import { AGENT_ACCEPTEERDER, draaiAccepteerder, type AccepteerUitkomst } from '../werker.js';
 
 /**
  * De derde taaksoort: een werker die accepteert in plaats van refinet of bouwt (#169).
@@ -37,7 +37,6 @@ export const ACCEPTEER_MARKERING = '<!-- accepteer:bewijs -->';
 
 const APP_CONFIG_BESTAND = 'factory.json';
 const EIGENAAR = 'gjvv13';
-const MODEL = 'claude-opus-4-6';
 
 /** Een item dat geaccepteerd kan worden: het `App`-veld moet gezet zijn. */
 export interface Accepteeritem extends BacklogItem {
@@ -363,7 +362,7 @@ async function accepteerAf(
     sessie: randomUUID(),
     extraMappen: [factoryMap],
     budgetUsd,
-    model: MODEL,
+    agent: AGENT_ACCEPTEERDER,
     effort,
   });
 

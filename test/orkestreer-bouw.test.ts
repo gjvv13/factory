@@ -931,15 +931,15 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(werker?.argumenten[werker.argumenten.indexOf('--max-budget-usd') + 1]).toBe('10');
   });
 
-  it('mag schrijven maar niet pushen', async () => {
+  it('gebruikt --agent bouwer in plaats van losse toolsets', async () => {
     const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
 
-    const args = (aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? []).join(' ');
-    // Schrijven is de opdracht; de PR is de grens tussen voorstellen en landen.
-    expect(args).toContain('Write');
-    expect(args).toContain('Bash(git commit:*)');
-    expect(args).toContain('Bash(git push:*)');
-    expect(args).toContain('Bash(gh pr:*)');
+    const args = aanroepen.find((a) => a.commando === 'claude')?.argumenten ?? [];
+    // De toolset zit in de agent-definitie; de CLI krijgt alleen --agent.
+    expect(args).toContain('--agent');
+    expect(args[args.indexOf('--agent') + 1]).toBe('bouwer');
+    expect(args).not.toContain('--allowedTools');
+    expect(args).not.toContain('--disallowedTools');
   });
 
   it('escaleert een criterium zonder bewijs in plaats van het af te vinken', async () => {
@@ -1024,16 +1024,12 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     const claudes = aanroepen.filter((a) => a.commando === 'claude');
     expect(claudes).toHaveLength(2);
 
-    // De tweede aanroep is de review: lees-alleen. Write en Edit staan in de
-    // verbodslijst, niet in de toestemmingslijst.
+    // De tweede aanroep is de review: via --agent reviewer, niet --allowedTools.
     const reviewArgLijst = claudes[1]?.argumenten ?? [];
-    const allowedStart = reviewArgLijst.indexOf('--allowedTools');
-    const disallowedStart = reviewArgLijst.indexOf('--disallowedTools');
-    const toegestaan = reviewArgLijst.slice(allowedStart + 1, disallowedStart);
-    expect(toegestaan).toContain('Read');
-    expect(toegestaan).toContain('Grep');
-    expect(toegestaan).not.toContain('Write');
-    expect(toegestaan).not.toContain('Edit');
+    expect(reviewArgLijst).toContain('--agent');
+    expect(reviewArgLijst[reviewArgLijst.indexOf('--agent') + 1]).toBe('reviewer');
+    expect(reviewArgLijst).not.toContain('--allowedTools');
+    expect(reviewArgLijst).not.toContain('--disallowedTools');
     // Reviewbudget is $3 (default), niet $10.
     const budgetIndex = reviewArgLijst.indexOf('--max-budget-usd');
     expect(reviewArgLijst[budgetIndex + 1]).toBe('3');

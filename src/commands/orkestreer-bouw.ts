@@ -34,7 +34,14 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks, type ReeksContext } from '../reeks.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
-import { draaiBouwer, draaiReviewer, type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
+import {
+  AGENT_BOUWER,
+  AGENT_REVIEWER,
+  draaiBouwer,
+  draaiReviewer,
+  type BouwUitkomst,
+  type ReviewUitkomst,
+} from '../werker.js';
 import {
   BOUW_NACHT_MINUUT,
   BOUW_NACHT_UUR,
@@ -76,8 +83,6 @@ const GECLAIMD_KOLOM: Kolom = 'Bouwen';
 /** Alleen kleine klussen. Een epic is geen bouwopdracht, en een slice hoort bij zijn epic. */
 const BOUWBARE_SOORTEN = ['type:bug', 'type:task'] as const;
 const EIGENAAR = 'gjvv13';
-/** Eén model voor alle onbemande werkers — zie het modelkeuze-besluit in #104. */
-const MODEL = 'claude-opus-4-6';
 
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
@@ -659,7 +664,7 @@ export async function bouwAf(
       sessie: randomUUID(),
       extraMappen: [factoryMap, ...bronMappen],
       budgetUsd,
-      model: MODEL,
+      agent: AGENT_BOUWER,
       effort,
       ...(env === undefined ? {} : { env }),
       ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -701,7 +706,7 @@ export async function bouwAf(
         sessie: randomUUID(),
         extraMappen: [factoryMap],
         budgetUsd: reviewBudgetUsd,
-        model: MODEL,
+        agent: AGENT_REVIEWER,
         effort,
         ...(env === undefined ? {} : { env }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
@@ -1042,7 +1047,7 @@ export async function werkBouwAntwoordAf(
   const uitkomst = await draaiBouwer({
     ...opdracht,
     budgetUsd: instellingen.bouwBudgetPerRun,
-    model: MODEL,
+    agent: AGENT_BOUWER,
     effort: instellingen.werkerEffort,
   });
 
@@ -1096,7 +1101,7 @@ export async function werkBouwAntwoordAf(
       sessie: randomUUID(),
       extraMappen: [factoryMap],
       budgetUsd: instellingen.reviewBudgetPerRun,
-      model: MODEL,
+      agent: AGENT_REVIEWER,
       effort: instellingen.werkerEffort,
     });
   } catch (fout) {

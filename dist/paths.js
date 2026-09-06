@@ -13,6 +13,7 @@ export const hooksDir = path.join(factoryPakketDir, 'hooks');
 export const workflowsDir = path.join(factoryPakketDir, 'workflows');
 export const skillsDir = path.join(factoryPakketDir, 'skills');
 export const claudeHooksDir = path.join(factoryPakketDir, 'claude-hooks');
+export const agentsDir = path.join(factoryPakketDir, 'agents');
 /**
  * Bestanden die `factory sync` als losse 1:1-kopie naar een app zet, naast de
  * directory-spiegels. Bron is relatief aan de factory-pakketwortel, doel is

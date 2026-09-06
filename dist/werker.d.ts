@@ -17,43 +17,17 @@ import { z } from 'zod';
  * "hij kan niets kapotmaken" geen belofte maar een eigenschap van de aanroep.
  */
 /**
- * Wat de werker mag. Bewust een toestemmingslijst en niet alleen een verbodslijst:
- * met alléén `Write` en `Edit` verboden schrijft het model gewoon via
- * `Bash(echo … > bestand)` — dat is precies wat de proefrun deed. In een `-p`-sessie
- * kan niets goedgekeurd worden wat hier niet in staat, dus deze lijst ís de grens.
- */
-export declare const WERKER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
-/**
- * Wat een **bouw**-werker mag (#183). Wél schrijven — dat is de opdracht — maar niet
- * pushen en geen PR openen: de supervisor levert in met `factory inleveren
- * --geen-automerge`, zodat het openen van een PR een beslissing van de factory blijft en
- * niet van het model. Committen mag wel; zonder commit is er niets in te leveren.
- */
-export declare const BOUWER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Write", "Edit", "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)", "Bash(grep:*)", "Bash(echo:*)", "Bash(mkdir:*)", "Bash(mktemp:*)", "Bash(git add:*)", "Bash(git commit:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)", "Bash(git restore:*)", "Bash(pnpm:*)", "Bash(npx:*)", "Bash(node:*)", "Bash(gh issue view:*)"];
-/**
- * Wat een bouw-werker nooit mag. `git push` en `gh pr` staan hier omdat de PR de grens
- * is tussen voorstellen en landen; `gh project`/`gh issue edit` omdat het board van de
- * supervisor is. En `git checkout`/`switch`/`rebase` niet: hij werkt op één branch in
- * zijn eigen worktree, en van branch wisselen is per definitie buiten de opdracht.
+ * De namen van de agent-definities in `agents/`. Elke definitie draagt zijn eigen
+ * toolset en model; de orkestrator geeft alleen de naam mee via `--agent`.
  *
- * **`rm` staat hier bewust niet bij de toegestane werkwoorden** (#217), anders dan de
- * andere tmp-hulpmiddelen. `Write` kan alleen bestanden maken of overschrijven binnen de
- * werkmap; `rm -rf <pad>` kan de spiegel van een ándere applicatie wissen. "Alleen in
- * zijn eigen tmp-map" is niet in een patroon uit te drukken, want dat pad is per sessie
- * anders. Hij mag zijn rommel in tmp laten staan — het besturingssysteem ruimt die op.
- *
- * **`git -C` ook niet**: `Bash(git -C:*)` zou `git -C <pad> push` toestaan en daarmee
- * precies de grens omzeilen die hierboven staat. Git in zijn eigen werkmap kan hij wel.
+ * Voorheen stonden de toolsets hier als hardcoded constanten; die zijn verhuisd naar
+ * de `.md`-bestanden in `agents/`, zodat ze via `factory sync` naar de apps propageren
+ * en op één plek te onderhouden zijn (#365).
  */
-export declare const BOUWER_VERBODEN: readonly ["Bash(git push:*)", "Bash(git checkout:*)", "Bash(git switch:*)", "Bash(git rebase:*)", "Bash(git reset:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)", "Bash(gh release:*)"];
-/**
- * Wat een **accepteer**-werker mag (#178). Lees-alleen, met `curl` voor HTTP-aanroepen
- * naar acc — dat is de enige manier waarop hij criteria uitoefent. Geen `Write`, geen
- * `Edit`, geen `git commit`: hij observeert, hij muteert niet.
- */
-export declare const ACCEPTEER_TOEGESTAAN: readonly ["Read", "Grep", "Glob", "Bash(gh issue view:*)", "Bash(curl:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git status:*)"];
-/** Wat de werker sowieso niet mag, ook niet als de lijst hierboven ooit uitdijt. */
-export declare const WERKER_VERBODEN: readonly ["Write", "Edit", "NotebookEdit", "Bash(git push:*)", "Bash(git commit:*)", "Bash(gh pr:*)", "Bash(gh issue edit:*)", "Bash(gh issue close:*)", "Bash(gh project:*)"];
+export declare const AGENT_REFINER = "refiner";
+export declare const AGENT_BOUWER = "bouwer";
+export declare const AGENT_REVIEWER = "reviewer";
+export declare const AGENT_ACCEPTEERDER = "accepteerder";
 /**
  * Het verdict, afgedwongen met `--json-schema` zodat de uitkomst niet uit proza
  * geraden hoeft te worden. `body` is de complete nieuwe issue-body; de orkestrator
@@ -323,7 +297,12 @@ export interface WerkerOpdracht {
     /** Extra leesbare mappen, bijvoorbeeld de factory-spiegel met de templates. */
     readonly extraMappen?: readonly string[];
     readonly budgetUsd: number;
-    readonly model: string;
+    /**
+     * De agent-definitie uit `agents/` die de toolset en het model vastlegt (#365).
+     * Vervangt de eerdere `model`-, `toegestaan`- en `verboden`-velden: die staan nu
+     * in het frontmatter van de definitie en worden via `--agent` aan `claude` meegegeven.
+     */
+    readonly agent: string;
     /** Reasoning-effort, als `--effort` (#290); afwezig laat claude zijn eigen default kiezen. */
     readonly effort?: string;
     /**
@@ -339,10 +318,6 @@ export interface WerkerOpdracht {
      * leeg en gebruikt `claude` de gewone keychain-auth.
      */
     readonly env?: NodeJS.ProcessEnv;
-    /** Welke gereedschappen mogen; standaard de lees-alleen-lijst van de refine-werker. */
-    readonly toegestaan?: readonly string[];
-    /** Welke nooit mogen; standaard de verbodslijst van de refine-werker. */
-    readonly verboden?: readonly string[];
     /** Het uitvoerschema dat aan `--json-schema` meegaat; standaard dat van een refinement. */
     readonly jsonSchema?: unknown;
 }

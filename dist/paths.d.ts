@@ -11,6 +11,7 @@ export declare const hooksDir: string;
 export declare const workflowsDir: string;
 export declare const skillsDir: string;
 export declare const claudeHooksDir: string;
+export declare const agentsDir: string;
 /**
  * Bestanden die `factory sync` als losse 1:1-kopie naar een app zet, naast de
  * directory-spiegels. Bron is relatief aan de factory-pakketwortel, doel is

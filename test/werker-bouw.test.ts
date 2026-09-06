@@ -3,17 +3,16 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  AGENT_BOUWER,
+  AGENT_REVIEWER,
   BOUW_JSON_SCHEMA,
-  BOUWER_TOEGESTAAN,
-  BOUWER_VERBODEN,
   draaiBouwer,
   draaiReviewer,
   REVIEW_JSON_SCHEMA,
-  WERKER_TOEGESTAAN,
-  WERKER_VERBODEN,
 } from '../src/werker.js';
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import { maakAsyncUitvoerderOpnemer } from './helpers.js';
+import { leesAgentFrontmatter } from './agent-definitie.js';
 
 /**
  * Het contract met de `claude`-CLI voor een bouw-run. Geen Pact: dat is een dienst van
@@ -33,7 +32,7 @@ const OPDRACHT = {
   werkmap: '/w/factory-wt/91',
   sessie: '7c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b',
   budgetUsd: 10,
-  model: 'claude-opus-4-6',
+  agent: AGENT_BOUWER,
 };
 
 describe('draaiBouwer', () => {
@@ -82,26 +81,25 @@ describe('draaiBouwer', () => {
     expect(uitkomst.weigeringen).toBe(1);
   });
 
-  it('roept claude aan met het bouw-schema en de bouw-rechten', async () => {
+  it('roept claude aan met het bouw-schema en --agent bouwer', async () => {
     const { aanroepen } = metEnvelop('claude-bouw-klaar');
 
     await draaiBouwer(OPDRACHT);
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(BOUW_JSON_SCHEMA));
-    // De toestemmingslijst ís de grens; een verbodslijst alleen is niet genoeg (#153).
-    for (const gereedschap of BOUWER_TOEGESTAAN) {
-      expect(args).toContain(gereedschap);
-    }
-    for (const gereedschap of BOUWER_VERBODEN) {
-      expect(args).toContain(gereedschap);
-    }
+    // De agent-definitie draagt de toolset; de CLI krijgt alleen --agent.
+    expect(args).toContain('--agent');
+    expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_BOUWER);
+    expect(args).not.toContain('--allowedTools');
+    expect(args).not.toContain('--disallowedTools');
   });
 
   it('mag lezen en een tmp-map maken, zonder extra macht', () => {
     // De negen weigeringen van de eerste bouw-run (#87) waren allemaal hulpmiddelen bij
     // zijn eigen toets. Weigeren kostte beurten en leverde geen veiligheid op, want
     // `Write` en `Edit` staan al op de lijst.
+    const def = leesAgentFrontmatter(AGENT_BOUWER);
     for (const gereedschap of [
       'Bash(ls:*)',
       'Bash(cat:*)',
@@ -110,7 +108,7 @@ describe('draaiBouwer', () => {
       'Bash(mkdir:*)',
       'Bash(mktemp:*)',
     ]) {
-      expect(BOUWER_TOEGESTAAN as readonly string[]).toContain(gereedschap);
+      expect(def.allowedTools).toContain(gereedschap);
     }
   });
 
@@ -118,18 +116,17 @@ describe('draaiBouwer', () => {
     // Deze vier zijn geen gemak maar macht: `rm -rf <pad>` kan de spiegel van een andere
     // app wissen, en `git -C <pad> push` omzeilt de grens tussen voorstellen en landen.
     // Een latere uitbreiding mag die grens niet stil oprekken.
-    const lijst = BOUWER_TOEGESTAAN as readonly string[];
-    expect(lijst.some((g) => g.startsWith('Bash(rm'))).toBe(false);
-    expect(lijst.some((g) => g.startsWith('Bash(git -C'))).toBe(false);
-    expect(lijst.some((g) => g.includes('push'))).toBe(false);
-    expect(lijst.some((g) => g.includes('gh pr'))).toBe(false);
+    const def = leesAgentFrontmatter(AGENT_BOUWER);
+    expect(def.allowedTools.some((g) => g.startsWith('Bash(rm'))).toBe(false);
+    expect(def.allowedTools.some((g) => g.startsWith('Bash(git -C'))).toBe(false);
+    expect(def.allowedTools.some((g) => g.includes('push'))).toBe(false);
+    expect(def.allowedTools.some((g) => g.includes('gh pr'))).toBe(false);
   });
 
-  it('laat de refine-werker ongemoeid', () => {
-    // `--soort bouw` mag de bestaande refine-aanroep niet van rechten of schema
-    // veranderen; dat zou #153 stil omgooien.
-    expect(BOUWER_TOEGESTAAN).toContain('Write');
-    expect(BOUWER_VERBODEN).toContain('Bash(git push:*)');
+  it('de bouwer mag schrijven en de refiner niet — de scheiding is intact', () => {
+    const bouwer = leesAgentFrontmatter(AGENT_BOUWER);
+    expect(bouwer.allowedTools).toContain('Write');
+    expect(bouwer.disallowedTools).toContain('Bash(git push:*)');
   });
 });
 
@@ -181,26 +178,17 @@ describe('draaiReviewer', () => {
     expect(uitkomst.verdict).toBeUndefined();
   });
 
-  it('roept claude aan met het review-schema en de lees-alleen-rechten', async () => {
+  it('roept claude aan met het review-schema en --agent reviewer', async () => {
     const { aanroepen } = metEnvelop('claude-review-klaar');
 
-    await draaiReviewer(OPDRACHT);
+    await draaiReviewer({ ...OPDRACHT, agent: AGENT_REVIEWER });
 
     const args = aanroepen[0]?.argumenten ?? [];
     expect(args[args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(REVIEW_JSON_SCHEMA));
-    // De reviewer is lees-alleen: dezelfde toestemmingslijst als de refine-werker (#184).
-    const allowedStart = args.indexOf('--allowedTools');
-    const disallowedStart = args.indexOf('--disallowedTools');
-    const toegestaan = args.slice(allowedStart + 1, disallowedStart);
-    for (const gereedschap of WERKER_TOEGESTAAN) {
-      expect(toegestaan).toContain(gereedschap);
-    }
-    for (const gereedschap of WERKER_VERBODEN) {
-      expect(args).toContain(gereedschap);
-    }
-    // Mag niet schrijven: Write en Edit staan in de verbodslijst, niet in de
-    // toestemmingslijst.
-    expect(toegestaan).not.toContain('Write');
-    expect(toegestaan).not.toContain('Edit');
+    // De reviewer krijgt zijn eigen agent-definitie; die is lees-alleen.
+    expect(args).toContain('--agent');
+    expect(args[args.indexOf('--agent') + 1]).toBe(AGENT_REVIEWER);
+    expect(args).not.toContain('--allowedTools');
+    expect(args).not.toContain('--disallowedTools');
   });
 });
