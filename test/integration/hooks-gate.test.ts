@@ -16,12 +16,14 @@ const hooksDir = path.join(
 function draaiHook(
   script: string,
   toolInput: Record<string, unknown>,
+  cwd?: string,
 ): { stdout: string; stderr: string; code: number } {
   const input = JSON.stringify({ tool_input: toolInput });
   const result = spawnSync('bash', [path.join(hooksDir, script)], {
     input,
     encoding: 'utf-8',
     timeout: 5000,
+    cwd,
     env: { ...process.env, PATH: process.env.PATH },
   });
   return {
@@ -29,6 +31,27 @@ function draaiHook(
     stderr: result.stderr.trim(),
     code: result.status ?? 1,
   };
+}
+
+/**
+ * Maakt een geïsoleerde temp-git-repo met één commit, uitgecheckt op `branch`.
+ * Zo hangt de branch-waarschuwing niet af van de ambient checkout (CI draait
+ * in detached HEAD, waar `git rev-parse --abbrev-ref HEAD` `HEAD` teruggeeft).
+ */
+function maakGitRepoOpBranch(branch: string): string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'hook-branch-'));
+  const git = (args: string[]): void => {
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' });
+    if (r.status !== 0) {
+      throw new Error(`git ${args.join(' ')} faalde: ${r.stderr}`);
+    }
+  };
+  git(['init', '-q']);
+  git(['config', 'user.email', 'test@example.com']);
+  git(['config', 'user.name', 'Test']);
+  git(['commit', '--allow-empty', '-q', '-m', 'init']);
+  git(['checkout', '-q', '-b', branch]);
+  return dir;
 }
 
 function verwachtBlok(result: { stdout: string; code: number }): void {
@@ -168,9 +191,18 @@ describe('waarschuw-branch.sh', () => {
   const hook = 'waarschuw-branch.sh';
 
   it('geeft geen uitvoer op een slice-branch', () => {
-    const result = draaiHook(hook, { command: 'git commit -m "test"' });
+    const repo = maakGitRepoOpBranch('slice/364-1');
+    const result = draaiHook(hook, { command: 'git commit -m "test"' }, repo);
     verwachtDoor(result);
     expect(result.stderr).toBe('');
+  });
+
+  it('waarschuwt via stderr buiten een slice-branch', () => {
+    const repo = maakGitRepoOpBranch('feature/geen-slice');
+    const result = draaiHook(hook, { command: 'git commit -m "test"' }, repo);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('niet op een slice-branch');
   });
 
   it("laat niet-commit commando's door", () => {
