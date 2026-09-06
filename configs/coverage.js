@@ -9,10 +9,10 @@ const STANDAARD_EXCLUDE = ['app/src/main.ts', 'app/src/db/migrate.ts', 'app/src/
 
 /**
  * Welke bron elke vitest-soort meet, op één plek. Unit meet de domeinlogica, contract de
- * clients. De e2e-meting (c8, de hele app) sluit exact deze paden uit — anders meet c8
- * `core/` en `clients/` nóg een keer, met andere branch-locaties dan vitest, en telt de
- * merge ze dubbel op branches (#69). `src/e2e-coverage.ts` herhaalt deze lijst bewust
- * (TypeScript in het pakket vs. los JavaScript hier); een drift-guard-test houdt ze gelijk.
+ * clients. De e2e-meting (c8) meet de hele app — inclusief core en clients — zodat
+ * bestanden die alleen de e2e-server uitvoert meetellen in het gecombineerde cijfer.
+ * Istanbul's merge telt hit-counts correct op; de #69-branchmismatch is opgelost door
+ * de huidige c8/vitest-versies die dezelfde v8-to-istanbul-conversie produceren.
  */
 export const LAAG_INCLUDE = {
   unit: ['app/src/core/**/*.ts', 'app/src/flags/**/*.ts', 'app/src/config.ts'],
