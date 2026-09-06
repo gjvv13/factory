@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { LAAG_INCLUDE } from '../../configs/coverage.js';
-import { e2eCoverageEnv, LAAG_UITSLUITING, schrijfE2eDekking } from '../../src/e2e-coverage.js';
+import { e2eCoverageEnv, schrijfE2eDekking } from '../../src/e2e-coverage.js';
+import { schrijfGecombineerdeDekking } from '../../src/coverage-merge.js';
 
 const require = createRequire(import.meta.url);
 // De tsx-loader zelf-registreert bij `--import`, net als de e2e-server in productie.
@@ -34,9 +34,8 @@ function maakApp(): string {
   return dir;
 }
 
-// Een probe die één bestand per laag uitvoert: core en clients (unit/contract-eigen) én
-// http en de losse probe (e2e-eigen). Zo bewijzen we dat de e2e-meting de eerste twee
-// uitsluit en de laatste twee wél telt.
+// Een probe die één bestand per laag uitvoert: core, clients, http én de losse probe.
+// Nu de laag-uitsluiting weg is (#473) horen alle vier in de e2e-meting te verschijnen.
 const PROBE_LAGEN_TS = `import { dom } from './core/dom.js';
 import { net } from './clients/net.js';
 import { route } from './http/route.js';
@@ -60,6 +59,18 @@ function summaryVan(appDir: string): Record<string, { lines: { pct: number } }> 
   return JSON.parse(readFileSync(bestand, 'utf8')) as Record<string, { lines: { pct: number } }>;
 }
 
+/** Draait de probe als apart Node-proces met v8-coverage en schrijft het e2e-rapport. */
+async function draaiEnSchrijf(app: string): Promise<void> {
+  const env = { ...process.env, ...e2eCoverageEnv(app) };
+  const uitkomst = spawnSync(process.execPath, ['--import', TSX_IMPORT, 'app/src/probe.ts'], {
+    cwd: app,
+    env,
+    encoding: 'utf8',
+  });
+  expect(uitkomst.status).toBe(0);
+  await schrijfE2eDekking(app);
+}
+
 describe('e2e-coverage', () => {
   const origineel = process.env.FACTORY_COVERAGE;
   afterEach(() => {
@@ -70,35 +81,50 @@ describe('e2e-coverage', () => {
     }
   });
 
-  it('de e2e-uitsluiting dekt exact wat unit en contract meten (drift-guard, #69)', () => {
-    // Houdt de bewust herhaalde lijst in e2e-coverage.ts gelijk aan de bron in
-    // configs/coverage.js, zodat de scope niet stil uiteenloopt.
-    expect(LAAG_UITSLUITING).toEqual([...LAAG_INCLUDE.unit, ...LAAG_INCLUDE.contract]);
-  });
-
-  it('sluit de door unit/contract bezette lagen (core, clients) uit de e2e-meting (#69)', async () => {
+  it('meet alle lagen — inclusief core en clients — in de e2e-meting (#473)', async () => {
     process.env.FACTORY_COVERAGE = '1';
     const app = maakAppMetLagen();
     const oorspronkelijk = process.cwd();
     process.chdir(app);
     try {
-      const env = { ...process.env, ...e2eCoverageEnv(app) };
-      const uitkomst = spawnSync(process.execPath, ['--import', TSX_IMPORT, 'app/src/probe.ts'], {
-        cwd: app,
-        env,
-        encoding: 'utf8',
-      });
-      expect(uitkomst.status).toBe(0);
-
-      await schrijfE2eDekking(app);
+      await draaiEnSchrijf(app);
       const bestanden = Object.keys(summaryVan(app));
 
-      // core/ en clients/ draaiden wel, maar horen bij unit/contract → uit de e2e-meting.
-      expect(bestanden.some((f) => f.includes(`${path.sep}core${path.sep}`))).toBe(false);
-      expect(bestanden.some((f) => f.includes(`${path.sep}clients${path.sep}`))).toBe(false);
-      // http/ en de losse probe zijn e2e-eigen → wél gemeten.
+      // core/ en clients/ worden nu wél gemeten door de e2e-meting.
+      expect(bestanden.some((f) => f.includes(`${path.sep}core${path.sep}`))).toBe(true);
+      expect(bestanden.some((f) => f.includes(`${path.sep}clients${path.sep}`))).toBe(true);
+      // http/ en de losse probe zijn altijd e2e-eigen → ook gemeten.
       expect(bestanden.some((f) => f.endsWith('route.ts'))).toBe(true);
       expect(bestanden.some((f) => f.endsWith('probe.ts'))).toBe(true);
+    } finally {
+      process.chdir(oorspronkelijk);
+    }
+  });
+
+  it('een e2e-only-bestand verschijnt in combined met >0% dekking (#473)', async () => {
+    process.env.FACTORY_COVERAGE = '1';
+    const app = maakAppMetLagen();
+    const oorspronkelijk = process.cwd();
+    process.chdir(app);
+    try {
+      // Geen unit/contract-dekking: alleen het e2e-rapport schrijven.
+      await draaiEnSchrijf(app);
+
+      // clients/net.ts is alleen door de e2e-server uitgevoerd, niet door unit of contract.
+      // In de gecombineerde merge moet het verschijnen met >0% dekking.
+      const cijfers = schrijfGecombineerdeDekking(app);
+      expect(cijfers).toBeDefined();
+
+      const combinedSummary = JSON.parse(
+        readFileSync(path.join(app, 'coverage', 'combined', 'coverage-summary.json'), 'utf8'),
+      ) as Record<string, { lines: { pct: number } }>;
+      const clientBestanden = Object.entries(combinedSummary).filter(([f]) =>
+        f.includes(`${path.sep}clients${path.sep}`),
+      );
+      expect(clientBestanden.length).toBeGreaterThan(0);
+      for (const [, waarde] of clientBestanden) {
+        expect(waarde.lines.pct).toBeGreaterThan(0);
+      }
     } finally {
       process.chdir(oorspronkelijk);
     }
@@ -135,15 +161,7 @@ describe('e2e-coverage', () => {
     const oorspronkelijk = process.cwd();
     process.chdir(app);
     try {
-      const env = { ...process.env, ...e2eCoverageEnv(app) };
-      const uitkomst = spawnSync(process.execPath, ['--import', TSX_IMPORT, 'app/src/probe.ts'], {
-        cwd: app,
-        env,
-        encoding: 'utf8',
-      });
-      expect(uitkomst.status).toBe(0);
-
-      await schrijfE2eDekking(app);
+      await draaiEnSchrijf(app);
 
       const summary = summaryVan(app);
       const bestanden = Object.keys(summary);
