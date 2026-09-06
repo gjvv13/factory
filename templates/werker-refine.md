@@ -43,8 +43,9 @@ toetsen van de premisse en het uitwerken van de architectuur.
 3. Werk de **technische helft** uit: architectuur per laag, datamodel, externe
    koppelingen, feature flag, slices met acceptatiecriteria en tests, risico's,
    besluiten. De functionele secties (_Gedrag_, _Natuurlijke taal_, _Regels en
-   randgevallen_, _Wat het expliciet níet doet_) neem je **letterlijk over**; die zijn
-   niet van jou. Wijk je daarvan af, dan is dat per definitie een escalatie.
+   randgevallen_, _Wat het expliciet níet doet_) en de _Functionele besluiten
+   (BINDEND)_ neem je **letterlijk over**; die zijn niet van jou. Wijk je daarvan af,
+   dan is dat per definitie een escalatie.
 
    **Functionele vragen in frontier-formaat.** Kom je een functionele vraag tegen die
    niet beantwoord is — iets wat de gebruiker moet beslissen — bouw dan de frontier

@@ -262,6 +262,8 @@ over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
 - [ ] Bij elk afgevinkt criterium weet je welke test het bewaakt, en die test zou
       rood worden als het gedrag verdwijnt. Dit is ook wat een review als eerste
       naloopt: niet of de tests groen zijn, maar of ze het criterium toetsen.
+- [ ] Het gebouwde gedrag komt overeen met de functionele besluiten
+      (`## Functionele besluiten (BINDEND)`) in het issue, als die sectie er is.
 - [ ] De actie is bereikbaar in natuurlijke taal (zie _Natuurlijke taal_), of de
       refinement legt onder _Wat het expliciet níet doet_ uit waarom niet.
 - [ ] Nieuw gedrag zit achter een flag die uit staat in productie, en je weet
