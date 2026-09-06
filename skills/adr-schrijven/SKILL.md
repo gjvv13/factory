@@ -32,12 +32,12 @@ omdat ze platformbeslissingen vastleggen die meerdere applicaties raken.
 Kopieer `docs/adr/000-sjabloon.md` naar een nieuw bestand en vul de vier velden
 in:
 
-| Veld            | Wat erin staat                                                  |
-| --------------- | --------------------------------------------------------------- |
-| **Context**     | Welk probleem of welke vraag speelde er? Wat was de aanleiding? |
-| **Beslissing**  | Wat is er gekozen en waarom?                                    |
-| **Alternatieven** | Welke andere opties zijn overwogen en waarom vielen ze af?     |
-| **Verwijzingen** | Datum, issue-nummer, en eventuele links naar bewijsplaatsen    |
+| Veld              | Wat erin staat                                                  |
+| ----------------- | --------------------------------------------------------------- |
+| **Context**       | Welk probleem of welke vraag speelde er? Wat was de aanleiding? |
+| **Beslissing**    | Wat is er gekozen en waarom?                                    |
+| **Alternatieven** | Welke andere opties zijn overwogen en waarom vielen ze af?      |
+| **Verwijzingen**  | Datum, issue-nummer, en eventuele links naar bewijsplaatsen     |
 
 ## Naamconventie
 
