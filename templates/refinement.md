@@ -46,6 +46,16 @@ dat dan onder _Wat het expliciet níet doet_.
 
 Grenzen zijn even belangrijk als de functie zelf.
 
+## Functionele besluiten (BINDEND)
+
+_De keuzes die tijdens het functionele gesprek (`/functioneel`) met de gebruiker zijn
+gemaakt, genummerd en met datum. De kop is exact zo geschreven — inclusief "BINDEND" —
+zodat de refine-gate en de werker hem herkennen. Een refine-werker neemt deze sectie
+**letterlijk** over en herschrijft haar niet; wil hij ervan afwijken, dan is dat een
+escalatie._
+
+1. **<keuze>** — <toelichting en reden>
+
 ## Technische architectuur
 
 _Technisch — dit volgt uit de code. Vanaf hier tot en met Besluiten werkt `/refine`
