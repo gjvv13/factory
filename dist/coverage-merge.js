@@ -31,10 +31,11 @@ function leesFinal(repoDir, soort) {
 }
 /**
  * Voegt de per-soort istanbul-maps samen tot één rapport in `coverage/combined/`
- * (json-summary + html) en geeft de vier gecombineerde percentages terug. Istanbul telt
- * de regel-hits per bestand bij elkaar op, dus een regel die door unit én e2e geraakt
- * wordt telt als geraakt — niet dubbel. Is er geen enkele `coverage-final.json`, dan
- * undefined: verify valt dan terug op de losse cijfers.
+ * (json-summary + html) en geeft de vier gecombineerde percentages plus de
+ * onderliggende CoverageMap terug. Istanbul telt de regel-hits per bestand bij
+ * elkaar op, dus een regel die door unit én e2e geraakt wordt telt als geraakt —
+ * niet dubbel. Is er geen enkele `coverage-final.json`, dan undefined: verify valt
+ * dan terug op de losse cijfers.
  */
 export function schrijfGecombineerdeDekking(repoDir, verwacht) {
     const soorten = verwacht !== undefined && verwacht.length > 0 ? verwacht : SOORTEN;
@@ -67,10 +68,13 @@ export function schrijfGecombineerdeDekking(repoDir, verwacht) {
     createReport('html').execute(context);
     const samenvatting = gecombineerd.getCoverageSummary();
     return {
-        lines: samenvatting.lines.pct,
-        statements: samenvatting.statements.pct,
-        functions: samenvatting.functions.pct,
-        branches: samenvatting.branches.pct,
+        cijfers: {
+            lines: samenvatting.lines.pct,
+            statements: samenvatting.statements.pct,
+            functions: samenvatting.functions.pct,
+            branches: samenvatting.branches.pct,
+        },
+        coverageMap: gecombineerd,
     };
 }
 //# sourceMappingURL=coverage-merge.js.map
