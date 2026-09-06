@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { heeftLabel, issueUitBranch, plaatsComment, zetKolom } from '../board.js';
+import { draaiCodeReview, maakGateComment, } from '../code-review.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import { GebruikersFout, git, installeer, kop, ok, pakketbeheerder, run, runMetHerhaling, uitvoerVan, waarschuwing, } from '../shell.js';
 import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
@@ -108,6 +109,19 @@ export function inleveren(opties = {}) {
     // De volledige verify kan de dekkings-basislijn hebben verhoogd; commit die mee,
     // zodat de branch schoon blijft en de verhoogde lat met de PR meereist.
     commitAlsGewijzigd(repoDir, BASISLIJN_BESTAND, 'verhoog dekking-basislijn');
+    // Code-review gate (#368): draait na verify, vóór de push. De instelling komt uit
+    // factory.json; zonder factory.json (de factory zelf) geldt `waarschuw`.
+    let reviewVerdict;
+    if (opties.geenReview !== true) {
+        const appDir = zoekAppDir(repoDir);
+        const reviewConfig = appDir === undefined ? undefined : leesAppConfig(appDir);
+        const instelling = reviewConfig?.codeReview ?? 'waarschuw';
+        reviewVerdict = draaiCodeReview(instelling, repoDir);
+        if (!reviewVerdict.doorgaan) {
+            throw new GebruikersFout(`Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
+                '  Los de bevindingen op of lever in met --geen-review.');
+        }
+    }
     kop('Branch pushen');
     git(['push', '-q', '-u', 'origin', branch], repoDir);
     ok(`${branch} gepusht`);
@@ -148,6 +162,12 @@ export function inleveren(opties = {}) {
                 : 'Kon geen PR aanmaken of vinden met gh.';
             throw new GebruikersFout(reden);
         }
+    }
+    // Review-bevindingen als PR-comment posten, zodat ze ook bij `waarschuw` zichtbaar
+    // blijven voor de ochtend-review (#368). Moet na de PR-creatie, want we hebben de URL nodig.
+    if (reviewVerdict?.verdict !== undefined && reviewVerdict.verdict.bevindingen.length >= 0) {
+        const comment = maakGateComment(reviewVerdict.verdict);
+        run('gh', ['pr', 'comment', prUrl, '--body', comment], { cwd: repoDir, toleranter: true });
     }
     // Het item schuift zelf mee (#128). Vanaf hier wacht de slice op de merge — de
     // menselijke poort die bepaalt of het de main bereikt. Een branch zonder

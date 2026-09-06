@@ -28,7 +28,7 @@ import { fout, GebruikersFout } from './shell.js';
 const HULP = `factory — pipeline van idee tot productie
 
   factory verify [--snel|--pre-commit]   kwaliteitspoort: opmaak, lint, types, tests, build
-  factory inleveren [--titel=<titel>] [--geen-automerge]  poort draaien, branch pushen, PR openen en in de merge-queue/wachtrij zetten
+  factory inleveren [--titel=<titel>] [--geen-automerge] [--geen-review]  poort draaien, code-review, branch pushen, PR openen
   factory integreer [--repo=<owner/naam>|--installeer|--verwijder]  werk de wachtrij af (--repo: TCC-vrij van overal)
   factory release [patch|minor|major]    verify, versie verhogen, committen en taggen
   factory promote <acc|prod> [tag] [--ja] release-tag uitrollen en de omgeving herstarten
@@ -68,7 +68,7 @@ async function main(argumenten) {
         }
         case 'inleveren': {
             const { schakelaars, waarden } = leesArgumenten(rest, {
-                schakelaars: ['--geen-automerge', '--fastlane'],
+                schakelaars: ['--geen-automerge', '--fastlane', '--geen-review'],
                 waarden: ['--titel'],
             });
             const titel = waarden.get('--titel');
@@ -76,6 +76,7 @@ async function main(argumenten) {
                 ...(titel === undefined ? {} : { titel }),
                 geenAutomerge: schakelaars.has('--geen-automerge'),
                 fastlane: schakelaars.has('--fastlane'),
+                geenReview: schakelaars.has('--geen-review'),
             });
             return;
         }
