@@ -12,6 +12,26 @@ import {
 import { herstelUitvoerder, OmgevingsFout, stelUitvoerderIn } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
+/** Maakt een tmp-map met een minimale package.json die de standaard verify-scripts bevat. */
+function maakVerifyDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'verify-'));
+  writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({
+      scripts: {
+        'format:check': 'echo ok',
+        lint: 'echo ok',
+        typecheck: 'echo ok',
+        'test:unit': 'echo ok',
+        'test:contract': 'echo ok',
+        'test:e2e': 'echo ok',
+        build: 'echo ok',
+      },
+    }),
+  );
+  return dir;
+}
+
 /**
  * Coverage draait via de omgevingsvariabele `FACTORY_COVERAGE`, die `verify`
  * alleen bij een volledige poort zet. We vangen de uitvoerder af en kijken of die
@@ -39,7 +59,9 @@ afterEach(() => {
 describe('verify — coverage', () => {
   it('meet coverage op de test-stap bij een volledige poort', () => {
     const aanroepen = vangAanroepen();
-    verify();
+    // Gebruik een tmp-map als cwd zodat de rmSync op coverage/ niet de coverage
+    // van de testrunner zelf verwijdert.
+    verify({ cwd: maakVerifyDir() });
     expect(aanroepen.find((a) => a.script === 'test:unit')?.coverage).toBe(true);
   });
 
