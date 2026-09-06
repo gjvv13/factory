@@ -56,10 +56,12 @@ Doe dit zo:
      gedrag erbij komt, welke randgevallen en wat het expliciet niet doet volgt uit die
      keuzes.
    - **Vanaf Technisch refinen:** hij staat er al en hij is van mij. Neem
-     `Samenvatting`, `Gedrag`, `Natuurlijke taal`, `Regels en randgevallen` en
-     `Wat het expliciet níet doet` **letterlijk** over in de nieuwe body — herschrijf
-     ze niet, ook niet om ze strakker te maken. Zie je er een echt probleem in, stel
-     de vraag; wijk er niet zelf van af.
+     `Samenvatting`, `Gedrag`, `Natuurlijke taal`, `Regels en randgevallen`,
+     `Wat het expliciet níet doet` en `Functionele besluiten (BINDEND)`
+     **letterlijk** over in de nieuwe body — herschrijf ze niet, ook niet om ze
+     strakker te maken. De functionele besluiten zijn met de gebruiker vastgelegd;
+     ga er niet zelf van afwijken en verzin er niets bij. Zie je er een echt probleem
+     in, stel de vraag; wijk er niet zelf van af.
 5. Bepaal de technische architectuur per laag, inclusief datamodel, migratie,
    externe koppelingen (met contract) en feature flag.
 6. Knip het op in slices. Een slice is zelfstandig af: werkt, is getest, kan naar
