@@ -11,7 +11,12 @@ import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { prioriteit } from './commands/prioriteit.js';
-import { orkestreer, orkestreerAntwoord, orkestreerStatus } from './commands/orkestreer.js';
+import {
+  orkestreer,
+  orkestreerAntwoord,
+  orkestreerStatus,
+  orkestreerWrijving,
+} from './commands/orkestreer.js';
 import { orkestreerAccepteer } from './commands/orkestreer-accepteer.js';
 import {
   leesBaan,
@@ -56,6 +61,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer --soort bouw <--installeer|--verwijder>  de bouw-LaunchAgent die --soort bouw --nacht elke nacht om 05:30 draait
   factory orkestreer --soort accepteer --dry  accepteer-wachtrij en acc-preconditie tonen
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
+  factory orkestreer wrijving [N]        wrijvingsaggregaat over de laatste N bouw-runs (default 25)
   factory orkestreer status              wat wacht op jouw akkoord, wat is geëscaleerd, wat staat in de rij
   factory orkestreer antwoord <issue> "<tekst>" [--opnieuw]  een escalatie beantwoorden; hervat de sessie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
@@ -187,6 +193,11 @@ async function main(argumenten: string[]): Promise<void> {
           eenmalig: schakelaars.has('--eenmalig'),
           ...(issue === undefined ? {} : { issue }),
         });
+        return;
+      }
+      if (positioneel[0] === 'wrijving') {
+        const n = positioneel[1] === undefined ? undefined : Number(positioneel[1]);
+        orkestreerWrijving(n !== undefined && Number.isSafeInteger(n) && n > 0 ? n : undefined);
         return;
       }
       if (positioneel[0] === 'status') {
