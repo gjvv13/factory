@@ -86,16 +86,23 @@ const verdictSchema = z.discriminatedUnion('uitkomst', [
  * `min(1)`, dus een criterium zonder bewijs komt niet als `klaar` door de poort — dat
  * is precies de reden dat dit schema bestaat en niet alleen de prompt erom vraagt.
  */
+/** Eén wrijvingssignaal: wat moeite kostte en wat het zou verhelpen (#542). */
+const wrijvingSchema = z.object({
+    signaal: z.string().min(1),
+    suggestie: z.string().min(1),
+});
 const bouwVerdictSchema = z.discriminatedUnion('uitkomst', [
     z.object({
         uitkomst: z.literal('klaar'),
         samenvatting: z.string().min(1),
         criteria: z.array(z.object({ criterium: z.string().min(1), bewijs: z.string().min(1) })).min(1),
+        wrijving: z.array(wrijvingSchema).optional(),
     }),
     z.object({
         uitkomst: z.literal('escalatie'),
         vraag: z.string().min(1),
         advies: z.string().min(1),
+        wrijving: z.array(wrijvingSchema).optional(),
     }),
 ]);
 /**
@@ -260,6 +267,19 @@ export const BOUW_JSON_SCHEMA = {
         },
         vraag: { type: 'string', description: 'alleen bij escalatie: wat je precies wilt weten' },
         advies: { type: 'string', description: 'alleen bij escalatie: wat jij zou doen en waarom' },
+        wrijving: {
+            type: 'array',
+            description: 'optioneel, beide varianten: wat je moeite of beurten kostte (signaal) en wat het zou oplossen (suggestie). Geen wrijving is een geldige uitkomst.',
+            items: {
+                type: 'object',
+                properties: {
+                    signaal: { type: 'string' },
+                    suggestie: { type: 'string' },
+                },
+                required: ['signaal', 'suggestie'],
+                additionalProperties: false,
+            },
+        },
     },
     required: ['uitkomst'],
     additionalProperties: false,

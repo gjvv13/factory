@@ -67,6 +67,7 @@ import {
 } from '../werkplaats.js';
 import { inleveren, type InleverenOpties } from './inleveren.js';
 import { werkplek } from './werkplek.js';
+import { leesWeigeringenUitLog, type SessieWeigering } from '../sessielog.js';
 
 /**
  * De tweede taaksoort: een werker die bouwt in plaats van refinet (#164, slice #182).
@@ -693,6 +694,10 @@ export async function bouwAf(
   // volgende run in de weg kan zitten.
   ruimBronMapOp(bronWortel);
 
+  // Sessielog lezen vóór de review: supplementaire wrijvingsdata die de comment verrijkt
+  // maar de run niet beïnvloedt (#542). Faalscenario's geven een leeg array — geen crash.
+  const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
+
   // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
   // Na het inleveren is de worktree weg — de review móét ervoor draaien.
   // Een throw uit de review (startfout, onverwachte uitzondering) mag het inleveren
@@ -725,6 +730,7 @@ export async function bouwAf(
     cwd,
     wortel,
     leverIn,
+    logWeigeringen,
     reeks,
     baan,
   );
@@ -751,6 +757,7 @@ function verwerkBouw(
   cwd: string,
   wortel: string,
   leverIn: (opties: InleverenOpties) => void,
+  logWeigeringen: readonly SessieWeigering[],
   reeks?: ReeksContext,
   baan?: BouwBaan,
 ): boolean {
@@ -845,12 +852,15 @@ function verwerkBouw(
   const mergeRegel = isFastlane
     ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
     : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
+  const wrijvingSectie = maakWrijvingSectie(verdict.wrijving, logWeigeringen, uitkomst);
   plaatsComment(
     item.issue,
     `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
       `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
       verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-      `\n\n${mergeRegel}\n\n${voetnoot}`,
+      `\n\n${mergeRegel}` +
+      (wrijvingSectie !== undefined ? `\n\n${wrijvingSectie}` : '') +
+      `\n\n${voetnoot}`,
     cwd,
   );
 
@@ -938,6 +948,56 @@ function maakVoetnoot(
     `<sub>${delen.filter((deel) => deel !== undefined).join(' · ')}</sub>\n` +
     `<!-- orkestrator: ${sessies} werkmap=${bouwWerkplek(item.app, item.issue, wortel)} -->`
   );
+}
+
+/**
+ * Bouwt de **Wrijving**-sectie in het bouw-comment (#542).
+ *
+ * Layer 1: wat de werker zelf rapporteert in zijn verdict (`wrijving`-veld).
+ * Layer 2: permission denials uit het sessielog die de envelop niet noemt — de envelop
+ * telt alleen het aantal en de labels; het log draagt tool + aantal per tool.
+ *
+ * Geen wrijving → `undefined`, en de sectie verschijnt niet.
+ */
+export function maakWrijvingSectie(
+  werkerWrijving:
+    ReadonlyArray<{ readonly signaal: string; readonly suggestie: string }> | undefined,
+  logWeigeringen: readonly SessieWeigering[],
+  uitkomst: BouwUitkomst,
+): string | undefined {
+  const delen: string[] = [];
+
+  // Layer 1: zelfrapportage van de werker.
+  if (werkerWrijving !== undefined && werkerWrijving.length > 0) {
+    delen.push(
+      '**Zelfrapportage:**\n' +
+        werkerWrijving.map((w) => `- ${w.signaal} → _${w.suggestie}_`).join('\n'),
+    );
+  }
+
+  // Layer 2: weigeringen uit het sessielog die de envelop niet al noemt.
+  // De envelop geeft `geweigerd` als de-duped labels (bijv. ["Bash", "git push"]); het
+  // sessielog geeft tool + aantal. We tonen alleen weigeringen uit het log die niet al
+  // in de envelop-voetnoot staan (die toont `N× geweigerd (tools)`).
+  const envelopLabels = new Set(uitkomst.geweigerd ?? []);
+  const extraWeigeringen = logWeigeringen.filter(
+    (w) => !envelopLabels.has(w.tool) && !envelopLabels.has(w.commando ?? ''),
+  );
+
+  if (extraWeigeringen.length > 0) {
+    delen.push(
+      '**Weigeringen (sessielog):**\n' +
+        extraWeigeringen
+          .map(
+            (w) =>
+              `- ${w.tool}${w.commando !== undefined ? ` (${w.commando})` : ''}: ${String(w.aantal)}×`,
+          )
+          .join('\n'),
+    );
+  }
+
+  if (delen.length === 0) return undefined;
+  return `### Wrijving\n\n${delen.join('\n\n')}`;
 }
 
 /**
@@ -1110,6 +1170,9 @@ export async function werkBouwAntwoordAf(
     reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
   }
 
+  // Sessielog lezen: supplementaire wrijvingsdata (#542).
+  const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
+
   // Het item ophalen voor de titel (PR-titel bij inleveren) en de volledige Bouwitem.
   const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
   const titel = item?.titel ?? `#${String(issue)}`;
@@ -1125,7 +1188,7 @@ export async function werkBouwAntwoordAf(
   // Het escalatie-label weghalen: het item is niet meer vastgelopen.
   haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
 
-  verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren);
+  verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren, logWeigeringen);
 }
 
 /**

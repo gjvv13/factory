@@ -990,6 +990,45 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(tekst).toContain('zonder auto-merge');
   });
 
+  it('toont een wrijvingssectie als de werker wrijving rapporteert', async () => {
+    const { aanroepen } = await draai(
+      envelop('claude-bouw-klaar-met-wrijving'),
+      envelop('claude-review-leeg'),
+    );
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).toContain('Wrijving');
+    expect(tekst).toContain('Zelfrapportage');
+    expect(tekst).toContain('pnpm install');
+    expect(tekst).toContain('toestemmingslijst');
+  });
+
+  it('toont geen wrijvingssectie als er geen wrijving is', async () => {
+    const { aanroepen } = await draai(envelop('claude-bouw-klaar'), envelop('claude-review-leeg'));
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    // Het woord "Wrijving" als sectiekop verschijnt niet bij een schone run.
+    expect(tekst).not.toContain('### Wrijving');
+  });
+
+  it('de terugval werkt: onleesbaar sessielog raakt de envelop-voetnoot niet', async () => {
+    // Het sessielog is intern en kan onleesbaar zijn. De comment moet dan nog steeds
+    // de bestaande weigeringen uit de envelop tonen, ongewijzigd (#542 AC5).
+    const { aanroepen } = await draai(envelop('claude-bouw-fout'));
+
+    const comment = aanroepen.find(
+      (a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'comment',
+    );
+    const tekst = comment?.argumenten.join(' ') ?? '';
+    expect(tekst).toContain('1× geweigerd (Bash)');
+  });
+
   it('weigert --dry en --eenmalig samen', async () => {
     zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar')));
 

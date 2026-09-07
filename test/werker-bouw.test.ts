@@ -13,6 +13,7 @@ import {
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import { maakAsyncUitvoerderOpnemer } from './helpers.js';
 import { leesAgentFrontmatter } from './agent-definitie.js';
+import { maakWrijvingSectie } from '../src/commands/orkestreer-bouw.js';
 
 /**
  * Het contract met de `claude`-CLI voor een bouw-run. Geen Pact: dat is een dienst van
@@ -127,6 +128,116 @@ describe('draaiBouwer', () => {
     const bouwer = leesAgentFrontmatter(AGENT_BOUWER);
     expect(bouwer.allowedTools).toContain('Write');
     expect(bouwer.disallowedTools).toContain('Bash(git push:*)');
+  });
+
+  it('parst een verdict met wrijving op de klaar-variant', async () => {
+    metEnvelop('claude-bouw-klaar-met-wrijving');
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    const verdict = uitkomst.verdict;
+    expect(verdict?.uitkomst).toBe('klaar');
+    if (verdict?.uitkomst === 'klaar') {
+      expect(verdict.wrijving).toHaveLength(1);
+      expect(verdict.wrijving?.[0]?.signaal).toMatch(/pnpm install/);
+      expect(verdict.wrijving?.[0]?.suggestie).toMatch(/toestemmingslijst/);
+    }
+  });
+
+  it('parst een verdict zonder wrijving als voorheen', async () => {
+    metEnvelop('claude-bouw-klaar');
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('klaar');
+    const verdict = uitkomst.verdict;
+    // Bestaande verdicts zonder het veld blijven geldig: `wrijving` is optioneel.
+    expect(verdict?.uitkomst).toBe('klaar');
+    if (verdict?.uitkomst === 'klaar') {
+      expect(verdict.wrijving).toBeUndefined();
+    }
+  });
+
+  it('accepteert wrijving op de escalatie-variant', async () => {
+    metEnvelop('claude-bouw-escalatie');
+
+    const uitkomst = await draaiBouwer(OPDRACHT);
+
+    // De escalatie-fixture heeft geen wrijving, dus het veld is undefined — maar het
+    // schema staat het toe. We testen de type-compatibiliteit indirect: een geëscaleerde
+    // run kan wrijving ondervonden hebben (#542, besluit 1).
+    expect(uitkomst.afloop).toBe('escalatie');
+  });
+});
+
+describe('maakWrijvingSectie', () => {
+  // Directe test op de comment-opbouw: layer 1 (werker) + layer 2 (sessielog) (#542).
+
+  const basisUitkomst = {
+    afloop: 'klaar' as const,
+    sessie: 'test',
+    weigeringen: 0,
+  };
+
+  it('bouwt een sectie met alleen layer 1 (zelfrapportage)', () => {
+    const wrijving = [{ signaal: 'pnpm duurde lang', suggestie: 'cache toevoegen' }];
+
+    const sectie = maakWrijvingSectie(wrijving, [], basisUitkomst);
+
+    expect(sectie).toContain('### Wrijving');
+    expect(sectie).toContain('Zelfrapportage');
+    expect(sectie).toContain('pnpm duurde lang');
+    expect(sectie).toContain('cache toevoegen');
+  });
+
+  it('bouwt een sectie met alleen layer 2 (sessielog weigeringen)', () => {
+    const logWeigeringen = [{ tool: 'Bash', aantal: 3 }];
+
+    const sectie = maakWrijvingSectie(undefined, logWeigeringen, basisUitkomst);
+
+    expect(sectie).toContain('### Wrijving');
+    expect(sectie).toContain('Weigeringen (sessielog)');
+    expect(sectie).toContain('Bash');
+    expect(sectie).toContain('3×');
+  });
+
+  it('filtert sessielog-weigeringen die al in de envelop staan', () => {
+    const logWeigeringen = [
+      { tool: 'Bash', aantal: 2 },
+      { tool: 'Write', aantal: 1 },
+    ];
+    const uitkomst = { ...basisUitkomst, weigeringen: 2, geweigerd: ['Bash'] as readonly string[] };
+
+    const sectie = maakWrijvingSectie(undefined, logWeigeringen, uitkomst);
+
+    // Bash staat al in de envelop; alleen Write is nieuw.
+    expect(sectie).toContain('Write');
+    expect(sectie).not.toContain('Bash:');
+  });
+
+  it('geeft undefined als er geen wrijving is', () => {
+    const sectie = maakWrijvingSectie(undefined, [], basisUitkomst);
+
+    expect(sectie).toBeUndefined();
+  });
+
+  it('geeft undefined bij een leeg wrijvings-array en geen log-weigeringen', () => {
+    const sectie = maakWrijvingSectie([], [], basisUitkomst);
+
+    expect(sectie).toBeUndefined();
+  });
+
+  it('combineert layer 1 en layer 2 in één sectie', () => {
+    const wrijving = [{ signaal: 'test-signaal', suggestie: 'test-suggestie' }];
+    const logWeigeringen = [{ tool: 'Edit', aantal: 1 }];
+
+    const sectie = maakWrijvingSectie(wrijving, logWeigeringen, basisUitkomst);
+
+    expect(sectie).toContain('Zelfrapportage');
+    expect(sectie).toContain('Weigeringen (sessielog)');
+    expect(sectie).toContain('test-signaal');
+    expect(sectie).toContain('Edit');
   });
 });
 
