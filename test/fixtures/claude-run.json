@@ -10,7 +10,18 @@
     "uitkomst": "klaar",
     "samenvatting": "proefrun voor de contracttest",
     "slices": 3,
-    "body": "# Proefrun\n\n- Stap 1: fixture aangemaakt\n- Stap 2: contracttest uitgevoerd\n- Stap 3: resultaat gevalideerd"
+    "body": "# Proefrun\n\n- Stap 1: fixture aangemaakt\n- Stap 2: contracttest uitgevoerd\n- Stap 3: resultaat gevalideerd",
+    "doorloop": [
+      { "sleutel": "buiten-opdracht", "waarde": "niet-gespeeld" },
+      { "sleutel": "datamodel", "waarde": "niet-gespeeld" },
+      { "sleutel": "externe-koppeling", "waarde": "niet-gespeeld" },
+      { "sleutel": "dependency", "waarde": "niet-gespeeld" },
+      { "sleutel": "flag-productie", "waarde": "niet-gespeeld" },
+      { "sleutel": "buiten-bestanden", "waarde": "niet-gespeeld" },
+      { "sleutel": "onleesbare-code", "waarde": "niet-gespeeld" },
+      { "sleutel": "dekking-verlagen", "waarde": "niet-gespeeld" },
+      { "sleutel": "productie", "waarde": "niet-gespeeld" }
+    ]
   },
   "permission_denials": [],
   "terminal_reason": "completed",
