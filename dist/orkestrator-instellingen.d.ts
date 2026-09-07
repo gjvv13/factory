@@ -143,6 +143,10 @@ export declare function logRun(paden: OrkestratorPaden, moment: Date, regel: {
     readonly beurten?: number;
     /** Uitsplitsing per fase, bijv. `(bouw $2.09 · review $1.12)` (#298). */
     readonly uitsplitsing?: string;
+    /** Aantal geweigerde gereedschappen; suffix verschijnt alleen bij > 0 (#544). */
+    readonly weigeringen?: number;
+    /** Welke gereedschappen, zonder dubbelen. Spaties worden `-` in de suffix. */
+    readonly geweigerd?: readonly string[];
 }): void;
 /** Wat er van een afgeronde run in het log komt; per soort anders opgebouwd. */
 export interface RunRegel {
@@ -155,6 +159,13 @@ export interface RunRegel {
      * ongewijzigd (#298).
      */
     readonly uitsplitsing?: string;
+    /**
+     * Aantal geweigerde gereedschappen (#544). Alleen geschreven als > 0; een aanroep
+     * zonder deze velden produceert exact dezelfde logregel als voorheen.
+     */
+    readonly weigeringen?: number;
+    /** Welke gereedschappen geweigerd werden, zonder dubbelen. */
+    readonly geweigerd?: readonly string[];
 }
 /**
  * Boekt één run en logt hem, ook als hij omvalt.

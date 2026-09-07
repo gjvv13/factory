@@ -517,12 +517,24 @@ export function beschrijfBouw(resultaat: BouwAfResultaat): RunRegel {
       ? bouw.afloop
       : `afgekapt (${String(bouw.afgekaptNaMinuten)} min)`;
 
+  // Wrijving uit de bouw-uitkomst meenemen in de logregel (#544).
+  const wrijvingVelden: Pick<RunRegel, 'weigeringen' | 'geweigerd'> =
+    bouw.weigeringen > 0
+      ? {
+          weigeringen: bouw.weigeringen,
+          ...(bouw.geweigerd !== undefined && bouw.geweigerd.length > 0
+            ? { geweigerd: bouw.geweigerd }
+            : {}),
+        }
+      : {};
+
   // Zonder review: alleen de bouw-kosten, geen uitsplitsing — de logregel is ongewijzigd.
   if (review === undefined) {
     return {
       uitkomst,
       ...(bouw.kosten === undefined ? {} : { kosten: bouw.kosten }),
       ...(bouw.beurten === undefined ? {} : { beurten: bouw.beurten }),
+      ...wrijvingVelden,
     };
   }
 
@@ -546,6 +558,7 @@ export function beschrijfBouw(resultaat: BouwAfResultaat): RunRegel {
     ...(totaalKosten === undefined ? {} : { kosten: totaalKosten }),
     ...(totaalBeurten === undefined ? {} : { beurten: totaalBeurten }),
     uitsplitsing: `(bouw ${bouwKostenTekst} · review ${reviewKostenTekst})`,
+    ...wrijvingVelden,
   };
 }
 

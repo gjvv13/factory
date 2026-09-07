@@ -46,6 +46,7 @@ import {
 } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
+import { leesRunLog } from '../runlog.js';
 import { type ReeksKeuze, werkBouwAntwoordAf } from './orkestreer-bouw.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
@@ -1537,4 +1538,92 @@ function verwijderAgent(paden: OrkestratorPaden): void {
   run('launchctl', ['unload', pad], { toleranter: true, capture: true });
   rmSync(pad, { force: true });
   ok('verwijderd; er draait niets meer vanzelf.');
+}
+
+// ---------------------------------------------------------------------------
+// Wrijvingsaggregaat (#544)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_WRIJVING_N = 25;
+
+/**
+ * Aggregeert wrijving over de laatste N bouw-runs en toont per-tool frequenties
+ * met totale kosten en een markering bij tools die de drempel (≥ 3) bereiken.
+ *
+ * Besluit 3: drempel N = 3.
+ * Besluit 6: alleen bouw-runs.
+ */
+export function orkestreerWrijving(n?: number, logPad?: string): void {
+  const pad = logPad ?? standaardPaden().logPad;
+  const aantal = n ?? DEFAULT_WRIJVING_N;
+  const records = leesRunLog(pad);
+
+  // Filter op bouw-runs (besluit 6).
+  const bouwRuns = records.filter((r) => r.soort === 'bouw');
+
+  // Neem de laatste `aantal`.
+  const selectie = bouwRuns.slice(-aantal);
+
+  if (selectie.length === 0) {
+    kop(`Wrijving over de laatste ${String(aantal)} bouw-runs`);
+    process.stdout.write('Geen bouw-runs in het log.\n');
+    return;
+  }
+
+  // Aggregeer per tool.
+  const perTool = new Map<string, { totaal: number; runs: number }>();
+  let runsMetWrijving = 0;
+
+  for (const run of selectie) {
+    if (run.weigeringen > 0) {
+      runsMetWrijving++;
+    }
+    for (const tool of run.geweigerd) {
+      const bestaand = perTool.get(tool);
+      if (bestaand !== undefined) {
+        // Tel het gereedschap nog één keer; het is per run uniek, dus runs telt 1 op.
+        bestaand.totaal += 1;
+        bestaand.runs += 1;
+      } else {
+        perTool.set(tool, { totaal: 1, runs: 1 });
+      }
+    }
+  }
+
+  // Totale kosten over de selectie.
+  let totaleKosten = 0;
+  let kostenBekend = false;
+  for (const r of selectie) {
+    if (r.kosten !== undefined) {
+      totaleKosten += r.kosten;
+      kostenBekend = true;
+    }
+  }
+
+  kop(`Wrijving over de laatste ${String(selectie.length)} bouw-runs`);
+
+  if (perTool.size === 0) {
+    process.stdout.write(`Geen wrijving in de laatste ${String(selectie.length)} bouw-runs.\n`);
+  } else {
+    // Sorteer op totaal weigeringen, aflopend.
+    const gesorteerd = [...perTool.entries()].sort((a, b) => b[1].totaal - a[1].totaal);
+
+    const DREMPEL = 3;
+    for (const [tool, { totaal, runs }] of gesorteerd) {
+      const markering = totaal >= DREMPEL ? ' ▸' : '';
+      process.stdout.write(
+        `  ${tool}: ${String(totaal)}× in ${String(runs)} run${runs === 1 ? '' : 's'}${markering}\n`,
+      );
+    }
+  }
+
+  // Totalen.
+  process.stdout.write('\n');
+  process.stdout.write(`Runs: ${String(selectie.length)}`);
+  if (kostenBekend) {
+    process.stdout.write(` · kosten: $${totaleKosten.toFixed(2)}`);
+  }
+  process.stdout.write(
+    ` · met wrijving: ${String(runsMetWrijving)} · zonder: ${String(selectie.length - runsMetWrijving)}\n`,
+  );
 }

@@ -412,14 +412,22 @@ export function logRun(
     readonly beurten?: number;
     /** Uitsplitsing per fase, bijv. `(bouw $2.09 · review $1.12)` (#298). */
     readonly uitsplitsing?: string;
+    /** Aantal geweigerde gereedschappen; suffix verschijnt alleen bij > 0 (#544). */
+    readonly weigeringen?: number;
+    /** Welke gereedschappen, zonder dubbelen. Spaties worden `-` in de suffix. */
+    readonly geweigerd?: readonly string[];
   },
 ): void {
   const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
   const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
   const uitsplitsing = regel.uitsplitsing === undefined ? '' : ` ${regel.uitsplitsing}`;
+  const wrijving =
+    regel.weigeringen !== undefined && regel.weigeringen > 0
+      ? ` [w:${String(regel.weigeringen)}:${(regel.geweigerd ?? []).map((t) => t.replace(/ /g, '-')).join(',')}]`
+      : '';
   schrijfLog(
     paden,
-    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}`,
+    `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}${wrijving}`,
   );
 }
 
@@ -434,6 +442,13 @@ export interface RunRegel {
    * ongewijzigd (#298).
    */
   readonly uitsplitsing?: string;
+  /**
+   * Aantal geweigerde gereedschappen (#544). Alleen geschreven als > 0; een aanroep
+   * zonder deze velden produceert exact dezelfde logregel als voorheen.
+   */
+  readonly weigeringen?: number;
+  /** Welke gereedschappen geweigerd werden, zonder dubbelen. */
+  readonly geweigerd?: readonly string[];
 }
 
 /**

@@ -243,4 +243,12 @@ export declare function nieuwsteTag(cwd: string): string;
  * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
  */
 export declare function vereisNachtModus(bin: string): void;
+/**
+ * Aggregeert wrijving over de laatste N bouw-runs en toont per-tool frequenties
+ * met totale kosten en een markering bij tools die de drempel (≥ 3) bereiken.
+ *
+ * Besluit 3: drempel N = 3.
+ * Besluit 6: alleen bouw-runs.
+ */
+export declare function orkestreerWrijving(n?: number, logPad?: string): void;
 export {};

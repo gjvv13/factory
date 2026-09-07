@@ -297,7 +297,10 @@ export function logRun(paden, moment, regel) {
     const kosten = regel.kosten === undefined ? '?' : `$${regel.kosten.toFixed(2)}`;
     const beurten = regel.beurten === undefined ? '?' : String(regel.beurten);
     const uitsplitsing = regel.uitsplitsing === undefined ? '' : ` ${regel.uitsplitsing}`;
-    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}`);
+    const wrijving = regel.weigeringen !== undefined && regel.weigeringen > 0
+        ? ` [w:${String(regel.weigeringen)}:${(regel.geweigerd ?? []).map((t) => t.replace(/ /g, '-')).join(',')}]`
+        : '';
+    schrijfLog(paden, `${new Date(moment.getTime()).toISOString()} #${String(regel.issue)} ${regel.app} ${regel.soort} ${regel.uitkomst} ${kosten} ${beurten} beurten${uitsplitsing}${wrijving}`);
 }
 /**
  * Boekt één run en logt hem, ook als hij omvalt.
