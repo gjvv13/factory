@@ -96,7 +96,7 @@
     "@types/istanbul-reports": "^3.0.4",
     "@types/node": "^26.4.1",
     "@vitest/coverage-v8": "^4.1.11",
-    "eslint": "^10.9.1",
+    "eslint": "^10.10.0",
     "prettier": "^3.9.6",
     "tsx": "^4.23.13",
     "typescript": "6.0.3",
