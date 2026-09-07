@@ -134,7 +134,7 @@ async function main(argumenten: string[]): Promise<void> {
       return;
     }
     case 'heeft-migratie':
-      toonMigratieStatus();
+      await toonMigratieStatus();
       return;
     case 'env': {
       const { positioneel } = leesArgumenten(rest);
