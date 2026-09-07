@@ -9,6 +9,7 @@ import {
   type Omgeving,
 } from '../app-config.js';
 import { zetItemsUitBereikOpDone } from '../board.js';
+import { versieUitHealth } from '../migratie.js';
 import {
   bevestig,
   GebruikersFout,
@@ -257,15 +258,7 @@ export async function promote(
   );
 }
 
-/** De versie uit een /health-JSON-body, of undefined als die er niet (geldig) in staat. */
-export function versieUitHealth(body: string): string | undefined {
-  try {
-    const data = JSON.parse(body) as { version?: unknown };
-    return typeof data.version === 'string' ? data.version : undefined;
-  } catch {
-    return undefined;
-  }
-}
+// versieUitHealth is verplaatst naar migratie.ts (#455); promote importeert hem daar.
 
 /**
  * Zet de backlog-items die met deze tag op prod terechtkomen op Done (#128).

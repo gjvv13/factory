@@ -19,7 +19,7 @@ import { templatesDir } from '../paths.js';
 import { GebruikersFout, kop, ok, uitvoerVan, waarschuwing } from '../shell.js';
 import { ESCALATIE_LABEL } from '../board.js';
 import { versWerkplaats, werkplaatsWortel } from '../werkplaats.js';
-import { versieUitHealth } from './promote.js';
+import { versieUitHealth } from '../migratie.js';
 import { AGENT_ACCEPTEERDER, draaiAccepteerder, type AccepteerUitkomst } from '../werker.js';
 
 /**
