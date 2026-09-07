@@ -37,16 +37,11 @@ export function leesAgentGrenzen(naam) {
 export function voegToolToe(agent, patroon) {
     const bestandsPad = path.join(agentsDir, `${agent}.md`);
     const inhoud = readFileSync(bestandsPad, 'utf8');
-    // Controleer of het patroon al in de allowedTools staat.
+    // Controleer of het patroon al in de allowedTools staat. `leesAgentGrenzen` gooit
+    // hier al als het frontmatter ontbreekt, dus vanaf hier is het frontmatter er zeker.
     const bestaand = leesAgentGrenzen(agent);
     if (bestaand.allowedTools.includes(patroon)) {
         return;
-    }
-    // Zoek het einde van het allowedTools-blok: de laatste `  - '...'`-regel vóór de
-    // volgende top-level key of het einde van het frontmatter.
-    const frontmatterMatch = /^---\n([\s\S]*?)\n---/.exec(inhoud);
-    if (frontmatterMatch?.[1] === undefined) {
-        throw new Error(`Geen frontmatter in agents/${agent}.md`);
     }
     // Strategie: zoek de laatste regel van het allowedTools-blok en voeg erna toe.
     // Het blok begint bij `allowedTools:` en alle regels die beginnen met `  - ` horen

@@ -90,4 +90,24 @@ describe('voegToolToe', () => {
       voegToolToe('niet-bestaand-agent-xyz', 'Bash(diff:*)');
     }).toThrow();
   });
+
+  it('gooit als er geen allowedTools-items zijn om na te voegen', () => {
+    // Frontmatter mét name maar zónder allowedTools-blok: er is geen anker om na te
+    // voegen, dus voegToolToe moet weigeren i.p.v. stil een kapot bestand te maken.
+    const agentPad = path.join(agentsDir, 'test-auto-groei-leeg.md');
+    writeFileSync(
+      agentPad,
+      ['---', 'name: test-auto-groei-leeg', 'model: claude-opus-4-6', '---', '', 'Een test.'].join(
+        '\n',
+      ),
+    );
+
+    try {
+      expect(() => {
+        voegToolToe('test-auto-groei-leeg', 'Bash(diff:*)');
+      }).toThrow(/allowedTools/);
+    } finally {
+      rmSync(agentPad, { force: true });
+    }
+  });
 });

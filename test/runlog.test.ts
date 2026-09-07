@@ -84,6 +84,13 @@ describe('parseRunLogRegel', () => {
     expect(parseRunLogRegel('')).toBeUndefined();
   });
 
+  it('retourneert undefined bij een onmogelijke datum', () => {
+    // De regel heeft de juiste vorm maar een datum die geen echte tijd is; dan mag
+    // hij niet als geldige run tellen.
+    const regel = '2026-13-99T99:99:99.000Z #87 assistant bouw klaar $2.09 31 beurten';
+    expect(parseRunLogRegel(regel)).toBeUndefined();
+  });
+
   it('handelt onbekende kosten en beurten af', () => {
     const regel = '2026-08-20T04:12:03.000Z #51 assistant bouw escalatie ? ? beurten';
     const record = parseRunLogRegel(regel);
