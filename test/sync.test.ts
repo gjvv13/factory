@@ -1,4 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -248,5 +255,49 @@ describe('sync', () => {
     const verschillen = syncVerschillen(app, [DEPENDABOT]);
 
     expect(verschillen.some((v) => v.pad === DEPENDABOT)).toBe(false);
+  });
+
+  // --- Verwijdering van overbodige bestanden in gespiegelde mappen (#456) ---
+
+  it('verwijdert een overbodig bestand in een gespiegelde map', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    // Voeg een bestand toe dat de factory niet kent.
+    const overbodigPad = path.join(app, OVERBODIG);
+    mkdirSync(path.dirname(overbodigPad), { recursive: true });
+    writeFileSync(overbodigPad, 'oud commando');
+    expect(existsSync(overbodigPad)).toBe(true);
+
+    const bijgewerkt = syncNaarApp(app);
+
+    expect(existsSync(overbodigPad)).toBe(false);
+    expect(bijgewerkt).toContain(OVERBODIG);
+  });
+
+  it('verwijdert geen overbodig bestand dat in syncNegeer staat', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    const overbodigPad = path.join(app, OVERBODIG);
+    mkdirSync(path.dirname(overbodigPad), { recursive: true });
+    writeFileSync(overbodigPad, 'bewust lokaal');
+
+    const bijgewerkt = syncNaarApp(app, [OVERBODIG]);
+
+    expect(existsSync(overbodigPad)).toBe(true);
+    expect(bijgewerkt).not.toContain(OVERBODIG);
+  });
+
+  it('verwijdert geen losse bestandskopie die niet in de factory staat', () => {
+    const app = maakAppMap();
+    syncNaarApp(app);
+    // Een extra bestand in .github/ dat buiten de gespiegelde workflows/ valt,
+    // mag niet geraakt worden door de verwijderlogica.
+    const losPad = path.join(app, '.github', 'CODEOWNERS');
+    writeFileSync(losPad, '* @owner');
+
+    syncNaarApp(app);
+
+    // CODEOWNERS valt buiten de workflows-spiegel en mag blijven staan.
+    expect(existsSync(losPad)).toBe(true);
   });
 });
