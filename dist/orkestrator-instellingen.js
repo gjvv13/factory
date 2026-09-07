@@ -22,6 +22,7 @@ export function standaardPaden(home) {
         logPad: path.join(wortel, 'Library', 'Logs', 'nl.factory.orkestreer.log'),
         agentPad: path.join(wortel, 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`),
         bouwAgentPad: path.join(wortel, 'Library', 'LaunchAgents', `${BOUW_LAUNCH_LABEL}.plist`),
+        tellersPad: path.join(wortel, 'Library', 'Application Support', 'factory', 'wrijving-tellers.json'),
     };
 }
 /** Het launchd-label van de refine-nacht-agent; ook de basis van zijn plist-naam. */

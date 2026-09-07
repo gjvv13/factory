@@ -3,6 +3,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appOpties, bordItems, ESCALATIE_LABEL, haalLabelWeg, isBacklogRepo, kolomVan, plaatsComment, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
+import { voegToolToe } from '../agent-definitie.js';
+import { isVeilig, labelNaarPatroon } from '../veilige-klasse.js';
+import { werkTellersBij } from '../wrijving-tellers.js';
 import { BOUW_LAUNCH_LABEL, kalenderdag, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
@@ -457,6 +460,17 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
     // Sessielog lezen vóór de review: supplementaire wrijvingsdata die de comment verrijkt
     // maar de run niet beïnvloedt (#542). Faalscenario's geven een leeg array — geen crash.
     const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
+    // Auto-groei: tellers bijwerken en bij drempeloverschrijding een PR aanmaken (#543).
+    // Faalscenario's blokkeren de bouw niet: de auto-groei is bijvangst, geen voorwaarde.
+    if (uitkomst.geweigerd !== undefined && uitkomst.geweigerd.length > 0) {
+        try {
+            const paden = standaardPaden();
+            verwerkAutoGroei([...uitkomst.geweigerd], paden, factoryMap);
+        }
+        catch (fout) {
+            waarschuwing(`auto-groei niet gelukt: ${fout instanceof Error ? fout.message : String(fout)}`);
+        }
+    }
     // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
     // Na het inleveren is de worktree weg — de review móét ervoor draaien.
     // Een throw uit de review (startfout, onverwachte uitzondering) mag het inleveren
@@ -669,6 +683,156 @@ export function maakWrijvingSectie(werkerWrijving, logWeigeringen, uitkomst) {
     if (delen.length === 0)
         return undefined;
     return `### Wrijving\n\n${delen.join('\n\n')}`;
+}
+// --- Auto-groeiende allowlist (#543) ------------------------------------------
+/**
+ * Verwerkt de auto-groei na een bouw-run: tellers bijwerken, en voor elk gereedschap
+ * dat de drempel bereikt én in de veilige klasse valt het patroon toevoegen aan de
+ * bouw-allowlist en een PR aanmaken in de factory-spiegel.
+ *
+ * Eén PR per groei-batch per run, niet per tool (besluit 3). Een label dat de drempel
+ * bereikt maar buiten de veilige klasse valt wordt overgeslagen zonder fout — de teller
+ * loopt door voor eventueel handmatig inzicht (#544).
+ */
+export function verwerkAutoGroei(geweigerd, paden, factorySpiegelPad, 
+/** Injecteerbaar voor tests: de git/gh-stappen overslaan en de agent kiezen. */
+opties) {
+    const groei = werkTellersBij(paden.tellersPad, geweigerd, labelNaarPatroon);
+    if (groei.length === 0)
+        return [];
+    // Filter: alleen tools die in de veilige klasse vallen.
+    const veilig = groei.filter((g) => isVeilig(g.label));
+    if (veilig.length === 0)
+        return [];
+    // Voeg de patronen toe aan de agent-definitie.
+    const agent = opties?.agent ?? AGENT_BOUWER;
+    for (const g of veilig) {
+        voegToolToe(agent, g.patroon);
+    }
+    if (opties?.skipGit !== true) {
+        // PR aanmaken in de factory-spiegel.
+        try {
+            maakAutoGroeiPr(veilig, factorySpiegelPad);
+        }
+        catch (fout) {
+            waarschuwing(`auto-groei PR kon niet aangemaakt worden: ${fout instanceof Error ? fout.message : String(fout)}`);
+        }
+    }
+    if (opties?.skipNotify !== true) {
+        // Ops-room melding.
+        try {
+            const instellingen = leesInstellingen(paden);
+            meldAutoGroei(veilig, instellingen.notifyUrl, instellingen.notifyToken);
+        }
+        catch (fout) {
+            waarschuwing(`auto-groei melding niet gelukt: ${fout instanceof Error ? fout.message : String(fout)}`);
+        }
+    }
+    return veilig;
+}
+/**
+ * Maakt een PR aan in de factory-spiegel voor de auto-groei (#543).
+ *
+ * De spiegel staat op `origin/main`. De stappen:
+ * 1. `git checkout main && git pull` — zodat de spiegel schoon is.
+ * 2. `git checkout -b auto-groei/<datum>-<labels>`
+ * 3. `git add agents/bouwer.md && git commit`
+ * 4. `git push origin <branch>`
+ * 5. `gh pr create` met auto-merge via de merge-queue.
+ * 6. `git checkout main` — spiegel herstellen.
+ */
+function maakAutoGroeiPr(groei, factorySpiegelPad) {
+    const labels = groei.map((g) => g.label).join('-');
+    const datum = kalenderdag(new Date(Date.now()));
+    const branch = `auto-groei/${datum}-${labels}`;
+    const commitBericht = `auto-groei: ${groei.map((g) => g.label).join(', ')} na herhaalde weigeringen (#543)`;
+    // Spiegel op main zetten.
+    run('git', ['checkout', 'main'], { cwd: factorySpiegelPad, capture: true, toleranter: true });
+    run('git', ['pull', '--ff-only', 'origin', 'main'], {
+        cwd: factorySpiegelPad,
+        capture: true,
+        toleranter: true,
+    });
+    // Branch aanmaken.
+    const branchResult = run('git', ['checkout', '-b', branch], {
+        cwd: factorySpiegelPad,
+        capture: true,
+        toleranter: true,
+    });
+    if (branchResult.code !== 0) {
+        // Branch bestaat al (vorige run met dezelfde labels op dezelfde dag) → skip.
+        waarschuwing(`branch ${branch} bestaat al; auto-groei PR overgeslagen.`);
+        run('git', ['checkout', 'main'], { cwd: factorySpiegelPad, capture: true, toleranter: true });
+        return;
+    }
+    // Commit.
+    run('git', ['add', 'agents/bouwer.md'], { cwd: factorySpiegelPad, capture: true });
+    run('git', ['commit', '-m', commitBericht], { cwd: factorySpiegelPad, capture: true });
+    // Push.
+    run('git', ['push', 'origin', branch], { cwd: factorySpiegelPad, capture: true });
+    // PR openen met auto-merge.
+    const prBody = `Auto-groei van de bouw-allowlist (#543).\n\n` +
+        `Tools die de drempel bereikt hebben:\n` +
+        groei
+            .map((g) => `- \`${g.label}\` → \`${g.patroon}\` (${String(g.nieuweTelling)}× geweigerd)`)
+            .join('\n');
+    run('gh', [
+        'pr',
+        'create',
+        '--repo',
+        `${EIGENAAR}/factory`,
+        '--title',
+        `auto-groei: ${groei.map((g) => g.label).join(', ')}`,
+        '--body',
+        prBody,
+        '--head',
+        branch,
+    ], { cwd: factorySpiegelPad, capture: true });
+    // Auto-merge via de merge-queue.
+    run('gh', ['pr', 'merge', branch, '--auto', '--squash', '--repo', `${EIGENAAR}/factory`], {
+        cwd: factorySpiegelPad,
+        capture: true,
+        toleranter: true,
+    });
+    // Spiegel herstellen.
+    run('git', ['checkout', 'main'], { cwd: factorySpiegelPad, capture: true, toleranter: true });
+    ok(`auto-groei PR aangemaakt: ${branch}`);
+}
+/**
+ * Meldt de auto-groei via de ops-room-notificatie (#543, criterium 5).
+ *
+ * Zonder URL: overslaan met waarschuwing, zelfde patroon als de deploy-faalmelding.
+ */
+function meldAutoGroei(groei, notifyUrl, notifyToken) {
+    if (notifyUrl === undefined) {
+        waarschuwing('auto-groei melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
+        return;
+    }
+    const tekst = `🔧 Auto-groei bouw-allowlist:\n` +
+        groei
+            .map((g) => `  ${g.label} → ${g.patroon} (${String(g.nieuweTelling)}× geweigerd)`)
+            .join('\n');
+    const headers = { 'Content-Type': 'application/json' };
+    if (notifyToken !== undefined) {
+        headers['Authorization'] = `Bearer ${notifyToken}`;
+    }
+    // Synchroon via curl, zoals de deploy-melding in de workflow. Een fetch zou async
+    // zijn en het controlflow-pad compliceren zonder meerwaarde: de melding is best-effort.
+    const args = [
+        '-s',
+        '-X',
+        'POST',
+        '-H',
+        'Content-Type: application/json',
+        ...(notifyToken !== undefined ? ['-H', `Authorization: Bearer ${notifyToken}`] : []),
+        '-d',
+        JSON.stringify({ text: tekst }),
+        notifyUrl,
+    ];
+    const result = run('curl', args, { capture: true, toleranter: true });
+    if (result.code !== 0) {
+        waarschuwing(`auto-groei melding mislukt (curl exit ${String(result.code)}).`);
+    }
 }
 /**
  * Het review-comment als markdown, of `undefined` als er geen review gedraaid heeft.
