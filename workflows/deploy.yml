@@ -100,10 +100,14 @@ jobs:
       # wordt de job rood en meldt de gefaalde-deploy-stap dat. No-op zonder een rooktest
       # in factory.json. Acc eerst: de logische plek om een kapotte kern als eerste te zien.
       - run: pnpm exec factory rooktest acc
-      # Bepaalt na de release of prod via de goedkeurings-poort moet. De factory-
-      # binary rechtstreeks (niet via `pnpm exec`): pnpm print anders een ruis-regel
-      # ("Lockfile is up to date…") die de command-substitutie en daarmee
-      # $GITHUB_OUTPUT breekt. tail -n1 pakt puur de laatste regel (ja/nee).
+      # Bepaalt na de release of prod via de goedkeurings-poort moet. Het bereik
+      # loopt vanaf de tag die prod daadwerkelijk draait (via /health), niet vanaf
+      # de vorige release-tag — zo kan een opgestapelde migratie niet meeliftend op
+      # een migratie-loze release worden omzeild (#455). Bij een onbereikbare prod
+      # valt de gate terug op de vorige-tag-logica. De factory-binary rechtstreeks
+      # (niet via `pnpm exec`): pnpm print anders een ruis-regel ("Lockfile is up
+      # to date…") die de command-substitutie en daarmee $GITHUB_OUTPUT breekt.
+      # tail -n1 pakt puur de laatste regel (ja/nee).
       - id: migratie
         run: echo "nieuw=$(node_modules/.bin/factory heeft-migratie | tail -n1)" >> "$GITHUB_OUTPUT"
       # Meldt een gefaalde deploy aan de assistent (die relayt naar Matrix), zodat een
