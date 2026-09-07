@@ -13,6 +13,7 @@ import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, es
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
 import { werkplek } from './werkplek.js';
+import { leesWeigeringenUitLog } from '../sessielog.js';
 /**
  * De tweede taaksoort: een werker die bouwt in plaats van refinet (#164, slice #182).
  *
@@ -453,6 +454,9 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
     // hoort er niet van af te hangen, en een achtergebleven map is rommel die bij de
     // volgende run in de weg kan zitten.
     ruimBronMapOp(bronWortel);
+    // Sessielog lezen vóór de review: supplementaire wrijvingsdata die de comment verrijkt
+    // maar de run niet beïnvloedt (#542). Faalscenario's geven een leeg array — geen crash.
+    const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
     // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
     // Na het inleveren is de worktree weg — de review móét ervoor draaien.
     // Een throw uit de review (startfout, onverwachte uitzondering) mag het inleveren
@@ -478,7 +482,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
             reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
         }
     }
-    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks, baan);
+    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, reeks, baan);
     return {
         // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
         // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
@@ -494,7 +498,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
  * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
  * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
  */
-function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks, baan) {
+function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, reeks, baan) {
     const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
     if (uitkomst.afloop === 'mislukt') {
         // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
@@ -566,10 +570,13 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, reeks
     const mergeRegel = isFastlane
         ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
         : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
+    const wrijvingSectie = maakWrijvingSectie(verdict.wrijving, logWeigeringen, uitkomst);
     plaatsComment(item.issue, `**Gebouwd door een onbemande werker.**\n\n${verdict.samenvatting}\n\n` +
         `| Acceptatiecriterium | Bewijs |\n| --- | --- |\n` +
         verdict.criteria.map((regel) => `| ${regel.criterium} | ${regel.bewijs} |`).join('\n') +
-        `\n\n${mergeRegel}\n\n${voetnoot}`, cwd);
+        `\n\n${mergeRegel}` +
+        (wrijvingSectie !== undefined ? `\n\n${wrijvingSectie}` : '') +
+        `\n\n${voetnoot}`, cwd);
     // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
     if (reviewComment !== undefined) {
         if (!plaatsPrComment(item, reviewComment)) {
@@ -630,6 +637,38 @@ function maakVoetnoot(item, uitkomst, reviewUitkomst, wortel) {
         : `sessie=${uitkomst.sessie} review-sessie=${reviewUitkomst.sessie}`;
     return (`<sub>${delen.filter((deel) => deel !== undefined).join(' · ')}</sub>\n` +
         `<!-- orkestrator: ${sessies} werkmap=${bouwWerkplek(item.app, item.issue, wortel)} -->`);
+}
+/**
+ * Bouwt de **Wrijving**-sectie in het bouw-comment (#542).
+ *
+ * Layer 1: wat de werker zelf rapporteert in zijn verdict (`wrijving`-veld).
+ * Layer 2: permission denials uit het sessielog die de envelop niet noemt — de envelop
+ * telt alleen het aantal en de labels; het log draagt tool + aantal per tool.
+ *
+ * Geen wrijving → `undefined`, en de sectie verschijnt niet.
+ */
+export function maakWrijvingSectie(werkerWrijving, logWeigeringen, uitkomst) {
+    const delen = [];
+    // Layer 1: zelfrapportage van de werker.
+    if (werkerWrijving !== undefined && werkerWrijving.length > 0) {
+        delen.push('**Zelfrapportage:**\n' +
+            werkerWrijving.map((w) => `- ${w.signaal} → _${w.suggestie}_`).join('\n'));
+    }
+    // Layer 2: weigeringen uit het sessielog die de envelop niet al noemt.
+    // De envelop geeft `geweigerd` als de-duped labels (bijv. ["Bash", "git push"]); het
+    // sessielog geeft tool + aantal. We tonen alleen weigeringen uit het log die niet al
+    // in de envelop-voetnoot staan (die toont `N× geweigerd (tools)`).
+    const envelopLabels = new Set(uitkomst.geweigerd ?? []);
+    const extraWeigeringen = logWeigeringen.filter((w) => !envelopLabels.has(w.tool) && !envelopLabels.has(w.commando ?? ''));
+    if (extraWeigeringen.length > 0) {
+        delen.push('**Weigeringen (sessielog):**\n' +
+            extraWeigeringen
+                .map((w) => `- ${w.tool}${w.commando !== undefined ? ` (${w.commando})` : ''}: ${String(w.aantal)}×`)
+                .join('\n'));
+    }
+    if (delen.length === 0)
+        return undefined;
+    return `### Wrijving\n\n${delen.join('\n\n')}`;
 }
 /**
  * Het review-comment als markdown, of `undefined` als er geen review gedraaid heeft.
@@ -758,6 +797,8 @@ export async function werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd) {
         waarschuwing(`review kon niet draaien: ${reden}`);
         reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
     }
+    // Sessielog lezen: supplementaire wrijvingsdata (#542).
+    const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
     // Het item ophalen voor de titel (PR-titel bij inleveren) en de volledige Bouwitem.
     const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
     const titel = item?.titel ?? `#${String(issue)}`;
@@ -771,7 +812,7 @@ export async function werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd) {
     };
     // Het escalatie-label weghalen: het item is niet meer vastgelopen.
     haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
-    verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren);
+    verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren, logWeigeringen);
 }
 /**
  * Bouwt een verse bouw-opdracht op voor `--opnieuw`: de sessie is weg, dus de volledige

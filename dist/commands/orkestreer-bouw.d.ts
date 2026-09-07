@@ -4,6 +4,7 @@ import { type ReeksContext } from '../reeks.js';
 import { type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import { type AntwoordOpties, type Escalatie } from './orkestreer.js';
 import { type InleverenOpties } from './inleveren.js';
+import { type SessieWeigering } from '../sessielog.js';
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
     readonly app: string;
@@ -131,6 +132,19 @@ export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap
  * er één weg moet.
  */
 export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => void, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number, baan?: BouwBaan): Promise<BouwAfResultaat>;
+/**
+ * Bouwt de **Wrijving**-sectie in het bouw-comment (#542).
+ *
+ * Layer 1: wat de werker zelf rapporteert in zijn verdict (`wrijving`-veld).
+ * Layer 2: permission denials uit het sessielog die de envelop niet noemt — de envelop
+ * telt alleen het aantal en de labels; het log draagt tool + aantal per tool.
+ *
+ * Geen wrijving → `undefined`, en de sectie verschijnt niet.
+ */
+export declare function maakWrijvingSectie(werkerWrijving: ReadonlyArray<{
+    readonly signaal: string;
+    readonly suggestie: string;
+}> | undefined, logWeigeringen: readonly SessieWeigering[], uitkomst: BouwUitkomst): string | undefined;
 /**
  * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
  * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in

@@ -44,12 +44,6 @@ declare const verdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     advies: z.ZodString;
 }, z.core.$strip>], "uitkomst">;
 export type Verdict = z.infer<typeof verdictSchema>;
-/**
- * Het verdict van een bouw-run (#183). Het verschil met een refinement zit in het
- * bewijs: per acceptatiecriterium een regel met wat het aantoont. `bewijs` is
- * `min(1)`, dus een criterium zonder bewijs komt niet als `klaar` door de poort — dat
- * is precies de reden dat dit schema bestaat en niet alleen de prompt erom vraagt.
- */
 declare const bouwVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     uitkomst: z.ZodLiteral<"klaar">;
     samenvatting: z.ZodString;
@@ -57,10 +51,18 @@ declare const bouwVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
         criterium: z.ZodString;
         bewijs: z.ZodString;
     }, z.core.$strip>>;
+    wrijving: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        signaal: z.ZodString;
+        suggestie: z.ZodString;
+    }, z.core.$strip>>>;
 }, z.core.$strip>, z.ZodObject<{
     uitkomst: z.ZodLiteral<"escalatie">;
     vraag: z.ZodString;
     advies: z.ZodString;
+    wrijving: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        signaal: z.ZodString;
+        suggestie: z.ZodString;
+    }, z.core.$strip>>>;
 }, z.core.$strip>], "uitkomst">;
 export type BouwVerdict = z.infer<typeof bouwVerdictSchema>;
 declare const reviewVerdictSchema: z.ZodObject<{
@@ -231,6 +233,23 @@ export declare const BOUW_JSON_SCHEMA: {
         readonly advies: {
             readonly type: "string";
             readonly description: "alleen bij escalatie: wat jij zou doen en waarom";
+        };
+        readonly wrijving: {
+            readonly type: "array";
+            readonly description: "optioneel, beide varianten: wat je moeite of beurten kostte (signaal) en wat het zou oplossen (suggestie). Geen wrijving is een geldige uitkomst.";
+            readonly items: {
+                readonly type: "object";
+                readonly properties: {
+                    readonly signaal: {
+                        readonly type: "string";
+                    };
+                    readonly suggestie: {
+                        readonly type: "string";
+                    };
+                };
+                readonly required: readonly ["signaal", "suggestie"];
+                readonly additionalProperties: false;
+            };
         };
     };
     readonly required: readonly ["uitkomst"];
