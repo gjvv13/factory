@@ -1,0 +1,39 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "7c1f0e2a-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
+  "num_turns": 31,
+  "total_cost_usd": 4.812,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "uitkomst": "klaar",
+    "samenvatting": "Promote gebruikt nu een niet-interactieve pnpm-aanroep; twee tests dekken het gedrag. Aangenomen dat de node_modules-opruiming alleen bij een versiewissel speelt.",
+    "criteria": [
+      {
+        "criterium": "promote faalt niet meer zonder TTY",
+        "bewijs": "test/promote.test.ts:'draait pnpm zonder interactieve prompt'"
+      },
+      {
+        "criterium": "de bestaande promote-weg verandert niet",
+        "bewijs": "test/promote.test.ts:'rolt een tag uit zoals voorheen' (ongewijzigd, groen)"
+      }
+    ],
+    "doorloop": [
+      { "sleutel": "buiten-opdracht", "waarde": "niet-gespeeld" },
+      {
+        "sleutel": "datamodel",
+        "waarde": "volgt-uit-de-opdracht",
+        "waarom": "het issue vraagt om een migratie"
+      },
+      { "sleutel": "externe-koppeling", "waarde": "niet-gespeeld" },
+      { "sleutel": "dependency", "waarde": "niet-gespeeld" },
+      { "sleutel": "flag-productie", "waarde": "niet-gespeeld" },
+      { "sleutel": "buiten-bestanden", "waarde": "niet-gespeeld" },
+      { "sleutel": "onleesbare-code", "waarde": "niet-gespeeld" },
+      { "sleutel": "dekking-verlagen", "waarde": "niet-gespeeld" },
+      { "sleutel": "productie", "waarde": "niet-gespeeld" }
+    ]
+  }
+}
