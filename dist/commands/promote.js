@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { leesOmgevingsWaarden, pm2NaamVan, vereisAppConfig, werkmapVan, } from '../app-config.js';
 import { zetItemsUitBereikOpDone } from '../board.js';
+import { versieUitHealth } from '../migratie.js';
 import { bevestig, GebruikersFout, git, installeer, isGezondNaStart, isInteractief, kop, ok, pakketbeheerder, run, uitvoerVan, vrijePoort, waarschuwing, wachtOpGezond, } from '../shell.js';
 import { herstartOmgeving, toonGeladenConfig } from '../env-herstart.js';
 function omgevingsVariabelen(appDir, werkmap, omgeving) {
@@ -170,16 +171,7 @@ export async function promote(omgevingArgument, tagArgument, opties = {}) {
     }
     throw new GebruikersFout(`Afgebroken: ${reden}. ${omgeving} draait weer op ${vorigeTag}. Let op: migraties zijn niet teruggedraaid.`);
 }
-/** De versie uit een /health-JSON-body, of undefined als die er niet (geldig) in staat. */
-export function versieUitHealth(body) {
-    try {
-        const data = JSON.parse(body);
-        return typeof data.version === 'string' ? data.version : undefined;
-    }
-    catch {
-        return undefined;
-    }
-}
+// versieUitHealth is verplaatst naar migratie.ts (#455); promote importeert hem daar.
 /**
  * Zet de backlog-items die met deze tag op prod terechtkomen op Done (#128).
  *

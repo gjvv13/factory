@@ -120,7 +120,7 @@ async function main(argumenten) {
             return;
         }
         case 'heeft-migratie':
-            toonMigratieStatus();
+            await toonMigratieStatus();
             return;
         case 'env': {
             const { positioneel } = leesArgumenten(rest);
