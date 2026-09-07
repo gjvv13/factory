@@ -17,7 +17,7 @@ export declare function syncVerschillen(appDir: string, negeer?: readonly string
  * en de CI-workflow. Deze kunnen niet uit node_modules komen omdat Claude Code,
  * git en GitHub Actions ze op een vaste plek in de repo verwachten.
  */
-export declare function syncNaarApp(appDir: string): string[];
+export declare function syncNaarApp(appDir: string, negeer?: readonly string[]): string[];
 export interface SyncOpties {
     /** Alleen controleren en bij drift met een niet-nul exit eindigen; niets schrijven. */
     readonly check?: boolean;

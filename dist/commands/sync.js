@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { agentsDir, claudeCommandsDir, factoryPakketDir, hooksDir, skillsDir, syncBestanden, workflowsDir, } from '../paths.js';
@@ -90,16 +90,30 @@ export function syncVerschillen(appDir, negeer = []) {
  * en de CI-workflow. Deze kunnen niet uit node_modules komen omdat Claude Code,
  * git en GitHub Actions ze op een vaste plek in de repo verwachten.
  */
-export function syncNaarApp(appDir) {
+export function syncNaarApp(appDir, negeer = []) {
+    const genegeerd = (pad) => negeer.some((n) => pad === n || pad.startsWith(`${n}${path.sep}`));
     const bijgewerkt = [];
     for (const { bronDir, doelBasis } of syncSpiegels()) {
-        for (const rel of bestandenOnder(bronDir)) {
+        const bronBestanden = new Set(bestandenOnder(bronDir));
+        // Factory → app: kopiëren of bijwerken.
+        for (const rel of bronBestanden) {
             if (kopieerAlsAnders(path.join(bronDir, rel), path.join(appDir, doelBasis, rel))) {
                 bijgewerkt.push(path.join(doelBasis, rel));
             }
         }
+        // App → factory: een bestand dat de factory niet (meer) kent, verwijderen.
+        for (const rel of bestandenOnder(path.join(appDir, doelBasis))) {
+            if (bronBestanden.has(rel))
+                continue;
+            const pad = path.join(doelBasis, rel);
+            if (genegeerd(pad))
+                continue;
+            rmSync(path.join(appDir, pad));
+            bijgewerkt.push(pad);
+        }
     }
-    // Losse bestandskopieën.
+    // Losse bestandskopieën — hier geen verwijdering: ze worden 1:1 gekopieerd,
+    // niet gespiegeld.
     for (const { bron, doel } of syncBestanden) {
         if (kopieerAlsAnders(path.join(factoryPakketDir, bron), path.join(appDir, doel))) {
             bijgewerkt.push(doel);
@@ -154,7 +168,8 @@ export function sync(opties = {}) {
         return;
     }
     kop('Slash commands, skills, git hook en CI-workflow gelijkzetten');
-    const bijgewerkt = syncNaarApp(appDir);
+    const negeer = leesAppConfig(appDir).syncNegeer ?? [];
+    const bijgewerkt = syncNaarApp(appDir, negeer);
     if (bijgewerkt.length === 0) {
         waarschuwing('Niets te doen: alles staat al gelijk aan de factory.');
         return;
