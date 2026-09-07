@@ -1,5 +1,5 @@
 /**
- * Contract-tests voor de versie-parse in promote.ts: `versieUitHealth` leest de
+ * Contract-tests voor de versie-parse in migratie.ts: `versieUitHealth` leest de
  * versie uit een /health-JSON-body. De test draait de échte parse tegen opgenomen
  * bodies, zodat een wijziging in de health-structuur meteen zichtbaar wordt.
  *
@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { versieUitHealth } from '../../src/commands/promote.js';
+import { versieUitHealth } from '../../src/migratie.js';
 
 const FIXTURES = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
