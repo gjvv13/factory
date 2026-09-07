@@ -99,6 +99,7 @@ declare const verdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
         }>;
         waarom: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
+    keuzeNotitie: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>, z.ZodObject<{
     uitkomst: z.ZodLiteral<"escalatie">;
     vraag: z.ZodString;
@@ -138,6 +139,7 @@ declare const bouwVerdictSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
         }>;
         waarom: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
+    keuzeNotitie: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>, z.ZodObject<{
     uitkomst: z.ZodLiteral<"escalatie">;
     vraag: z.ZodString;
@@ -344,6 +346,10 @@ export declare const BOUW_JSON_SCHEMA: {
                 readonly additionalProperties: false;
             };
         };
+        readonly keuzeNotitie: {
+            readonly type: "string";
+            readonly description: "alleen bij klaar: optionele toelichting op een eigen-gedragen keuze die de werker maakte zonder te escaleren";
+        };
         readonly vraag: {
             readonly type: "string";
             readonly description: "alleen bij escalatie: wat je precies wilt weten";
@@ -426,6 +432,10 @@ export declare const VERDICT_JSON_SCHEMA: {
                 readonly required: readonly ["sleutel", "waarde"];
                 readonly additionalProperties: false;
             };
+        };
+        readonly keuzeNotitie: {
+            readonly type: "string";
+            readonly description: "alleen bij klaar: optionele toelichting op een eigen-gedragen keuze die de werker maakte zonder te escaleren";
         };
         readonly vraag: {
             readonly type: "string";
