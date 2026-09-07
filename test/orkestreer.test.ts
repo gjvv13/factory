@@ -25,6 +25,7 @@ import {
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
+  veiligOpruimen,
 } from '../src/commands/orkestreer.js';
 import {
   boekRun,
@@ -344,6 +345,17 @@ describe('orkestreer', () => {
     const zetten = aanroepen.findIndex((a) => a.argumenten.includes('--add-label'));
     expect(maken).toBeGreaterThanOrEqual(0);
     expect(zetten).toBeGreaterThan(maken);
+  });
+
+  it('--eenmalig draait opruimen niet (#422)', async () => {
+    zetBeideUitvoerdersOp(bepaler());
+    const opruimFn = vi.fn();
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel, opruimFn });
+
+    // Bij een los item is de overhead niet de moeite; opruimen hoort alleen na een
+    // reeks of nacht.
+    expect(opruimFn).not.toHaveBeenCalled();
   });
 
   it('doet niets zonder --dry of --eenmalig', async () => {
@@ -1369,6 +1381,50 @@ describe('orkestreer --nacht', () => {
     expect(uitvoer.join('')).toMatch(/reeks klaar: 2 gedaan, 2 geslaagd, \$\d+\.\d\d/);
   });
 
+  it('--reeks draait opruimen na afloop (#422)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+    const opruimFn = vi.fn();
+
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 2 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+      opruimFn,
+    });
+
+    expect(opruimFn).toHaveBeenCalledOnce();
+  });
+
+  it('--nacht draait opruimen na afloop (#422)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+    const opruimFn = vi.fn();
+
+    await orkestreer({ nacht: true, werkplaatsWortel: wortel, paden, nu: NU, opruimFn });
+
+    expect(opruimFn).toHaveBeenCalledOnce();
+  });
+
+  it('een fout in opruimen verandert de reeks-uitkomst niet (#422)', async () => {
+    zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
+    const opruimFn = vi.fn(() => {
+      throw new Error('git fetch mislukt');
+    });
+
+    // De run slaagt ondanks de fout in opruimen.
+    await orkestreer({
+      reeks: { soort: 'aantal', aantal: 2 },
+      werkplaatsWortel: wortel,
+      paden,
+      nu: NU,
+      opruimFn,
+    });
+
+    expect(opruimFn).toHaveBeenCalledOnce();
+    // De fout wordt gelogd als waarschuwing.
+    expect(uitvoer.join('')).toContain('opruimen mislukt');
+  });
+
   it('stopt bij het dagmaximum, ook al staan er meer items in de rij', async () => {
     const { aanroepen } = zetBeideUitvoerdersOp(nachtBord(WACHTRIJ));
 
@@ -2075,5 +2131,41 @@ describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {
 
   it('geeft leeg terug zonder checks', () => {
     expect(ciSamenvatting([])).toBe('');
+  });
+});
+
+describe('veiligOpruimen (#422)', () => {
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('roept de meegegeven functie aan', () => {
+    const fn = vi.fn();
+
+    veiligOpruimen(fn);
+
+    expect(fn).toHaveBeenCalledOnce();
+  });
+
+  it('vangt een fout op en logt een waarschuwing', () => {
+    const fn = vi.fn(() => {
+      throw new Error('git fetch mislukt');
+    });
+
+    // Gooit niet — de fout wordt gevangen.
+    veiligOpruimen(fn);
+
+    expect(fn).toHaveBeenCalledOnce();
+    expect(uitvoer.join('')).toContain('opruimen mislukt: git fetch mislukt');
   });
 });
