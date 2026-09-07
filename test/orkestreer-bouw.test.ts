@@ -1694,4 +1694,39 @@ describe('beschrijfBouw (#298)', () => {
 
     expect(regel.uitkomst).toBe('afgekapt (30 min)');
   });
+
+  it('neemt wrijving uit de bouw-uitkomst mee in de RunRegel (#544)', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31, weigeringen: 5, geweigerd: ['mkdir', 'rm'] }),
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.weigeringen).toBe(5);
+    expect(regel.geweigerd).toEqual(['mkdir', 'rm']);
+  });
+
+  it('laat wrijvingsvelden weg bij nul weigeringen (#544)', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31 }),
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.weigeringen).toBeUndefined();
+    expect(regel.geweigerd).toBeUndefined();
+  });
+
+  it('neemt wrijving mee ook als er een review draaide (#544)', () => {
+    const resultaat: BouwAfResultaat = {
+      bouw: bouwUitkomst({ kosten: 2.09, beurten: 31, weigeringen: 3, geweigerd: ['mkdir'] }),
+      review: { afloop: 'klaar', sessie: 'review-1', weigeringen: 0, kosten: 1.12, beurten: 8 },
+    };
+
+    const regel = beschrijfBouw(resultaat);
+
+    expect(regel.weigeringen).toBe(3);
+    expect(regel.geweigerd).toEqual(['mkdir']);
+    expect(regel.uitsplitsing).toBeDefined();
+  });
 });
