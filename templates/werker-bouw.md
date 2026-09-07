@@ -42,6 +42,15 @@ Je antwoord is gestructureerd; proza eromheen wordt niet gelezen.
 - **Escalatie** (`uitkomst: "escalatie"`): met `vraag` en `advies`, beide concreet genoeg
   om met één zin op te antwoorden.
 
+### Wrijving
+
+Meld in het optionele `wrijving`-array wat je moeite of beurten kostte — een geweigerd
+gereedschap dat je nodig had, een ontbrekend bestand, een onduidelijke opdracht, een
+omweg die je moest nemen. Per item een `signaal` (wat er gebeurde) en een `suggestie`
+(wat het zou oplossen). Geen wrijving is een geldige uitkomst; laat het veld dan weg.
+Dit veld staat op beide varianten: ook een geëscaleerde run kan al wrijving ondervonden
+hebben.
+
 Loop vóór je antwoord de gesloten lijst uit de `onbemand-werken`-skill punt voor punt
 langs. Kwam je er één tegen die je stilzwijgend hebt opgelost, dan is dat alsnog een
 escalatie.
