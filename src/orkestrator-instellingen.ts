@@ -45,6 +45,8 @@ export interface OrkestratorPaden {
   readonly agentPad: string;
   /** De LaunchAgent-plist die de bouw-nacht aftrapt (#343). */
   readonly bouwAgentPad: string;
+  /** Persistent per-tool weigeringstellers voor auto-groei (#543). */
+  readonly tellersPad: string;
 }
 
 /**
@@ -68,6 +70,13 @@ export function standaardPaden(home?: string): OrkestratorPaden {
     logPad: path.join(wortel, 'Library', 'Logs', 'nl.factory.orkestreer.log'),
     agentPad: path.join(wortel, 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`),
     bouwAgentPad: path.join(wortel, 'Library', 'LaunchAgents', `${BOUW_LAUNCH_LABEL}.plist`),
+    tellersPad: path.join(
+      wortel,
+      'Library',
+      'Application Support',
+      'factory',
+      'wrijving-tellers.json',
+    ),
   };
 }
 

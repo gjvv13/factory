@@ -19,3 +19,10 @@ export interface AgentGrenzen {
  * `key:`- en `  - "waarde"`-patronen.
  */
 export declare function leesAgentGrenzen(naam: string): AgentGrenzen;
+/**
+ * Voegt een patroon toe aan `allowedTools` in het frontmatter van een agent-definitie.
+ *
+ * Een dubbele toevoeging is een no-op: als het patroon er al staat, wordt het bestand
+ * niet aangeraakt. Gooit bij een onbekend agent-bestand of ontbrekend frontmatter.
+ */
+export declare function voegToolToe(agent: string, patroon: string): void;

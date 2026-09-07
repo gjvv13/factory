@@ -1,4 +1,5 @@
 import { type BacklogItem } from '../board.js';
+import { type VerwerkteGroei } from '../wrijving-tellers.js';
 import { type RunRegel, type OrkestratorPaden } from '../orkestrator-instellingen.js';
 import { type ReeksContext } from '../reeks.js';
 import { type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
@@ -145,6 +146,23 @@ export declare function maakWrijvingSectie(werkerWrijving: ReadonlyArray<{
     readonly signaal: string;
     readonly suggestie: string;
 }> | undefined, logWeigeringen: readonly SessieWeigering[], uitkomst: BouwUitkomst): string | undefined;
+/**
+ * Verwerkt de auto-groei na een bouw-run: tellers bijwerken, en voor elk gereedschap
+ * dat de drempel bereikt én in de veilige klasse valt het patroon toevoegen aan de
+ * bouw-allowlist en een PR aanmaken in de factory-spiegel.
+ *
+ * Eén PR per groei-batch per run, niet per tool (besluit 3). Een label dat de drempel
+ * bereikt maar buiten de veilige klasse valt wordt overgeslagen zonder fout — de teller
+ * loopt door voor eventueel handmatig inzicht (#544).
+ */
+export declare function verwerkAutoGroei(geweigerd: readonly string[], paden: OrkestratorPaden, factorySpiegelPad: string, 
+/** Injecteerbaar voor tests: de git/gh-stappen overslaan en de agent kiezen. */
+opties?: {
+    readonly skipGit?: boolean;
+    readonly skipNotify?: boolean;
+    /** De agent waarvan de allowlist uitgebreid wordt; default: `AGENT_BOUWER`. */
+    readonly agent?: string;
+}): VerwerkteGroei[];
 /**
  * Verwerkt het antwoord op een bouw-escalatie: hervat de sessie met `draaiBouwer` en
  * draait het bouw-afrondingspad (review + inleveren). De logica zit hier en niet in

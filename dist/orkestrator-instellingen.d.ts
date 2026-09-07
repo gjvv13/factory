@@ -31,6 +31,8 @@ export interface OrkestratorPaden {
     readonly agentPad: string;
     /** De LaunchAgent-plist die de bouw-nacht aftrapt (#343). */
     readonly bouwAgentPad: string;
+    /** Persistent per-tool weigeringstellers voor auto-groei (#543). */
+    readonly tellersPad: string;
 }
 /**
  * De echte paden. `home` is er zodat een test met een tijdelijke map kan werken in
