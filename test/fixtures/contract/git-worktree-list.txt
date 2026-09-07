@@ -1,0 +1,16 @@
+worktree /Users/gjvv/Documents/Software/factory
+HEAD abc1234567890abcdef1234567890abcdef123456
+branch refs/heads/main
+
+worktree /Users/gjvv/OrkestratorWerk/factory-wt/42
+HEAD def4567890abcdef1234567890abcdef12345678
+branch refs/heads/slice/42-1
+
+worktree /Users/gjvv/OrkestratorWerk/factory-wt/99
+HEAD 1234567890abcdef1234567890abcdef12345678
+branch refs/heads/slice/99-2
+
+worktree /Users/gjvv/OrkestratorWerk/factory-wt/detached
+HEAD 9999567890abcdef1234567890abcdef12345678
+detached
+
