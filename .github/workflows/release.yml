@@ -172,6 +172,61 @@ jobs:
           GH_TOKEN="$RELEASE_PAT" gh pr merge "release/$v" --auto --merge --delete-branch \
             || echo "::warning::kon auto-merge niet inschakelen op de release-PR (tag $v staat er wel)."
 
+  # De globale factory-bin op de mini verversen bij een release (#505). De nacht-
+  # LaunchAgent doet dit al vóór elke run (orkestreer.ts:1467-1482), maar dat is
+  # pas om 04:00; een release overdag laat de bin anders achterlopen tot die nacht.
+  # Upgrade-only: een al even nieuwe (of nieuwere) versie wordt niet overschreven.
+  # Soft-fail: de tag is het primaire release-artefact; een mislukte install is een
+  # waarschuwing, geen harde fout — de nacht pikt het op.
+  #
+  # Draait op de mini (self-hosted runner): de globale bin staat daar. Geen
+  # setup-node nodig: Node 22 via nvm is al beschikbaar, net als bij het nacht-script.
+  #
+  # Bewust niet door een test gedekt: pure YAML/shell zonder eigen poort, consistent
+  # met de melding-job hieronder (release.yml, zie #195). Het bewijs dat de job werkt
+  # is een echte release.
+  globale-bin:
+    needs: release
+    if: ${{ needs.release.outputs.tag != '' }}
+    runs-on: [self-hosted, mini]
+    steps:
+      - name: Globale factory-bin verversen
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          versie="${TAG#v}"
+          # Upgrade-only: lees de globale versie, vergelijk per component.
+          # Zelfde semantiek als minstensVersie (integreer.ts:339) en het
+          # nacht-script (orkestreer.ts:1472), maar in shell.
+          globaal=$(node -e "
+            try {
+              const r = require('child_process')
+                .execSync('npm root -g', { encoding: 'utf8' }).trim();
+              const v = JSON.parse(require('fs')
+                .readFileSync(r + '/factory/package.json', 'utf8')).version;
+              console.log(v);
+            } catch {}
+          " 2>/dev/null || true)
+          if [ -n "$globaal" ]; then
+            # Exit 0 = globaal >= versie (overslaan), exit 1 = installeren.
+            if node -e "
+              const a=process.argv[1].split('.').map(Number);
+              const b=process.argv[2].split('.').map(Number);
+              for(let i=0;i<3;i++){
+                if((a[i]||0)>(b[i]||0))process.exit(0);
+                if((a[i]||0)<(b[i]||0))process.exit(1);
+              }
+            " "$globaal" "$versie" 2>/dev/null; then
+              echo "factory $globaal staat al globaal (>= $versie); install overgeslagen."
+              exit 0
+            fi
+          fi
+          if npm install -g "https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/$TAG"; then
+            echo "factory bijgewerkt naar $TAG"
+          else
+            echo "::warning::kon de globale factory niet bijwerken naar $TAG; de nacht pikt het op."
+          fi
+
   # Vangnet tegen een stílle overslag (#195): kon de release het board niet bijwerken, dan
   # hoort dat te staan waar ik toch al kijk — de ops-room — en niet alleen als een groene
   # regel in een log. Precies dat liet de kolom Uitrollen zes items diep vollopen.
