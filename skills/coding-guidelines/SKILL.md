@@ -3,11 +3,13 @@ name: coding-guidelines
 description: >-
   De coding guidelines van de software factory. Gebruik deze skill bij het
   schrijven, nakijken of herstructureren van code in een factory-applicatie (een
-  TypeScript-backend met een app/src-map, Fastify, Drizzle en Vitest). Trigger
-  op het toevoegen of wijzigen van een route, service, commando, kanaal, migratie,
-  client of test, op het bouwen van een slice, en op vragen als "waar hoort dit thuis",
-  "hoe test ik dit" of "klopt dit met onze afspraken". Pas de skill ook toe
-  zonder dat erom gevraagd wordt zodra er code voor de applicatie ontstaat.
+  TypeScript-backend met een app/src-map, Fastify, Drizzle en Vitest) of in de
+  factory-CLI zelf (TypeScript, src/-map, Vitest, zonder Fastify of Drizzle).
+  Trigger op het toevoegen of wijzigen van een route, service, commando, kanaal,
+  migratie, client of test, op het bouwen van een slice, en op vragen als "waar
+  hoort dit thuis", "hoe test ik dit" of "klopt dit met onze afspraken". Pas de
+  skill ook toe zonder dat erom gevraagd wordt zodra er code voor de applicatie
+  of de factory ontstaat.
 ---
 
 # Coding guidelines
@@ -127,6 +129,12 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
 - Faal hard bij een verkeerd geconfigureerde omgeving: half opstarten is erger
   dan niet opstarten.
 - Vang nooit een fout om hem stil te laten verdwijnen. Loggen en doorgooien mag.
+- Een controle die niet kón draaien is geen geslaagde controle. Geef "kon niet
+  controleren" een eigen, zichtbare uitkomst — nooit dezelfde als "niets
+  gevonden". In de onbemande pijplijn betekent zichtbaar: **beide kanalen** — een
+  ops-room melding (real-time signaal) én een item-escalatie naar de
+  chat/ochtendupdate (geborgde opvolging). De pijplijn hoeft niet te stoppen
+  (fail-open, #289), maar de storing moet hoorbaar zijn.
 - Kan de aanroeper er zinnig op reageren, dan is falen geen uitzondering maar een
   **resultaat**: een discriminated union (`{ ok: false, reden }` of een
   domeinspecifieke variant). Het return-type dwingt de aanroeper beide takken af te
@@ -273,10 +281,11 @@ over, nooit de volledige poort — die moet vóór de merge alsnog groen zijn.
       `promote <vorige tag>` níet terugdraait, dus splits een verandering in
       toevoegen-en-vullen nu, en het oude veld weghalen in een latere release —
       pas als niets het meer leest.
-- [ ] Kan het nieuwe gedrag falen, dan kun je achteraf zien dát het gebeurde: een
-      logregel op het punt waar de beslissing valt, met het id dat het inkomende
-      bericht of verzoek meedraagt. Een fout die alleen als stilte zichtbaar is,
-      kost op productie een veelvoud.
+- [ ] Kan het nieuwe gedrag falen, dan kun je achteraf zien dát het gebeurde — en
+      zou iemand het ook merken zonder ernaar te zoeken: een logregel op het punt
+      waar de beslissing valt, met het id dat het inkomende bericht of verzoek
+      meedraagt, en een actieve melding als de fout niet vanzelf opvalt. Een fout
+      die alleen als stilte zichtbaar is, kost op productie een veelvoud.
 - [ ] Wijkt het gedrag af van wat de documentatie van de app belooft, dan is die
       documentatie mee bijgewerkt.
 - [ ] Til je de factory naar een nieuwe versie, dan heb je `factory sync` gedraaid
