@@ -8,8 +8,19 @@ export function kop(tekst) {
 export function ok(tekst) {
     process.stdout.write(`\x1b[32m✓ ${tekst}\x1b[0m\n`);
 }
+/** Moduleteller voor waarschuwingen, zodat de eindregel kan beoordelen of "Alles groen" klopt. */
+let waarschuwingTeller = 0;
 export function waarschuwing(tekst) {
+    waarschuwingTeller += 1;
     process.stdout.write(`\x1b[33m! ${tekst}\x1b[0m\n`);
+}
+/** Hoeveel keer `waarschuwing()` is aangeroepen sinds de laatste reset. */
+export function aantalWaarschuwingen() {
+    return waarschuwingTeller;
+}
+/** Zet de waarschuwingsteller op nul. Bedoeld voor het begin van een verify-run en voor tests. */
+export function resetWaarschuwingen() {
+    waarschuwingTeller = 0;
 }
 export function fout(tekst) {
     process.stderr.write(`\x1b[31m✗ ${tekst}\x1b[0m\n`);

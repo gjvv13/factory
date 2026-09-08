@@ -149,13 +149,17 @@ ze los kan tonen. De e2e-server draait als apart proces en wordt via
 naar `coverage/e2e/` (`factory/e2e-coverage`).
 
 **De afhankelijkheden-audit** draait als laatste stap van de volledige verify:
-`pnpm audit`, geteld vanaf `auditNiveau` (default `high`). `audit` bepaalt het
-gedrag — `waarschuw` (default) meldt geel en houdt de poort groen, `blokkeer` laat
-verify falen, `uit` slaat de stap over. Advies-eerst, net als de ratchet: een
-advisory in een transitieve dev-dependency mag geen release gijzelen zolang je hem
-nog niet beoordeeld hebt. De stap onderscheidt bewust "niets gevonden" van "kon
-niet draaien": zonder netwerk waarschuwt hij en toetst hij niets, in plaats van
-groen te kleuren of de poort te laten omvallen op een DNS-blip.
+`pnpm audit --prod`, geteld vanaf `auditNiveau` (default `high`). `--prod`
+beperkt de audit tot productie-afhankelijkheden: een advisory in een transitieve
+dev-dependency blokkeert een release niet en hoort dus ook niet als bevinding
+gepresenteerd te worden (#589). `audit` bepaalt het gedrag voor wat er wél
+gerapporteerd wordt — `waarschuw` (default) meldt geel en houdt de poort groen,
+`blokkeer` laat verify falen, `uit` slaat de stap over. De stap onderscheidt
+bewust "niets gevonden" van "kon niet draaien": zonder netwerk waarschuwt hij en
+toetst hij niets, in plaats van groen te kleuren of de poort te laten omvallen op
+een DNS-blip. De poort sluit af met **Alles groen** alleen als er geen enkele
+waarschuwing viel; viel er één (een advisory, een overgeslagen stap), dan met
+**Klaar met waarschuwingen** — groen betekent groen (#589).
 
 Zo staat de poort bij het **release-moment**: `factory release` draait de volledige
 verify, dus er ontstaat geen tag onder de drempel, en `factory promote prod` rolt

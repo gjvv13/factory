@@ -7,7 +7,7 @@ import { leesDekkingsConfig } from '../dekking-config.js';
 import { berekenDiffDekking, parseDiffRegels } from '../diff-dekking.js';
 import { toetsConfigSleutels } from '../config-sleutels.js';
 import { toetsFlagVerloop } from '../flag-verloop.js';
-import { draaiScript, kop, ok, run, waarschuwing, GebruikersFout, OmgevingsFout, } from '../shell.js';
+import { aantalWaarschuwingen, draaiScript, kop, ok, resetWaarschuwingen, run, waarschuwing, GebruikersFout, OmgevingsFout, } from '../shell.js';
 /**
  * De vaste volgorde van de kwaliteitspoort. Een stap die de repo niet heeft
  * wordt overgeslagen, zodat dezelfde poort werkt in de factory (die geen
@@ -274,7 +274,7 @@ function toetsAfhankelijkheden(repoDir, config) {
     kop('Afhankelijkheden (pnpm audit)');
     // `pnpm audit` sluit af met een niet-nul code zodra het iets vindt, dus we
     // beoordelen de uitvoer en niet de exitcode.
-    const uitkomst = run('pnpm', ['audit', '--json'], {
+    const uitkomst = run('pnpm', ['audit', '--prod', '--json'], {
         cwd: repoDir,
         capture: true,
         toleranter: true,
@@ -303,6 +303,7 @@ export function verify(opties = {}) {
     const repoDir = opties.cwd ?? process.cwd();
     const aanwezig = beschikbareScripts(repoDir);
     const start = Date.now();
+    resetWaarschuwingen();
     // Coverage draait alleen bij een volledige poort; --snel en --pre-commit slaan
     // het over zodat lokaal en de pre-commit hook snel blijven.
     const metCoverage = opties.snel !== true && opties.preCommit !== true;
@@ -393,11 +394,19 @@ export function verify(opties = {}) {
         toetsAfhankelijkheden(repoDir, appConfig);
         toetsConfigSleutels(repoDir, appConfig, aanwezig);
     }
+    // Snapshot de kwaliteitswaarschuwingen vóór de informationele "overgeslagen"-meldingen,
+    // zodat die bij --snel niet meetellen voor de eindregel (#589).
+    const kwaliteitsWaarschuwingen = aantalWaarschuwingen();
     for (const titel of overgeslagen) {
         waarschuwing(`${titel} overgeslagen (--snel)`);
     }
     const seconden = Math.round((Date.now() - start) / 1000);
     process.stdout.write('\n');
-    ok(`Alles groen in ${String(seconden)}s`);
+    if (kwaliteitsWaarschuwingen === 0) {
+        ok(`Alles groen in ${String(seconden)}s`);
+    }
+    else {
+        waarschuwing(`Klaar met waarschuwingen in ${String(seconden)}s`);
+    }
 }
 //# sourceMappingURL=verify.js.map
