@@ -109,22 +109,47 @@ export function maakGateComment(verdict) {
  * gate graceful: waarschuwen en doorgaan. Alleen een geldig verdict met bevindingen
  * kan een blokkade opleveren, en dat uitsluitend bij `blokkeer`.
  */
-export function draaiCodeReview(instelling, repoDir) {
+/**
+ * Stuurt een ops-room-melding via curl POST (#586). Best-effort: een
+ * netwerkfout waarschuwt maar blokkeert niets.
+ */
+function stuurOpsMelding(config, tekst) {
+    const args = [
+        '-s',
+        '-X',
+        'POST',
+        '-H',
+        'Content-Type: application/json',
+        ...(config.token !== undefined ? ['-H', `Authorization: Bearer ${config.token}`] : []),
+        '-d',
+        JSON.stringify({ text: tekst }),
+        config.url,
+    ];
+    const result = run('curl', args, { capture: true, toleranter: true });
+    if (result.code !== 0) {
+        waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
+    }
+}
+export function draaiCodeReview(instelling, repoDir, opsMelding) {
     kop('Code-review');
     if (instelling === 'uit') {
         ok('code-review overgeslagen (instelling: uit)');
-        return { doorgaan: true };
+        return { doorgaan: true, reden: 'uit' };
     }
     // Pre-flight: claude beschikbaar?
     if (!claudeBeschikbaar()) {
         waarschuwing('claude niet gevonden op het pad — code-review overgeslagen.');
-        return { doorgaan: true, melding: 'claude niet beschikbaar' };
+        if (opsMelding !== undefined) {
+            const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
+            stuurOpsMelding(opsMelding, `⚠ Code-review-gate kon niet draaien${app}: claude niet beschikbaar.`);
+        }
+        return { doorgaan: true, reden: 'niet-beschikbaar', melding: 'claude niet beschikbaar' };
     }
     // Pre-flight: diff niet leeg?
     const diff = leesDiff(repoDir);
     if (diff === undefined) {
         ok('geen diff ten opzichte van origin/main — niets te reviewen.');
-        return { doorgaan: true };
+        return { doorgaan: true, reden: 'geen-diff' };
     }
     const prompt = reviewPrompt(diff);
     const uitkomst = run('claude', [
@@ -141,20 +166,22 @@ export function draaiCodeReview(instelling, repoDir) {
         'Bash(git diff:*)',
         'Bash(git log:*)',
         'Bash(git show:*)',
-        '--model',
-        'claude-sonnet-4-20250514',
         '--effort',
         'medium',
     ], { cwd: repoDir, capture: true, toleranter: true, timeoutMs: REVIEW_TIMEOUT_MS });
     const verdict = parseReviewUitvoer(uitkomst.stdout);
     if (verdict === undefined) {
         waarschuwing('code-review gaf geen bruikbaar verdict — doorgaan.');
-        return { doorgaan: true, melding: 'geen bruikbaar verdict' };
+        if (opsMelding !== undefined) {
+            const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
+            stuurOpsMelding(opsMelding, `⚠ Code-review-gate kon niet draaien${app}: geen bruikbaar verdict.`);
+        }
+        return { doorgaan: true, reden: 'geen-verdict', melding: 'geen bruikbaar verdict' };
     }
     const aantalBevindingen = verdict.bevindingen.length;
     if (aantalBevindingen === 0) {
         ok('code-review: geen bevindingen.');
-        return { doorgaan: true, verdict };
+        return { doorgaan: true, reden: 'schoon', verdict };
     }
     // Er zijn bevindingen. Toon ze.
     const ernstLabels = verdict.bevindingen.map((b) => b.ernst).join(', ');
@@ -167,6 +194,7 @@ export function draaiCodeReview(instelling, repoDir) {
         }
         return {
             doorgaan: false,
+            reden: 'bevindingen',
             verdict,
             melding: samenvatting,
         };
@@ -176,6 +204,6 @@ export function draaiCodeReview(instelling, repoDir) {
     for (const b of verdict.bevindingen) {
         process.stdout.write(`  ${b.bestand}${b.regel === undefined ? '' : `:${String(b.regel)}`} [${b.ernst}] ${b.bevinding}\n`);
     }
-    return { doorgaan: true, verdict };
+    return { doorgaan: true, reden: 'bevindingen', verdict };
 }
 //# sourceMappingURL=code-review.js.map

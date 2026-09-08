@@ -723,7 +723,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       eenmalig: true,
       werkplaatsWortel: wortel,
       paden,
-      leverIn: (opties) => geleverd.push(opties),
+      leverIn: (opties) => {
+        geleverd.push(opties);
+        return {};
+      },
     });
     return { aanroepen, geleverd };
   }
@@ -813,7 +816,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       reeks: { soort: 'aantal', aantal: 2 },
       werkplaatsWortel: wortel,
       paden,
-      leverIn: (opties) => geleverd.push(opties),
+      leverIn: (opties) => {
+        geleverd.push(opties);
+        return {};
+      },
     });
 
     // Twee runs: elk item krijgt een bouw-run én een review-run, dus vier claude-aanroepen.
@@ -832,7 +838,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       reeks: { soort: 'lijst', issues: [126, 91] },
       werkplaatsWortel: wortel,
       paden,
-      leverIn: () => undefined,
+      leverIn: () => ({}),
     });
 
     // De kop van de rij is #91 (ouder), maar gevraagd is eerst #126: de lijst bepaalt de
@@ -855,7 +861,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       reeks: { soort: 'lijst', issues: [149, 126] },
       werkplaatsWortel: wortel,
       paden,
-      leverIn: () => undefined,
+      leverIn: () => ({}),
     });
 
     // Eén typefout of één geblokkeerd item mag een reeks van vier niet kosten — maar
@@ -876,7 +882,7 @@ describe('orkestreer --soort bouw --eenmalig', () => {
         reeks: { soort: 'lijst', issues: [126, 99999] },
         werkplaatsWortel: wortel,
         paden,
-        leverIn: () => undefined,
+        leverIn: () => ({}),
       }),
     ).rejects.toThrow(/#99999/);
     expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(0);
@@ -1203,7 +1209,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       eenmalig: true,
       werkplaatsWortel: wortel,
       paden,
-      leverIn: (opties) => geleverd.push(opties),
+      leverIn: (opties) => {
+        geleverd.push(opties);
+        return {};
+      },
     });
 
     // De bouw is ingeleverd ondanks de review-startfout.
@@ -1286,7 +1295,10 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       issue: 106,
       werkplaatsWortel: wortel,
       paden,
-      leverIn: (opties) => geleverd.push(opties),
+      leverIn: (opties) => {
+        geleverd.push(opties);
+        return {};
+      },
     });
 
     // Bij een escalatie wordt er niet ingeleverd, maar de bron-map moet wel opgeruimd

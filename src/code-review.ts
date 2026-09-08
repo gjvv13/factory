@@ -47,9 +47,28 @@ export function leesDiff(repoDir: string): string | undefined {
 /** Timeout van de review-run in milliseconden: 5 minuten. */
 const REVIEW_TIMEOUT_MS = 5 * 60 * 1_000;
 
+/**
+ * Discriminant die de uitkomst van de review-gate onderscheidt (#586).
+ *
+ * Elke uitkomst heeft een eigen waarde, zodat "kon niet reviewen" en "niets
+ * gevonden" nooit dezelfde tak zijn — de storing die dit type voorkomt.
+ */
+export type ReviewReden =
+  'uit' | 'geen-diff' | 'niet-beschikbaar' | 'geen-verdict' | 'schoon' | 'bevindingen';
+
+/** Configuratie voor de ops-room-melding bij gate-falen (#586). */
+export interface OpsMeldingConfig {
+  readonly url: string;
+  readonly token?: string;
+  /** App-naam voor de meldingtekst. */
+  readonly app?: string;
+}
+
 export interface ReviewGateResultaat {
   /** Of de gate de inlevering laat doorgaan. */
   readonly doorgaan: boolean;
+  /** Discriminant: waarom dit resultaat (#586). */
+  readonly reden: ReviewReden;
   /** Het verdict als de review slaagde; undefined bij een crash of skip. */
   readonly verdict?: ReviewVerdict;
   /** Eventuele waarschuwing of fout voor de gebruiker. */
@@ -134,28 +153,58 @@ export type CodeReviewInstelling = 'uit' | 'waarschuw' | 'blokkeer';
  * gate graceful: waarschuwen en doorgaan. Alleen een geldig verdict met bevindingen
  * kan een blokkade opleveren, en dat uitsluitend bij `blokkeer`.
  */
+/**
+ * Stuurt een ops-room-melding via curl POST (#586). Best-effort: een
+ * netwerkfout waarschuwt maar blokkeert niets.
+ */
+function stuurOpsMelding(config: OpsMeldingConfig, tekst: string): void {
+  const args = [
+    '-s',
+    '-X',
+    'POST',
+    '-H',
+    'Content-Type: application/json',
+    ...(config.token !== undefined ? ['-H', `Authorization: Bearer ${config.token}`] : []),
+    '-d',
+    JSON.stringify({ text: tekst }),
+    config.url,
+  ];
+  const result = run('curl', args, { capture: true, toleranter: true });
+  if (result.code !== 0) {
+    waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
+  }
+}
+
 export function draaiCodeReview(
   instelling: CodeReviewInstelling,
   repoDir: string,
+  opsMelding?: OpsMeldingConfig,
 ): ReviewGateResultaat {
   kop('Code-review');
 
   if (instelling === 'uit') {
     ok('code-review overgeslagen (instelling: uit)');
-    return { doorgaan: true };
+    return { doorgaan: true, reden: 'uit' };
   }
 
   // Pre-flight: claude beschikbaar?
   if (!claudeBeschikbaar()) {
     waarschuwing('claude niet gevonden op het pad — code-review overgeslagen.');
-    return { doorgaan: true, melding: 'claude niet beschikbaar' };
+    if (opsMelding !== undefined) {
+      const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
+      stuurOpsMelding(
+        opsMelding,
+        `⚠ Code-review-gate kon niet draaien${app}: claude niet beschikbaar.`,
+      );
+    }
+    return { doorgaan: true, reden: 'niet-beschikbaar', melding: 'claude niet beschikbaar' };
   }
 
   // Pre-flight: diff niet leeg?
   const diff = leesDiff(repoDir);
   if (diff === undefined) {
     ok('geen diff ten opzichte van origin/main — niets te reviewen.');
-    return { doorgaan: true };
+    return { doorgaan: true, reden: 'geen-diff' };
   }
 
   const prompt = reviewPrompt(diff);
@@ -175,8 +224,6 @@ export function draaiCodeReview(
       'Bash(git diff:*)',
       'Bash(git log:*)',
       'Bash(git show:*)',
-      '--model',
-      'claude-sonnet-4-20250514',
       '--effort',
       'medium',
     ],
@@ -186,13 +233,20 @@ export function draaiCodeReview(
   const verdict = parseReviewUitvoer(uitkomst.stdout);
   if (verdict === undefined) {
     waarschuwing('code-review gaf geen bruikbaar verdict — doorgaan.');
-    return { doorgaan: true, melding: 'geen bruikbaar verdict' };
+    if (opsMelding !== undefined) {
+      const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
+      stuurOpsMelding(
+        opsMelding,
+        `⚠ Code-review-gate kon niet draaien${app}: geen bruikbaar verdict.`,
+      );
+    }
+    return { doorgaan: true, reden: 'geen-verdict', melding: 'geen bruikbaar verdict' };
   }
 
   const aantalBevindingen = verdict.bevindingen.length;
   if (aantalBevindingen === 0) {
     ok('code-review: geen bevindingen.');
-    return { doorgaan: true, verdict };
+    return { doorgaan: true, reden: 'schoon', verdict };
   }
 
   // Er zijn bevindingen. Toon ze.
@@ -209,6 +263,7 @@ export function draaiCodeReview(
     }
     return {
       doorgaan: false,
+      reden: 'bevindingen',
       verdict,
       melding: samenvatting,
     };
@@ -221,5 +276,5 @@ export function draaiCodeReview(
       `  ${b.bestand}${b.regel === undefined ? '' : `:${String(b.regel)}`} [${b.ernst}] ${b.bevinding}\n`,
     );
   }
-  return { doorgaan: true, verdict };
+  return { doorgaan: true, reden: 'bevindingen', verdict };
 }

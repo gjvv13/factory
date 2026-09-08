@@ -6,7 +6,9 @@ import {
   draaiCodeReview,
   maakGateComment,
   type CodeReviewInstelling,
+  type OpsMeldingConfig,
   type ReviewGateResultaat,
+  type ReviewReden,
 } from '../code-review.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
@@ -64,6 +66,12 @@ export interface InleverenOpties {
    * `factory.json`. Escape hatch voor situaties waar de review niet gewenst is.
    */
   readonly geenReview?: boolean;
+  /**
+   * Ops-room-meldingsconfiguratie (#586). Wordt doorgegeven aan de code-review-gate,
+   * die bij gate-falen een melding stuurt. Zonder config (attended gebruik) stuurt de
+   * gate niets.
+   */
+  readonly opsMelding?: OpsMeldingConfig;
   /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
   readonly cwd?: string;
   /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
@@ -76,6 +84,16 @@ export interface InleverenOpties {
  * `orkestreer-bouw` importeert `inleveren`, dus de omgekeerde richting mag niet.
  */
 const FASTLANE_LABEL = 'fastlane';
+
+/**
+ * Het resultaat van `inleveren()` (#586). Geeft de code-review-reden terug zodat
+ * de orkestrator onderscheid kan maken tussen "niets gevonden" en "kon niet
+ * reviewen" en de juiste kanalen kan bedienen (PR-comment, ops-room).
+ */
+export interface InleverenResultaat {
+  /** De reden-discriminant van de code-review-gate, of undefined als de review niet draaide. */
+  readonly reviewReden?: ReviewReden;
+}
 
 /** Committeert een gewijzigd bestand met een korte melding; slaat over als het niet wijzigde. */
 function commitAlsGewijzigd(repoDir: string, bestand: string, melding: string): boolean {
@@ -128,7 +146,7 @@ function bestaandePr(repoDir: string, branch: string): PrStatus | undefined {
  * queue integreert branches daarna serieel en conflictvrij naar main, dus de sessie
  * kan meteen aan de volgende slice beginnen.
  */
-export function inleveren(opties: InleverenOpties = {}): void {
+export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
   const repoDir = opties.cwd ?? process.cwd();
 
   const branch = uitvoerVan('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoDir);
@@ -197,7 +215,7 @@ export function inleveren(opties: InleverenOpties = {}): void {
     const appDir = zoekAppDir(repoDir);
     const reviewConfig = appDir === undefined ? undefined : leesAppConfig(appDir);
     const instelling: CodeReviewInstelling = reviewConfig?.codeReview ?? 'waarschuw';
-    reviewVerdict = draaiCodeReview(instelling, repoDir);
+    reviewVerdict = draaiCodeReview(instelling, repoDir, opties.opsMelding);
     if (!reviewVerdict.doorgaan) {
       throw new GebruikersFout(
         `Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
@@ -350,6 +368,8 @@ export function inleveren(opties: InleverenOpties = {}): void {
       process.stdout.write(`Je stond in ${werkplek}; ga verder in ${wortel}.\n`);
     }
   }
+
+  return reviewVerdict?.reden !== undefined ? { reviewReden: reviewVerdict.reden } : {};
 }
 
 /**
