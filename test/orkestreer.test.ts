@@ -34,8 +34,9 @@ import {
   TOKEN_SLEUTEL,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
-import { herstelAsyncUitvoerder, herstelUitvoerder } from '../src/shell.js';
+import { herstelAsyncUitvoerder, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
+  maakUitvoerderOpnemer,
   zetBeideUitvoerdersOp,
   zetBoardOmgeving,
   type ProcesAanroep,
@@ -2313,7 +2314,7 @@ describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {
   });
 });
 
-describe('veiligOpruimen (#422)', () => {
+describe('veiligOpruimen (#422, #588)', () => {
   let uitvoer: string[];
 
   beforeEach(() => {
@@ -2325,6 +2326,7 @@ describe('veiligOpruimen (#422)', () => {
   });
 
   afterEach(() => {
+    herstelUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -2346,5 +2348,80 @@ describe('veiligOpruimen (#422)', () => {
 
     expect(fn).toHaveBeenCalledOnce();
     expect(uitvoer.join('')).toContain('opruimen mislukt: git fetch mislukt');
+  });
+
+  it('zonder context alleen waarschuwing — geen schrijfLog of melding (#588)', () => {
+    const fn = vi.fn(() => {
+      throw new Error('onleesbare map');
+    });
+
+    veiligOpruimen(fn);
+
+    // Alleen de waarschuwing; geen curl-aanroep of log-schrijfactie.
+    expect(uitvoer.join('')).toContain('opruimen mislukt: onleesbare map');
+    // Geen ops-melding-waarschuwing (dat komt alleen bij context zonder URL).
+    expect(uitvoer.join('')).not.toContain('ops-melding');
+  });
+
+  it('met context en fout: schrijft naar runlog en stuurt ops-melding (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'veilig-opruim-'));
+    const paden = standaardPaden(home);
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    const fn = vi.fn(() => {
+      throw new Error('fetch faalde');
+    });
+
+    veiligOpruimen(fn, {
+      paden,
+      repoPad: '/spiegel/factory',
+      notifyUrl: 'https://ops.example.com/notify',
+      notifyToken: 'geheim',
+    });
+
+    // (a) schrijfLog: het logbestand bevat de WARNING.
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain('WARNING opruimen mislukt: fetch faalde');
+
+    // (b) ops-melding: curl is aangeroepen.
+    const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
+    expect(curlAanroepen).toHaveLength(1);
+    expect(curlAanroepen[0]?.argumenten).toContain('https://ops.example.com/notify');
+    expect(curlAanroepen[0]?.argumenten.join(' ')).toContain('Bearer geheim');
+    // De body bevat het foutbericht.
+    const bodyArg = curlAanroepen[0]?.argumenten[curlAanroepen[0].argumenten.indexOf('-d') + 1];
+    expect(bodyArg).toContain('fetch faalde');
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('met context zonder notifyUrl: waarschuwt over ontbrekende URL (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'veilig-opruim-'));
+    const paden = standaardPaden(home);
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    const fn = vi.fn(() => {
+      throw new Error('onleesbaar');
+    });
+
+    veiligOpruimen(fn, { paden, repoPad: '/spiegel/factory' });
+
+    // Runlog is geschreven.
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain('WARNING opruimen mislukt: onleesbaar');
+
+    // Geen curl, maar wel een waarschuwing over de ontbrekende URL.
+    const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
+    expect(curlAanroepen).toHaveLength(0);
+    expect(uitvoer.join('')).toContain('ops-melding overgeslagen');
+    expect(uitvoer.join('')).toContain('DEPLOY_NOTIFY_URL');
+
+    rmSync(home, { recursive: true, force: true });
   });
 });

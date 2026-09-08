@@ -401,7 +401,18 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
           beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
         }),
       );
-      veiligOpruimen(opties.opruimFn);
+      veiligOpruimen(
+        opties.opruimFn ??
+          (() => {
+            opruimen({ repoPad: cwd });
+          }),
+        {
+          paden,
+          repoPad: cwd,
+          notifyUrl: instellingen.notifyUrl,
+          notifyToken: instellingen.notifyToken,
+        },
+      );
     } finally {
       geefLockVrij();
     }
@@ -502,16 +513,62 @@ function beschrijfRun(uitkomst: RunUitkomst): RunRegel {
 }
 
 /**
+ * Context voor `veiligOpruimen`: bij een fout meldt hij via beide kanalen
+ * (schrijfLog + ops-room) in plaats van alleen een waarschuwing (#588).
+ */
+export interface OpruimContext {
+  /** Het repo-pad dat aan `opruimen` was meegegeven — voor de logmelding. */
+  readonly repoPad?: string | undefined;
+  readonly paden: OrkestratorPaden;
+  readonly notifyUrl?: string | undefined;
+  readonly notifyToken?: string | undefined;
+}
+
+/**
  * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
+ *
+ * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
+ * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
  */
-export function veiligOpruimen(fn: () => void = opruimen): void {
+export function veiligOpruimen(fn: () => void = opruimen, context?: OpruimContext): void {
   try {
     fn();
   } catch (fout: unknown) {
     const bericht = fout instanceof Error ? fout.message : String(fout);
     waarschuwing(`opruimen mislukt: ${bericht}`);
+
+    if (context !== undefined) {
+      // Kanaal 2: runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
+      schrijfLog(
+        context.paden,
+        `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt: ${bericht}`,
+      );
+
+      // Kanaal 1: ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
+      if (context.notifyUrl !== undefined) {
+        const args = [
+          '-s',
+          '-X',
+          'POST',
+          '-H',
+          'Content-Type: application/json',
+          ...(context.notifyToken !== undefined
+            ? ['-H', `Authorization: Bearer ${context.notifyToken}`]
+            : []),
+          '-d',
+          JSON.stringify({ text: `⚠️ opruimen mislukt: ${bericht}` }),
+          context.notifyUrl,
+        ];
+        const result = run('curl', args, { capture: true, toleranter: true });
+        if (result.code !== 0) {
+          waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
+        }
+      } else {
+        waarschuwing('ops-melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
+      }
+    }
   }
 }
 
@@ -592,7 +649,18 @@ async function draaiNacht(
     } else if (uitkomst.einde === 'niets-nieuws') {
       ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
     }
-    veiligOpruimen(opruimFn);
+    veiligOpruimen(
+      opruimFn ??
+        (() => {
+          opruimen({ repoPad: cwd });
+        }),
+      {
+        paden,
+        repoPad: cwd,
+        notifyUrl: instellingen.notifyUrl,
+        notifyToken: instellingen.notifyToken,
+      },
+    );
   } finally {
     geefLockVrij();
   }

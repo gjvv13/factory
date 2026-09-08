@@ -254,7 +254,15 @@ export async function orkestreer(opties = {}) {
                 beschrijf: beschrijfRun,
                 beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
             }));
-            veiligOpruimen(opties.opruimFn);
+            veiligOpruimen(opties.opruimFn ??
+                (() => {
+                    opruimen({ repoPad: cwd });
+                }), {
+                paden,
+                repoPad: cwd,
+                notifyUrl: instellingen.notifyUrl,
+                notifyToken: instellingen.notifyToken,
+            });
         }
         finally {
             geefLockVrij();
@@ -337,14 +345,44 @@ function beschrijfRun(uitkomst) {
  * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
+ *
+ * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
+ * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
  */
-export function veiligOpruimen(fn = opruimen) {
+export function veiligOpruimen(fn = opruimen, context) {
     try {
         fn();
     }
     catch (fout) {
         const bericht = fout instanceof Error ? fout.message : String(fout);
         waarschuwing(`opruimen mislukt: ${bericht}`);
+        if (context !== undefined) {
+            // Kanaal 2: runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
+            schrijfLog(context.paden, `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt: ${bericht}`);
+            // Kanaal 1: ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
+            if (context.notifyUrl !== undefined) {
+                const args = [
+                    '-s',
+                    '-X',
+                    'POST',
+                    '-H',
+                    'Content-Type: application/json',
+                    ...(context.notifyToken !== undefined
+                        ? ['-H', `Authorization: Bearer ${context.notifyToken}`]
+                        : []),
+                    '-d',
+                    JSON.stringify({ text: `⚠️ opruimen mislukt: ${bericht}` }),
+                    context.notifyUrl,
+                ];
+                const result = run('curl', args, { capture: true, toleranter: true });
+                if (result.code !== 0) {
+                    waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
+                }
+            }
+            else {
+                waarschuwing('ops-melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
+            }
+        }
     }
 }
 /**
@@ -414,7 +452,15 @@ async function draaiNacht(cwd, wortel, paden, nu, opruimFn) {
         else if (uitkomst.einde === 'niets-nieuws') {
             ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
         }
-        veiligOpruimen(opruimFn);
+        veiligOpruimen(opruimFn ??
+            (() => {
+                opruimen({ repoPad: cwd });
+            }), {
+            paden,
+            repoPad: cwd,
+            notifyUrl: instellingen.notifyUrl,
+            notifyToken: instellingen.notifyToken,
+        });
     }
     finally {
         geefLockVrij();
