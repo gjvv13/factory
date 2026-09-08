@@ -4,7 +4,8 @@ import { type RunRegel, type OrkestratorPaden } from '../orkestrator-instellinge
 import { type ReeksContext } from '../reeks.js';
 import { type BouwUitkomst, type ReviewUitkomst } from '../werker.js';
 import { type AntwoordOpties, type Escalatie } from './orkestreer.js';
-import { type InleverenOpties } from './inleveren.js';
+import type { OpsMeldingConfig } from '../code-review.js';
+import { type InleverenOpties, type InleverenResultaat } from './inleveren.js';
 import { type SessieWeigering } from '../sessielog.js';
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
@@ -97,7 +98,7 @@ export interface BouwOpties {
      * Hoe er ingeleverd wordt. Geen CLI-vlag: `inleveren` draait de volledige poort, en
      * een test hoort prettier, eslint en vitest niet vanuit zichzélf te starten.
      */
-    readonly leverIn?: (opties: InleverenOpties) => void;
+    readonly leverIn?: (opties: InleverenOpties) => InleverenResultaat;
     /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
     readonly nu?: Date;
 }
@@ -132,7 +133,7 @@ export declare function reviewPrompt(item: Bouwitem, werkmap: string, factoryMap
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => void, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number, baan?: BouwBaan): Promise<BouwAfResultaat>;
+export declare function bouwAf(item: Bouwitem, cwd: string, wortel: string, budgetUsd: number, reviewBudgetUsd: number, effort: string, leverIn: (opties: InleverenOpties) => InleverenResultaat, apps?: readonly string[], reeks?: ReeksContext, env?: NodeJS.ProcessEnv, timeoutMs?: number, baan?: BouwBaan, opsMelding?: OpsMeldingConfig): Promise<BouwAfResultaat>;
 /**
  * Bouwt de **Wrijving**-sectie in het bouw-comment (#542).
  *

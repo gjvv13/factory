@@ -116,7 +116,7 @@ export function inleveren(opties = {}) {
         const appDir = zoekAppDir(repoDir);
         const reviewConfig = appDir === undefined ? undefined : leesAppConfig(appDir);
         const instelling = reviewConfig?.codeReview ?? 'waarschuw';
-        reviewVerdict = draaiCodeReview(instelling, repoDir);
+        reviewVerdict = draaiCodeReview(instelling, repoDir, opties.opsMelding);
         if (!reviewVerdict.doorgaan) {
             throw new GebruikersFout(`Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
                 '  Los de bevindingen op of lever in met --geen-review.');
@@ -245,6 +245,7 @@ export function inleveren(opties = {}) {
             process.stdout.write(`Je stond in ${werkplek}; ga verder in ${wortel}.\n`);
         }
     }
+    return reviewVerdict?.reden !== undefined ? { reviewReden: reviewVerdict.reden } : {};
 }
 /**
  * De bestanden waarop deze branch botst met `origin/main`, of undefined als het schoon

@@ -11,9 +11,25 @@ export declare function claudeBeschikbaar(): boolean;
  * niet te laten draaien, niet om halverwege te crashen.
  */
 export declare function leesDiff(repoDir: string): string | undefined;
+/**
+ * Discriminant die de uitkomst van de review-gate onderscheidt (#586).
+ *
+ * Elke uitkomst heeft een eigen waarde, zodat "kon niet reviewen" en "niets
+ * gevonden" nooit dezelfde tak zijn — de storing die dit type voorkomt.
+ */
+export type ReviewReden = 'uit' | 'geen-diff' | 'niet-beschikbaar' | 'geen-verdict' | 'schoon' | 'bevindingen';
+/** Configuratie voor de ops-room-melding bij gate-falen (#586). */
+export interface OpsMeldingConfig {
+    readonly url: string;
+    readonly token?: string;
+    /** App-naam voor de meldingtekst. */
+    readonly app?: string;
+}
 export interface ReviewGateResultaat {
     /** Of de gate de inlevering laat doorgaan. */
     readonly doorgaan: boolean;
+    /** Discriminant: waarom dit resultaat (#586). */
+    readonly reden: ReviewReden;
     /** Het verdict als de review slaagde; undefined bij een crash of skip. */
     readonly verdict?: ReviewVerdict;
     /** Eventuele waarschuwing of fout voor de gebruiker. */
@@ -34,16 +50,4 @@ export declare function parseReviewUitvoer(stdout: string): ReviewVerdict | unde
  */
 export declare function maakGateComment(verdict: ReviewVerdict): string;
 export type CodeReviewInstelling = 'uit' | 'waarschuw' | 'blokkeer';
-/**
- * Draait de AI-code-review-gate op de huidige branch.
- *
- * Stappen:
- * 1. Pre-flight: controleer of `claude` op het pad staat en of de diff niet leeg is.
- * 2. Draai `claude -p` met het review-prompt en `--json-schema`.
- * 3. Parse het verdict en beslis op basis van de instelling (waarschuw/blokkeer).
- *
- * Bij elke onvoorziene fout (claude niet beschikbaar, crash, timeout) degradeert de
- * gate graceful: waarschuwen en doorgaan. Alleen een geldig verdict met bevindingen
- * kan een blokkade opleveren, en dat uitsluitend bij `blokkeer`.
- */
-export declare function draaiCodeReview(instelling: CodeReviewInstelling, repoDir: string): ReviewGateResultaat;
+export declare function draaiCodeReview(instelling: CodeReviewInstelling, repoDir: string, opsMelding?: OpsMeldingConfig): ReviewGateResultaat;

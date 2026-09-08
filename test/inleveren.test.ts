@@ -1053,6 +1053,39 @@ describe('inleveren', () => {
       expect(body).toContain('Code-review gate (inleveren)');
     });
 
+    it('retourneert InleverenResultaat met reviewReden (#586)', () => {
+      process.chdir(maakRepo());
+      stelUitvoerderIn(maakUitvoerderOpnemer(metReview(REVIEW_SCHOON)).uitvoerder);
+
+      const resultaat = inleveren();
+
+      expect(resultaat).toBeDefined();
+      expect(resultaat.reviewReden).toBe('schoon');
+    });
+
+    it('retourneert InleverenResultaat zonder reviewReden bij --geen-review (#586)', () => {
+      process.chdir(maakRepo());
+      stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+
+      const resultaat = inleveren({ geenReview: true });
+
+      expect(resultaat).toBeDefined();
+      expect(resultaat.reviewReden).toBeUndefined();
+    });
+
+    it('geeft opsMelding door aan draaiCodeReview (#586)', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metReview(REVIEW_SCHOON));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ opsMelding: { url: 'https://ops.example.com', token: 'tok' } });
+
+      // Geen curl-aanroep bij schone review, maar de review draaide wel.
+      expect(aanroepen.some((a) => a.commando === 'claude' && a.argumenten.includes('-p'))).toBe(
+        true,
+      );
+    });
+
     it('doorloopt de fastlane-gate op dezelfde manier', () => {
       process.chdir(maakRepo());
       const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metReview(REVIEW_SCHOON));

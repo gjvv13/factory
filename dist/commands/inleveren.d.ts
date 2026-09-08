@@ -1,3 +1,4 @@
+import { type OpsMeldingConfig, type ReviewReden } from '../code-review.js';
 /**
  * Positie in een bouw-reeks (#327): voegt een vermelding toe aan de PR-body die de
  * stacking-relatie zichtbaar maakt, zodat een mens 's ochtends de stapel begrijpt.
@@ -36,10 +37,25 @@ export interface InleverenOpties {
      * `factory.json`. Escape hatch voor situaties waar de review niet gewenst is.
      */
     readonly geenReview?: boolean;
+    /**
+     * Ops-room-meldingsconfiguratie (#586). Wordt doorgegeven aan de code-review-gate,
+     * die bij gate-falen een melding stuurt. Zonder config (attended gebruik) stuurt de
+     * gate niets.
+     */
+    readonly opsMelding?: OpsMeldingConfig;
     /** De repo waarin ingeleverd wordt; de bouw-werker (#183) levert in vanuit een worktree. */
     readonly cwd?: string;
     /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
     readonly reeksInfo?: ReeksInfo;
+}
+/**
+ * Het resultaat van `inleveren()` (#586). Geeft de code-review-reden terug zodat
+ * de orkestrator onderscheid kan maken tussen "niets gevonden" en "kon niet
+ * reviewen" en de juiste kanalen kan bedienen (PR-comment, ops-room).
+ */
+export interface InleverenResultaat {
+    /** De reden-discriminant van de code-review-gate, of undefined als de review niet draaide. */
+    readonly reviewReden?: ReviewReden;
 }
 /**
  * Parseert de JSON-uitvoer van `gh pr view --json url,state` tot url + state.
@@ -55,4 +71,4 @@ export declare function parsePrView(json: string): {
  * queue integreert branches daarna serieel en conflictvrij naar main, dus de sessie
  * kan meteen aan de volgende slice beginnen.
  */
-export declare function inleveren(opties?: InleverenOpties): void;
+export declare function inleveren(opties?: InleverenOpties): InleverenResultaat;

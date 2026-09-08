@@ -294,7 +294,7 @@ export async function orkestreerBouw(opties = {}) {
             // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
             // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
             branchVan: (item) => bouwBranch(item.issue),
-            werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], reeks, undefined, undefined, opties.baan),
+            werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], reeks, undefined, undefined, opties.baan, opsMeldingVan(instellingen)),
             beschrijf: beschrijfBouw,
             beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
         }));
@@ -309,7 +309,7 @@ export async function orkestreerBouw(opties = {}) {
         // Wie dit start is een mens; de pot is interactief (#265).
         pot: 'interactief',
         item: eerste,
-    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], undefined, undefined, undefined, opties.baan), beschrijfBouw);
+    }, () => bouwAf(eerste, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, opties.leverIn ?? inleveren, appOpties() ?? [], undefined, undefined, undefined, opties.baan, opsMeldingVan(instellingen)), beschrijfBouw);
 }
 /**
  * Wat er van een bouw-run in het log komt.
@@ -397,7 +397,7 @@ export function reviewPrompt(item, werkmap, factoryMap, apps = []) {
  * chat kent dit slot niet, en twee werkers op één item leveren twee branches op waarvan
  * er één weg moet.
  */
-export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs, baan) {
+export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effort, leverIn, apps = [], reeks, env, timeoutMs, baan, opsMelding) {
     kop(`#${String(item.issue)} — ${item.titel}`);
     zorgVoorEscalatieLabel(cwd);
     zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
@@ -507,7 +507,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
             reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
         }
     }
-    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, reeks, baan);
+    const inleverOmgevingsfout = verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, opsMelding, reeks, baan);
     return {
         // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
         // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
@@ -523,7 +523,7 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
  * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
  * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
  */
-function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, reeks, baan) {
+function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWeigeringen, opsMelding, reeks, baan) {
     const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
     if (uitkomst.afloop === 'mislukt') {
         // Een `is_error: true` bij exit 0 landt hier: geen PR, geen afvink-comment. Terug in
@@ -569,13 +569,16 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWe
     const reviewComment = maakReviewComment(reviewUitkomst);
     // Fastlane-items (#401) mergen zichzelf op groen; gewone items wachten op een mens.
     const isFastlane = baan === 'fastlane';
+    let inleverResultaat;
     try {
         // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
         // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
-        leverIn({
+        inleverResultaat = leverIn({
             cwd: werkmap,
             ...(isFastlane ? { fastlane: true } : { geenAutomerge: true }),
             titel: `#${String(item.issue)} — ${item.titel}`,
+            // Ops-melding-config doorgeven zodat de review-gate bij falen de ops-room bedient (#586).
+            ...(opsMelding !== undefined ? { opsMelding } : {}),
             // In een reeks de stacking-informatie doorgeven (#327): de positie en de
             // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
             ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
@@ -625,6 +628,14 @@ function verwerkBouw(item, uitkomst, reviewUitkomst, cwd, wortel, leverIn, logWe
             // Kon de PR niet vinden of de comment niet plaatsen; val terug op het issue.
             waarschuwing(`Kon review-comment niet op de PR plaatsen; het staat op het issue.`);
             plaatsComment(item.issue, reviewComment, cwd);
+        }
+    }
+    // Bij een review-gate die niet kon draaien: PR-comment zodat het zichtbaar is (#586).
+    const gateReden = inleverResultaat.reviewReden;
+    if (gateReden === 'geen-verdict' || gateReden === 'niet-beschikbaar') {
+        const gateMelding = `⚠ Review-gate kon niet draaien: ${gateReden === 'niet-beschikbaar' ? 'claude niet beschikbaar' : 'geen bruikbaar verdict'}.`;
+        if (!plaatsPrComment(item, gateMelding)) {
+            plaatsComment(item.issue, gateMelding, cwd);
         }
     }
     ok(isFastlane
@@ -827,6 +838,19 @@ function maakAutoGroeiPr(groei, factorySpiegelPad) {
     ok(`auto-groei PR aangemaakt: ${branch}`);
 }
 /**
+ * Bouwt een `OpsMeldingConfig` uit de orkestrator-instellingen (#586). Geeft
+ * `undefined` als er geen `notifyUrl` geconfigureerd is — de review-gate stuurt
+ * dan niets, wat het verwachte gedrag is bij attended gebruik.
+ */
+function opsMeldingVan(instellingen) {
+    if (instellingen.notifyUrl === undefined)
+        return undefined;
+    return {
+        url: instellingen.notifyUrl,
+        ...(instellingen.notifyToken !== undefined ? { token: instellingen.notifyToken } : {}),
+    };
+}
+/**
  * Meldt de auto-groei via de ops-room-notificatie (#543, criterium 5).
  *
  * Zonder URL: overslaan met waarschuwing, zelfde patroon als de deploy-faalmelding.
@@ -1004,7 +1028,7 @@ export async function werkBouwAntwoordAf(issue, tekst, escalatie, opties, cwd) {
     };
     // Het escalatie-label weghalen: het item is niet meer vastgelopen.
     haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
-    verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren, logWeigeringen);
+    verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren, logWeigeringen, opsMeldingVan(instellingen));
 }
 /**
  * Bouwt een verse bouw-opdracht op voor `--opnieuw`: de sessie is weg, dus de volledige
@@ -1139,7 +1163,7 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
                 aantal: instellingen.bouwDagmaximum - bouwAlGestart,
                 leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
                 branchVan: (item) => bouwBranch(item.issue),
-                werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs),
+                werkAf: (item, reeks) => bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs, undefined, opsMeldingVan(instellingen)),
                 beschrijf: beschrijfBouw,
                 beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
                 naElkeRun: (aantal) => {
@@ -1166,7 +1190,7 @@ async function draaiNachtBouw(cwd, wortel, paden, nu, leverIn) {
                 leesRij: () => fastlaneWachtrij(bordItems(cwd) ?? []),
                 branchVan: (item) => bouwBranch(item.issue),
                 werkAf: async (item, reeks) => {
-                    const resultaat = await bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs, 'fastlane');
+                    const resultaat = await bouwAf(item, cwd, wortel, instellingen.bouwBudgetPerRun, instellingen.reviewBudgetPerRun, instellingen.werkerEffort, leverIn ?? inleveren, appOpties() ?? [], reeks, draaiOpties.env, draaiOpties.timeoutMs, 'fastlane', opsMeldingVan(instellingen));
                     return resultaat;
                 },
                 beschrijf: beschrijfBouw,

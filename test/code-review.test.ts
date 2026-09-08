@@ -152,20 +152,22 @@ describe('draaiCodeReview', () => {
     vi.restoreAllMocks();
   });
 
-  it('slaat over bij instelling "uit"', () => {
+  it('slaat over bij instelling "uit" met reden "uit"', () => {
     const resultaat = draaiCodeReview('uit', '/tmp/test');
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('uit');
     expect(resultaat.verdict).toBeUndefined();
   });
 
-  it('waarschuwt en gaat door als claude niet beschikbaar is', () => {
+  it('waarschuwt en gaat door als claude niet beschikbaar is met reden "niet-beschikbaar"', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(() => ({ code: 1, startfout: 'not found' })).uitvoerder);
     const resultaat = draaiCodeReview('waarschuw', '/tmp/test');
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('niet-beschikbaar');
     expect(resultaat.melding).toContain('niet beschikbaar');
   });
 
-  it('gaat door bij een lege diff', () => {
+  it('gaat door bij een lege diff met reden "geen-diff"', () => {
     const bepaal: UitkomstBepaler = ({ argumenten }) => {
       // claude --version slaagt
       if (argumenten[0] === '--version') return { stdout: '2.3.0' };
@@ -178,9 +180,10 @@ describe('draaiCodeReview', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
     const resultaat = draaiCodeReview('waarschuw', '/tmp/test');
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('geen-diff');
   });
 
-  it('gaat door bij bevindingen en instelling "waarschuw"', () => {
+  it('gaat door bij bevindingen en instelling "waarschuw" met reden "bevindingen"', () => {
     const reviewUitvoer = fixture('code-review-gate-bevindingen.json');
     const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
       if (commando === 'claude') return { stdout: reviewUitvoer };
@@ -192,11 +195,12 @@ describe('draaiCodeReview', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
     const resultaat = draaiCodeReview('waarschuw', '/tmp/test');
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('bevindingen');
     expect(resultaat.verdict).toBeDefined();
     expect(resultaat.verdict!.bevindingen).toHaveLength(2);
   });
 
-  it('blokkeert bij bevindingen en instelling "blokkeer"', () => {
+  it('blokkeert bij bevindingen en instelling "blokkeer" met reden "bevindingen"', () => {
     const reviewUitvoer = fixture('code-review-gate-bevindingen.json');
     const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
       if (commando === 'claude') return { stdout: reviewUitvoer };
@@ -208,11 +212,12 @@ describe('draaiCodeReview', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
     const resultaat = draaiCodeReview('blokkeer', '/tmp/test');
     expect(resultaat.doorgaan).toBe(false);
+    expect(resultaat.reden).toBe('bevindingen');
     expect(resultaat.verdict).toBeDefined();
     expect(resultaat.verdict!.bevindingen).toHaveLength(2);
   });
 
-  it('gaat door bij een schone review ongeacht de instelling', () => {
+  it('gaat door bij een schone review met reden "schoon"', () => {
     const reviewUitvoer = fixture('code-review-gate-schoon.json');
     const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
       if (commando === 'claude') return { stdout: reviewUitvoer };
@@ -224,11 +229,12 @@ describe('draaiCodeReview', () => {
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
     const resultaat = draaiCodeReview('blokkeer', '/tmp/test');
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('schoon');
     expect(resultaat.verdict).toBeDefined();
     expect(resultaat.verdict!.bevindingen).toHaveLength(0);
   });
 
-  it('degradeert graceful bij een claude-crash', () => {
+  it('degradeert graceful bij een claude-crash met reden "geen-verdict"', () => {
     const reviewUitvoer = fixture('code-review-gate-crash.json');
     const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
       if (commando === 'claude') return { stdout: reviewUitvoer };
@@ -241,7 +247,98 @@ describe('draaiCodeReview', () => {
     const resultaat = draaiCodeReview('blokkeer', '/tmp/test');
     // Zelfs bij `blokkeer`: een crash degradeert, gaat door.
     expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('geen-verdict');
     expect(resultaat.verdict).toBeUndefined();
     expect(resultaat.melding).toContain('geen bruikbaar verdict');
+  });
+
+  it('stuurt ops-melding bij "geen-verdict" als opsMelding-config aanwezig is (#586)', () => {
+    const reviewUitvoer = fixture('code-review-gate-crash.json');
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: reviewUitvoer };
+      if (commando === 'curl') return { stdout: '' };
+      if (argumenten[0] === '--version') return { stdout: '2.3.0' };
+      if (argumenten.includes('--verify')) return { stdout: 'abc' };
+      if (argumenten[0] === 'diff') return { stdout: '--- a/foo\n+++ b/foo' };
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    const resultaat = draaiCodeReview('waarschuw', '/tmp/test', {
+      url: 'https://ops.example.com/notify',
+      token: 'test-token',
+      app: 'proefapp',
+    });
+
+    expect(resultaat.reden).toBe('geen-verdict');
+    // Curl-aanroep naar de ops-room.
+    const curlAanroep = aanroepen.find((a) => a.commando === 'curl');
+    expect(curlAanroep).toBeDefined();
+    expect(curlAanroep!.argumenten).toContain('https://ops.example.com/notify');
+    expect(curlAanroep!.argumenten).toContain('Authorization: Bearer test-token');
+    // De body bevat de reden en de app-naam.
+    const bodyIndex = curlAanroep!.argumenten.indexOf('-d');
+    const body = curlAanroep!.argumenten[bodyIndex + 1]!;
+    expect(body).toContain('proefapp');
+    expect(body).toContain('geen bruikbaar verdict');
+  });
+
+  it('stuurt ops-melding bij "niet-beschikbaar" als opsMelding-config aanwezig is (#586)', () => {
+    const bepaal: UitkomstBepaler = ({ commando }) => {
+      // curl slaagt (ops-melding); claude faalt (niet beschikbaar).
+      if (commando === 'curl') return { stdout: '' };
+      return { code: 1, startfout: 'not found' };
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    const resultaat = draaiCodeReview('waarschuw', '/tmp/test', {
+      url: 'https://ops.example.com/notify',
+    });
+
+    expect(resultaat.reden).toBe('niet-beschikbaar');
+    const curlAanroep = aanroepen.find((a) => a.commando === 'curl');
+    expect(curlAanroep).toBeDefined();
+    expect(curlAanroep!.argumenten).toContain('https://ops.example.com/notify');
+    // Geen Authorization-header als token niet meegegeven.
+    expect(curlAanroep!.argumenten).not.toContain(expect.stringContaining('Authorization'));
+  });
+
+  it('stuurt geen ops-melding bij "schoon" (#586)', () => {
+    const reviewUitvoer = fixture('code-review-gate-schoon.json');
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: reviewUitvoer };
+      if (argumenten[0] === '--version') return { stdout: '2.3.0' };
+      if (argumenten.includes('--verify')) return { stdout: 'abc' };
+      if (argumenten[0] === 'diff') return { stdout: '--- a/foo\n+++ b/foo' };
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    draaiCodeReview('waarschuw', '/tmp/test', {
+      url: 'https://ops.example.com/notify',
+    });
+
+    expect(aanroepen.find((a) => a.commando === 'curl')).toBeUndefined();
+  });
+
+  it('stuurt geen ops-melding als opsMelding-config afwezig is (#586)', () => {
+    const reviewUitvoer = fixture('code-review-gate-crash.json');
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: reviewUitvoer };
+      if (argumenten[0] === '--version') return { stdout: '2.3.0' };
+      if (argumenten.includes('--verify')) return { stdout: 'abc' };
+      if (argumenten[0] === 'diff') return { stdout: '--- a/foo\n+++ b/foo' };
+      return {};
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+    stelUitvoerderIn(uitvoerder);
+
+    // Zonder opsMelding-config (attended gebruik).
+    draaiCodeReview('waarschuw', '/tmp/test');
+
+    expect(aanroepen.find((a) => a.commando === 'curl')).toBeUndefined();
   });
 });

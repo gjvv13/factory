@@ -70,7 +70,8 @@ import {
   versWerkplaats,
   werkplaatsWortel,
 } from '../werkplaats.js';
-import { inleveren, type InleverenOpties } from './inleveren.js';
+import type { OpsMeldingConfig } from '../code-review.js';
+import { inleveren, type InleverenOpties, type InleverenResultaat } from './inleveren.js';
 import { werkplek } from './werkplek.js';
 import { leesWeigeringenUitLog, type SessieWeigering } from '../sessielog.js';
 
@@ -294,7 +295,7 @@ export interface BouwOpties {
    * Hoe er ingeleverd wordt. Geen CLI-vlag: `inleveren` draait de volledige poort, en
    * een test hoort prettier, eslint en vitest niet vanuit zichzélf te starten.
    */
-  readonly leverIn?: (opties: InleverenOpties) => void;
+  readonly leverIn?: (opties: InleverenOpties) => InleverenResultaat;
   /** Het moment waarop deze run valt. Injecteerbaar zodat een dagovergang te testen is. */
   readonly nu?: Date;
 }
@@ -459,6 +460,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
             undefined,
             undefined,
             opties.baan,
+            opsMeldingVan(instellingen),
           ),
         beschrijf: beschrijfBouw,
         beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
@@ -492,6 +494,7 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
         undefined,
         undefined,
         opties.baan,
+        opsMeldingVan(instellingen),
       ),
     beschrijfBouw,
   );
@@ -629,12 +632,13 @@ export async function bouwAf(
   budgetUsd: number,
   reviewBudgetUsd: number,
   effort: string,
-  leverIn: (opties: InleverenOpties) => void,
+  leverIn: (opties: InleverenOpties) => InleverenResultaat,
   apps: readonly string[] = [],
   reeks?: ReeksContext,
   env?: NodeJS.ProcessEnv,
   timeoutMs?: number,
   baan?: BouwBaan,
+  opsMelding?: OpsMeldingConfig,
 ): Promise<BouwAfResultaat> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -762,6 +766,7 @@ export async function bouwAf(
     wortel,
     leverIn,
     logWeigeringen,
+    opsMelding,
     reeks,
     baan,
   );
@@ -787,8 +792,9 @@ function verwerkBouw(
   reviewUitkomst: ReviewUitkomst | undefined,
   cwd: string,
   wortel: string,
-  leverIn: (opties: InleverenOpties) => void,
+  leverIn: (opties: InleverenOpties) => InleverenResultaat,
   logWeigeringen: readonly SessieWeigering[],
+  opsMelding?: OpsMeldingConfig,
   reeks?: ReeksContext,
   baan?: BouwBaan,
 ): boolean {
@@ -872,13 +878,16 @@ function verwerkBouw(
   const reviewComment = maakReviewComment(reviewUitkomst);
   // Fastlane-items (#401) mergen zichzelf op groen; gewone items wachten op een mens.
   const isFastlane = baan === 'fastlane';
+  let inleverResultaat: InleverenResultaat;
   try {
     // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
     // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
-    leverIn({
+    inleverResultaat = leverIn({
       cwd: werkmap,
       ...(isFastlane ? { fastlane: true } : { geenAutomerge: true }),
       titel: `#${String(item.issue)} — ${item.titel}`,
+      // Ops-melding-config doorgeven zodat de review-gate bij falen de ops-room bedient (#586).
+      ...(opsMelding !== undefined ? { opsMelding } : {}),
       // In een reeks de stacking-informatie doorgeven (#327): de positie en de
       // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
       ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
@@ -935,6 +944,15 @@ function verwerkBouw(
       // Kon de PR niet vinden of de comment niet plaatsen; val terug op het issue.
       waarschuwing(`Kon review-comment niet op de PR plaatsen; het staat op het issue.`);
       plaatsComment(item.issue, reviewComment, cwd);
+    }
+  }
+
+  // Bij een review-gate die niet kon draaien: PR-comment zodat het zichtbaar is (#586).
+  const gateReden = inleverResultaat.reviewReden;
+  if (gateReden === 'geen-verdict' || gateReden === 'niet-beschikbaar') {
+    const gateMelding = `⚠ Review-gate kon niet draaien: ${gateReden === 'niet-beschikbaar' ? 'claude niet beschikbaar' : 'geen bruikbaar verdict'}.`;
+    if (!plaatsPrComment(item, gateMelding)) {
+      plaatsComment(item.issue, gateMelding, cwd);
     }
   }
 
@@ -1211,6 +1229,22 @@ function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: st
 }
 
 /**
+ * Bouwt een `OpsMeldingConfig` uit de orkestrator-instellingen (#586). Geeft
+ * `undefined` als er geen `notifyUrl` geconfigureerd is — de review-gate stuurt
+ * dan niets, wat het verwachte gedrag is bij attended gebruik.
+ */
+function opsMeldingVan(instellingen: {
+  readonly notifyUrl?: string;
+  readonly notifyToken?: string;
+}): OpsMeldingConfig | undefined {
+  if (instellingen.notifyUrl === undefined) return undefined;
+  return {
+    url: instellingen.notifyUrl,
+    ...(instellingen.notifyToken !== undefined ? { token: instellingen.notifyToken } : {}),
+  };
+}
+
+/**
  * Meldt de auto-groei via de ops-room-notificatie (#543, criterium 5).
  *
  * Zonder URL: overslaan met waarschuwing, zelfde patroon als de deploy-faalmelding.
@@ -1443,7 +1477,16 @@ export async function werkBouwAntwoordAf(
   // Het escalatie-label weghalen: het item is niet meer vastgelopen.
   haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
 
-  verwerkBouw(bouwitem, uitkomst, reviewUitkomst, cwd, wortel, inleveren, logWeigeringen);
+  verwerkBouw(
+    bouwitem,
+    uitkomst,
+    reviewUitkomst,
+    cwd,
+    wortel,
+    inleveren,
+    logWeigeringen,
+    opsMeldingVan(instellingen),
+  );
 }
 
 /**
@@ -1554,7 +1597,7 @@ async function draaiNachtBouw(
   wortel: string,
   paden: OrkestratorPaden,
   nu: Date,
-  leverIn?: (opties: InleverenOpties) => void,
+  leverIn?: (opties: InleverenOpties) => InleverenResultaat,
 ): Promise<void> {
   const instellingen = leesInstellingen(paden);
   const token = vereisToken(instellingen, paden);
@@ -1628,6 +1671,8 @@ async function draaiNachtBouw(
             reeks,
             draaiOpties.env,
             draaiOpties.timeoutMs,
+            undefined,
+            opsMeldingVan(instellingen),
           ),
         beschrijf: beschrijfBouw,
         beoordeel: (u) => (u.bouw.afloop === 'klaar' ? 'gelukt' : u.bouw.afloop),
@@ -1670,6 +1715,7 @@ async function draaiNachtBouw(
             draaiOpties.env,
             draaiOpties.timeoutMs,
             'fastlane',
+            opsMeldingVan(instellingen),
           );
           return resultaat;
         },
