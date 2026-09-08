@@ -553,13 +553,26 @@ describe('verify — eindregel respecteert waarschuwingen', () => {
 // ---------------------------------------------------------------------------
 
 describe('toetsAfhankelijkheden draait --prod', () => {
-  it('bevat --prod in de pnpm audit-aanroep', () => {
-    const bron = readFileSync(
-      path.join(import.meta.dirname, '..', 'src', 'commands', 'verify.ts'),
-      'utf8',
-    );
-    // Zoek de audit-aanroep en verifieer dat --prod erin staat.
-    expect(bron).toContain("'audit', '--prod', '--json'");
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  it('roept pnpm audit met --prod aan', () => {
+    const dir = maakVerifyDir();
+    const auditAanroepen: string[][] = [];
+    stelUitvoerderIn((commando, argumenten): ProcesUitkomst => {
+      if (commando === 'pnpm' && argumenten[0] === 'audit') {
+        auditAanroepen.push([...argumenten]);
+      }
+      return { code: 0, stdout: '' };
+    });
+
+    verify({ cwd: dir });
+
+    // Gedragsmatig: de audit-stap wordt precies één keer met --prod aangeroepen.
+    // Een herschrijving van de argumenten (andere volgorde, uit een const) blijft
+    // groen; het weglaten van --prod maakt hem rood.
+    expect(auditAanroepen).toEqual([['audit', '--prod', '--json']]);
   });
 });
 

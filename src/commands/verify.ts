@@ -515,6 +515,6 @@ export function verify(opties: VerifyOpties = {}): void {
   if (kwaliteitsWaarschuwingen === 0) {
     ok(`Alles groen in ${String(seconden)}s`);
   } else {
-    process.stdout.write(`Klaar met waarschuwingen in ${String(seconden)}s\n`);
+    waarschuwing(`Klaar met waarschuwingen in ${String(seconden)}s`);
   }
 }
