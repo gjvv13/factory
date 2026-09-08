@@ -737,6 +737,45 @@ describe('opruimen', () => {
     });
   });
 
+  // --- repoPad-doorgifte (#588) ---
+
+  it('gebruikt repoPad als cwd voor alle git-aanroepen in plaats van process.cwd()', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      maakGitOmgeving({
+        lokaal: ['main', 'feature-a'],
+        gemerged: new Set(['feature-a']),
+      }),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    opruimen({ repoPad: '/spiegel/factory' });
+
+    // Elke git-aanroep die een cwd meekrijgt, moet /spiegel/factory gebruiken.
+    const gitAanroepen = aanroepen.filter((a) => a.commando === 'git' && a.cwd !== undefined);
+    expect(gitAanroepen.length).toBeGreaterThan(0);
+    for (const aanroep of gitAanroepen) {
+      expect(aanroep.cwd).toBe('/spiegel/factory');
+    }
+  });
+
+  it('valt terug op process.cwd() als repoPad niet is meegegeven', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      maakGitOmgeving({
+        lokaal: ['main'],
+      }),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    opruimen();
+
+    // De git-aanroepen krijgen process.cwd() als cwd — dat is het huidige pad.
+    const gitAanroepen = aanroepen.filter((a) => a.commando === 'git' && a.cwd !== undefined);
+    expect(gitAanroepen.length).toBeGreaterThan(0);
+    for (const aanroep of gitAanroepen) {
+      expect(aanroep.cwd).toBe(process.cwd());
+    }
+  });
+
   // --- "Alles schoon"-gedrag ---
 
   it('meldt "Alles is al schoon." als er niets te doen is', () => {
