@@ -2,6 +2,10 @@ import type { Readable, Writable } from 'node:stream';
 export declare function kop(tekst: string): void;
 export declare function ok(tekst: string): void;
 export declare function waarschuwing(tekst: string): void;
+/** Hoeveel keer `waarschuwing()` is aangeroepen sinds de laatste reset. */
+export declare function aantalWaarschuwingen(): number;
+/** Zet de waarschuwingsteller op nul. Bedoeld voor het begin van een verify-run en voor tests. */
+export declare function resetWaarschuwingen(): void;
 export declare function fout(tekst: string): void;
 /** Fout waarbij de melding al genoeg is: de CLI print hem en stopt met code 1. */
 export declare class GebruikersFout extends Error {

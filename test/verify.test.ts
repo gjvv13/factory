@@ -15,10 +15,13 @@ import {
 } from '../src/commands/verify.js';
 import type { DekkingsConfig } from '../src/dekking-config.js';
 import {
+  aantalWaarschuwingen,
   GebruikersFout,
   herstelUitvoerder,
   OmgevingsFout,
+  resetWaarschuwingen,
   stelUitvoerderIn,
+  waarschuwing,
 } from '../src/shell.js';
 import type { ProcesUitkomst } from '../src/shell.js';
 
@@ -436,6 +439,129 @@ describe('toetsDiffDekking', () => {
 // ---------------------------------------------------------------------------
 // Aggregaat-ratchet is altijd informatief (#516)
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// aantalWaarschuwingen / resetWaarschuwingen (#589)
+// ---------------------------------------------------------------------------
+
+describe('aantalWaarschuwingen', () => {
+  afterEach(() => {
+    resetWaarschuwingen();
+  });
+
+  it('telt het aantal waarschuwingen en reset zet op nul', () => {
+    resetWaarschuwingen();
+    expect(aantalWaarschuwingen()).toBe(0);
+    waarschuwing('test 1');
+    waarschuwing('test 2');
+    expect(aantalWaarschuwingen()).toBe(2);
+    resetWaarschuwingen();
+    expect(aantalWaarschuwingen()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verify — eindregel (#589)
+// ---------------------------------------------------------------------------
+
+describe('verify — eindregel respecteert waarschuwingen', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+    resetWaarschuwingen();
+  });
+
+  /** Vangt stdout op en geeft de inhoud terug na de callback. */
+  function vangStdout(fn: () => void): string {
+    const stukken: string[] = [];
+    const origineel = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      stukken.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+      return true;
+    };
+    try {
+      fn();
+    } finally {
+      process.stdout.write = origineel;
+    }
+    return stukken.join('');
+  }
+
+  /** Maakt een tmp-map met alleen niet-coverage scripts, zodat de volledige poort
+   *  geen coverage-merge-waarschuwing produceert. Audit geeft een leeg rapport. */
+  function maakSchoneVerifyDir(): string {
+    const dir = mkdtempSync(path.join(tmpdir(), 'verify-schoon-'));
+    writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        scripts: {
+          'format:check': 'echo ok',
+          lint: 'echo ok',
+          typecheck: 'echo ok',
+          build: 'echo ok',
+        },
+      }),
+    );
+    return dir;
+  }
+
+  it('eindigt met "Alles groen" als er geen waarschuwingen zijn', () => {
+    // Gebruik een dir zonder test-scripts zodat er geen coverage-waarschuwingen komen,
+    // en geef de audit schone JSON terug zodat die ook geen waarschuwing genereert.
+    const schoneAudit = JSON.stringify({
+      metadata: { vulnerabilities: { high: 0, critical: 0 } },
+    });
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('audit')) return { code: 0, stdout: schoneAudit };
+      return { code: 0, stdout: '' };
+    });
+    const uitvoer = vangStdout(() => {
+      verify({ cwd: maakSchoneVerifyDir() });
+    });
+    expect(uitvoer).toContain('Alles groen');
+    expect(uitvoer).not.toContain('Klaar met waarschuwingen');
+  });
+
+  it('eindigt met een neutrale afsluiter als er een audit-waarschuwing was', () => {
+    // Simuleer: alle stappen groen, maar audit meldt een kwetsbaarheid.
+    const auditJson = JSON.stringify({
+      metadata: { vulnerabilities: { high: 1 } },
+    });
+    stelUitvoerderIn((_cmd, args): ProcesUitkomst => {
+      if (args.includes('audit')) return { code: 1, stdout: auditJson };
+      return { code: 0, stdout: '' };
+    });
+    const uitvoer = vangStdout(() => {
+      verify({ cwd: maakSchoneVerifyDir() });
+    });
+    expect(uitvoer).toContain('Klaar met waarschuwingen');
+    expect(uitvoer).not.toContain('Alles groen');
+  });
+
+  it('telt --snel "overgeslagen"-meldingen niet als kwaliteitswaarschuwing', () => {
+    stelUitvoerderIn((): ProcesUitkomst => ({ code: 0, stdout: '' }));
+    const uitvoer = vangStdout(() => {
+      verify({ cwd: maakVerifyDir(), snel: true });
+    });
+    // --snel slaat e2e over met een waarschuwing, maar de eindregel moet "Alles groen" zijn.
+    expect(uitvoer).toContain('Alles groen');
+    expect(uitvoer).not.toContain('Klaar met waarschuwingen');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toetsAfhankelijkheden draait --prod (#589)
+// ---------------------------------------------------------------------------
+
+describe('toetsAfhankelijkheden draait --prod', () => {
+  it('bevat --prod in de pnpm audit-aanroep', () => {
+    const bron = readFileSync(
+      path.join(import.meta.dirname, '..', 'src', 'commands', 'verify.ts'),
+      'utf8',
+    );
+    // Zoek de audit-aanroep en verifieer dat --prod erin staat.
+    expect(bron).toContain("'audit', '--prod', '--json'");
+  });
+});
 
 describe('verify — aggregaat-ratchet is altijd informatief', () => {
   afterEach(() => {
