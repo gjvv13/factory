@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   openSync,
@@ -530,13 +531,13 @@ export function veiligOpruimen(fn: () => void = opruimen, context?: OpruimContex
     waarschuwing(`opruimen mislukt${padInfo}: ${bericht}`);
 
     if (context !== undefined) {
-      // Kanaal 2: runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
+      // Runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
       schrijfLog(
         context.paden,
         `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt${padInfo}: ${bericht}`,
       );
 
-      // Kanaal 1: ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
+      // Ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
       if (context.notifyUrl !== undefined) {
         const args = [
           '-s',
@@ -575,6 +576,14 @@ export function opruimenNaReeks(
   opruimFn?: () => void,
 ): void {
   const repoPad = werkplaatsVan('factory', wortel);
+  // De factory-spiegel wordt pas door de eerste werker aangemaakt (versWerkplaats
+  // in werkAf). Bestaat hij nog niet — eerste nacht op een machine, of een lege
+  // wachtrij vóór de eerste werker — dan valt er niets op te ruimen; vroeg
+  // terugkeren i.p.v. `git fetch` op een niet-bestaand pad te laten falen en een
+  // valse ops-melding te sturen over een probleem dat er niet is (#588).
+  if (opruimFn === undefined && !existsSync(repoPad)) {
+    return;
+  }
   const instellingen = leesInstellingen(paden);
   veiligOpruimen(
     opruimFn ??

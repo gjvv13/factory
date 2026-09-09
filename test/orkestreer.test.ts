@@ -2489,6 +2489,8 @@ describe('opruimenNaReeks (#588)', () => {
 
     mkdirSync(path.dirname(paden.envPad), { recursive: true });
     writeFileSync(paden.envPad, '');
+    // De factory-spiegel moet bestaan, anders slaat opruimenNaReeks bewust over.
+    mkdirSync(path.join(wortel, 'factory'), { recursive: true });
 
     // We mocken de uitvoerder om de git-aanroepen op te vangen; zonder mock
     // zou de echte opruimen falen.
@@ -2504,6 +2506,29 @@ describe('opruimenNaReeks (#588)', () => {
     for (const aanroep of gitAanroepen) {
       expect(aanroep.cwd).toBe(verwachtPad);
     }
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('slaat over — geen git, geen ops-melding — als de factory-spiegel nog niet bestaat (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-geen-spiegel-'));
+    const wortel = path.join(home, 'OrkestratorWerk'); // wortel/factory bestaat NIET
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    // Productiepad (geen opruimFn): de spiegel ontbreekt, dus de helper moet
+    // vroeg terugkeren zonder git aan te roepen en zonder een valse ops-melding.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    opruimenNaReeks(wortel, paden);
+
+    expect(aanroepen.some((a) => a.commando === 'git')).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'curl')).toBe(false);
+    // Geen WARNING naar het runlog geschreven.
+    expect(existsSync(paden.logPad)).toBe(false);
 
     rmSync(home, { recursive: true, force: true });
   });
