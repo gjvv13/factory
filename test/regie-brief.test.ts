@@ -185,17 +185,19 @@ describe('bouwBrief', () => {
     expect(tekst).toContain('Vastgelopen');
   });
 
-  it('toont de deploy-status per app', () => {
+  it('toont de deploy-status per app met drie toestanden', () => {
     const deployRuns: DeployRunStatus[] = [
       {
         app: 'assistant',
         conclusion: 'success',
+        status: 'completed',
         url: 'https://github.com/gjvv13/assistant/actions/runs/123',
         createdAt: '2026-09-05T04:00:00.000Z',
       },
       {
         app: 'beheer',
         conclusion: 'failure',
+        status: 'completed',
         url: 'https://github.com/gjvv13/beheer/actions/runs/456',
         createdAt: '2026-09-04T20:00:00.000Z',
       },
@@ -209,12 +211,83 @@ describe('bouwBrief', () => {
     expect(tekst).toContain('❌');
   });
 
+  it('toont een lopende deploy als "loopt" met 🔄, niet als ❌', () => {
+    const deployRuns: DeployRunStatus[] = [
+      {
+        app: 'assistant',
+        conclusion: 'unknown',
+        status: 'in_progress',
+        url: 'https://github.com/gjvv13/assistant/actions/runs/789',
+        createdAt: '2026-09-05T06:00:00.000Z',
+      },
+    ];
+    const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+    expect(tekst).toContain('🔄');
+    expect(tekst).toContain('loopt');
+    expect(tekst).not.toContain('❌');
+  });
+
+  it('toont een queued deploy als "in wachtrij" met 🔄, niet als ❌', () => {
+    const deployRuns: DeployRunStatus[] = [
+      {
+        app: 'boodschappen',
+        conclusion: 'unknown',
+        status: 'queued',
+        url: 'https://github.com/gjvv13/boodschappen/actions/runs/999',
+        createdAt: '2026-09-05T06:30:00.000Z',
+      },
+    ];
+    const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+    expect(tekst).toContain('🔄');
+    expect(tekst).toContain('in wachtrij');
+    expect(tekst).not.toContain('❌');
+  });
+
+  it.each(['waiting', 'requested', 'pending'])(
+    'toont een %s-run (nog niet completed) als 🔄, niet als ❌ (#587)',
+    (status) => {
+      const deployRuns: DeployRunStatus[] = [
+        {
+          app: 'beheer',
+          conclusion: 'unknown',
+          status,
+          url: 'https://github.com/gjvv13/beheer/actions/runs/1234',
+          createdAt: '2026-09-08T15:00:00.000Z',
+        },
+      ];
+      const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+      expect(tekst).toContain('🔄');
+      expect(tekst).not.toContain('❌');
+    },
+  );
+
+  it('toont een onbekende status zónder conclusion als ❌ unknown (#587)', () => {
+    const deployRuns: DeployRunStatus[] = [
+      {
+        app: 'apple',
+        conclusion: 'unknown',
+        status: 'unknown',
+        url: 'https://github.com/gjvv13/apple/actions/runs/5678',
+        createdAt: '2026-09-08T15:00:00.000Z',
+      },
+    ];
+    const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+    expect(tekst).toContain('❌');
+    expect(tekst).toContain('unknown');
+    expect(tekst).not.toContain('🔄');
+  });
+
   it('verbergt lege secties (geen ruis)', () => {
     // Alleen een deploy-run, geen andere data
     const deployRuns: DeployRunStatus[] = [
       {
         app: 'assistant',
         conclusion: 'success',
+        status: 'completed',
         url: 'https://example.com/run/1',
         createdAt: '2026-09-05T04:00:00.000Z',
       },
@@ -247,6 +320,7 @@ describe('bouwBrief', () => {
       {
         app: 'assistant',
         conclusion: 'success',
+        status: 'completed',
         url: 'https://example.com/run/1',
         createdAt: '2026-09-05T04:00:00.000Z',
       },

@@ -30,6 +30,13 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
 // ---------------------------------------------------------------------------
 
 /**
+ * Namen die in de deploy-lijst kunnen opduiken maar geen echte app zijn
+ * (proefapp = wegwerp-testapp uit een afgeronde proef); ze horen niet in de
+ * brief. Het register telt vijf echte apps — zie [[app-register-vijf-apps]].
+ */
+const GEEN_ECHTE_APPS: ReadonlySet<string> = new Set(['proefapp']);
+
+/**
  * Haalt de recentste deploy-run per app op via `gh run list`.
  *
  * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
@@ -41,6 +48,7 @@ export function haalDeployRuns(
 ): DeployRunStatus[] {
   const resultaten: DeployRunStatus[] = [];
   for (const app of apps) {
+    if (GEEN_ECHTE_APPS.has(app)) continue;
     const ruw = leesRun(app);
     if (ruw === undefined || ruw === '' || ruw === '[]') continue;
     let runs: unknown;
@@ -54,9 +62,11 @@ export function haalDeployRuns(
     const eerste: unknown = runs[0];
     if (eerste === undefined || eerste === null || typeof eerste !== 'object') continue;
     const obj = eerste as Record<string, unknown>;
+    const rawConclusion = typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown';
     resultaten.push({
       app,
-      conclusion: typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown',
+      conclusion: rawConclusion === '' ? 'unknown' : rawConclusion,
+      status: typeof obj['status'] === 'string' ? obj['status'] : 'unknown',
       url: typeof obj['url'] === 'string' ? obj['url'] : '',
       createdAt: typeof obj['createdAt'] === 'string' ? obj['createdAt'] : '',
     });
@@ -73,7 +83,7 @@ function ghRunList(app: string): string | undefined {
     '--workflow=deploy.yml',
     '--limit=1',
     '--json',
-    'conclusion,createdAt,url',
+    'conclusion,createdAt,status,url',
   ]);
 }
 

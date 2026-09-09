@@ -67,6 +67,7 @@ describe('brief', () => {
         {
           conclusion: 'success',
           createdAt: '2026-09-05T05:30:00.000Z',
+          status: 'completed',
           url: 'https://github.com/gjvv13/assistant/actions/runs/1',
         },
       ]),

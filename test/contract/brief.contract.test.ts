@@ -19,11 +19,12 @@ const fixtureDir = path.join(
   'contract',
 );
 
-/** Schema dat vastlegt wat we van `gh run list --json conclusion,createdAt,url` verwachten. */
+/** Schema dat vastlegt wat we van `gh run list --json conclusion,createdAt,status,url` verwachten. */
 const ghRunListSchema = z.array(
   z.object({
     conclusion: z.string(),
     createdAt: z.string(),
+    status: z.string(),
     url: z.url(),
   }),
 );
@@ -53,6 +54,7 @@ describe('contract: gh run list-respons voor de regie-brief', () => {
     expect(runs[0]).toMatchObject({
       app: 'assistant',
       conclusion: 'success',
+      status: 'completed',
       url: expect.stringContaining('github.com'),
       createdAt: expect.any(String),
     });

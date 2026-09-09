@@ -15,6 +15,12 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
 // Deploy-run-status ophalen
 // ---------------------------------------------------------------------------
 /**
+ * Namen die in de deploy-lijst kunnen opduiken maar geen echte app zijn
+ * (proefapp = wegwerp-testapp uit een afgeronde proef); ze horen niet in de
+ * brief. Het register telt vijf echte apps — zie [[app-register-vijf-apps]].
+ */
+const GEEN_ECHTE_APPS = new Set(['proefapp']);
+/**
  * Haalt de recentste deploy-run per app op via `gh run list`.
  *
  * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
@@ -23,6 +29,8 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
 export function haalDeployRuns(apps, leesRun = ghRunList) {
     const resultaten = [];
     for (const app of apps) {
+        if (GEEN_ECHTE_APPS.has(app))
+            continue;
         const ruw = leesRun(app);
         if (ruw === undefined || ruw === '' || ruw === '[]')
             continue;
@@ -40,9 +48,11 @@ export function haalDeployRuns(apps, leesRun = ghRunList) {
         if (eerste === undefined || eerste === null || typeof eerste !== 'object')
             continue;
         const obj = eerste;
+        const rawConclusion = typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown';
         resultaten.push({
             app,
-            conclusion: typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown',
+            conclusion: rawConclusion === '' ? 'unknown' : rawConclusion,
+            status: typeof obj['status'] === 'string' ? obj['status'] : 'unknown',
             url: typeof obj['url'] === 'string' ? obj['url'] : '',
             createdAt: typeof obj['createdAt'] === 'string' ? obj['createdAt'] : '',
         });
@@ -58,7 +68,7 @@ function ghRunList(app) {
         '--workflow=deploy.yml',
         '--limit=1',
         '--json',
-        'conclusion,createdAt,url',
+        'conclusion,createdAt,status,url',
     ]);
 }
 // ---------------------------------------------------------------------------

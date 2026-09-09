@@ -19,6 +19,7 @@ export interface RunlogEntry {
 export interface DeployRunStatus {
     readonly app: string;
     readonly conclusion: string;
+    readonly status: string;
     readonly url: string;
     readonly createdAt: string;
 }
