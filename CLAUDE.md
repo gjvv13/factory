@@ -55,10 +55,10 @@ jq-expressies van `alleKinderenDicht` en `ouderVan`, de GraphQL-parse van
 
 **Gedeelde configuratie**, geïmporteerd uit het pakket:
 
-- `factory/tsconfig.base.json` — strikte TypeScript-instellingen
-- `factory/eslint` — de afdwingbare helft van de coding guidelines
-- `factory/prettier` — opmaak
-- `factory/vitest-unit`, `factory/vitest-contract`, `factory/vitest-e2e` — testpresets
+- `@gjvv13/factory/tsconfig.base.json` — strikte TypeScript-instellingen
+- `@gjvv13/factory/eslint` — de afdwingbare helft van de coding guidelines
+- `@gjvv13/factory/prettier` — opmaak
+- `@gjvv13/factory/vitest-unit`, `@gjvv13/factory/vitest-contract`, `@gjvv13/factory/vitest-e2e` — testpresets
 
 **Het proces**: `templates/`, de slash commands, en de `coding-guidelines`-skill
 (`skills/coding-guidelines/SKILL.md`) — de niet-afdwingbare helft van de regels,
@@ -146,7 +146,7 @@ samen tot één rapport in `coverage/combined/` waar de drempel tegen getoetst w
 De per-soort-rapporten (`coverage/<soort>/`) blijven bestaan, zodat de beheer-tool
 ze los kan tonen. De e2e-server draait als apart proces en wordt via
 `NODE_V8_COVERAGE` gemeten; de e2e-`global-setup` zet die ruwe coverage met c8 om
-naar `coverage/e2e/` (`factory/e2e-coverage`).
+naar `coverage/e2e/` (`@gjvv13/factory/e2e-coverage`).
 
 **De afhankelijkheden-audit** draait als laatste stap van de volledige verify:
 `pnpm audit --prod`, geteld vanaf `auditNiveau` (default `high`). `--prod`
@@ -169,7 +169,7 @@ gecombineerde dekking: hoog genoeg om regressies te vangen, met lucht voor een
 legitieme dip.
 
 ```json
-"devDependencies": { "factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }
+"devDependencies": { "@gjvv13/factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }
 ```
 
 Schrijf de koppeling als `git+https://…` en niet als de verkorting
