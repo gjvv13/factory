@@ -139,7 +139,7 @@ describe('inleveren', () => {
     expect(verify).toHaveBeenCalledTimes(1);
     // Branch gepusht met upstream.
     expect(argsVan(aanroepen, 'git')).toContainEqual(['push', '-q', '-u', 'origin', BRANCH]);
-    // PR aangemaakt naar main met --fill (geen titel meegegeven).
+    // PR aangemaakt naar main met --fill en --body met Closes (geen titel meegegeven).
     expect(argsVan(aanroepen, 'gh')).toContainEqual([
       'pr',
       'create',
@@ -148,6 +148,8 @@ describe('inleveren', () => {
       '--head',
       BRANCH,
       '--fill',
+      '--body',
+      'Closes #58',
     ]);
     // Auto-merge op de teruggegeven PR-url → belandt in de merge-queue.
     expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
@@ -210,7 +212,7 @@ describe('inleveren', () => {
     expect(body).toContain('slice/250-1');
   });
 
-  it('laat de PR-body ongewijzigd als er geen reeksInfo is', () => {
+  it('laat de reeksvermelding weg als er geen reeksInfo is', () => {
     process.chdir(maakRepo());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
     stelUitvoerderIn(uitvoerder);
@@ -224,6 +226,76 @@ describe('inleveren', () => {
     const body = prCreate!.argumenten[bodyIndex + 1];
     expect(body).not.toContain('Reeks');
     expect(body).toContain('Ingeleverd via');
+  });
+
+  describe('Closes #<issue> in de PR-body (#598)', () => {
+    it('bevat Closes #<issue> in de body bij een PR met titel', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ titel: '#58 — een wijziging' });
+
+      const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+      expect(prCreate).toBeDefined();
+      const bodyIndex = prCreate!.argumenten.indexOf('--body');
+      expect(bodyIndex).toBeGreaterThan(-1);
+      const body = prCreate!.argumenten[bodyIndex + 1];
+      expect(body).toContain('Closes #58');
+    });
+
+    it('bevat Closes #<issue> in de body bij een PR zonder titel (--fill pad)', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+      expect(prCreate).toBeDefined();
+      const args = prCreate!.argumenten;
+      expect(args).toContain('--fill');
+      expect(args).toContain('--body');
+      const bodyIndex = args.indexOf('--body');
+      expect(args[bodyIndex + 1]).toBe('Closes #58');
+    });
+
+    it('voegt geen Closes toe bij een branch zonder slice-vorm', () => {
+      process.chdir(maakRepo());
+      const bepaal: UitkomstBepaler = (aanroep, index) =>
+        aanroep.commando === 'git' && aanroep.argumenten[0] === 'rev-parse'
+          ? { stdout: 'fix/losse-hotfix' }
+          : gelukkig(aanroep, index);
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+      expect(prCreate).toBeDefined();
+      const args = prCreate!.argumenten;
+      // Alleen --fill, geen --body: er is geen issue om te sluiten.
+      expect(args).toContain('--fill');
+      expect(args).not.toContain('--body');
+      expect(args.join(' ')).not.toContain('Closes');
+    });
+
+    it('bevat zowel de reeksvermelding als Closes in de body', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({
+        titel: '#58 — een wijziging',
+        reeksInfo: { positie: 2, totaal: 3, basisBranch: 'slice/50-1', basisIssue: 50 },
+      });
+
+      const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
+      const bodyIndex = prCreate!.argumenten.indexOf('--body');
+      const body = prCreate!.argumenten[bodyIndex + 1];
+      expect(body).toContain('🔗 Reeks 2/3');
+      expect(body).toContain('Closes #58');
+    });
   });
 
   it('geeft de purge-vlag mee aan de lockfile-install (#87)', () => {

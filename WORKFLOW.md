@@ -33,7 +33,7 @@ Waar een item in de pijplijn staat, is **de kolom op het board** — het veld
 | **Bouwen**                           | Er wordt nu aan gebouwd                                    | de bouwer               |
 | **Wacht op merge**                   | Ingeleverd; PR wacht op merge                              | ja — merge              |
 | **Uitrollen**                        | Gemerged, onderweg naar acc en prod                        | machinaal               |
-| **Done**                             | Draait op prod, gezien                                     | —                       |
+| **Done**                             | Afgerond en gesloten (zie noot bij #598)                   | —                       |
 
 De kolommen komen in paren: een **wachtrij** waar niemand aan zet is, en de stap
 waarin er gewerkt wordt. Dat onderscheid is niet cosmetisch. Een onbemande werker
@@ -117,17 +117,24 @@ Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
 
 ## De pijplijn
 
-| Stap           | Commando                | Waar             | Wat er met het issue gebeurt                                          |
-| -------------- | ----------------------- | ---------------- | --------------------------------------------------------------------- |
-| 1. Idee        | `/idee <beschrijving>`  | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**  |
-| 2. Functioneel | `/functioneel <issue#>` | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**   |
-| 3. Technisch   | `/refine <issue#>`      | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan |
-| 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij            |
-| 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue          |
-| 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                     |
-| 7. Inleveren   | `factory inleveren`     | in de applicatie | → kolom **Wacht op merge**                                            |
-| 8. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen** (via deploy)                                    |
-| 9. Promoveren  | `pnpm promote`          | in de applicatie | Bij afronding: → kolom **Done**, issue sluiten                        |
+| Stap           | Commando                | Waar             | Wat er met het issue gebeurt                                                   |
+| -------------- | ----------------------- | ---------------- | ------------------------------------------------------------------------------ |
+| 1. Idee        | `/idee <beschrijving>`  | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**           |
+| 2. Functioneel | `/functioneel <issue#>` | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**            |
+| 3. Technisch   | `/refine <issue#>`      | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan          |
+| 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij                     |
+| 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue                   |
+| 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                              |
+| 7. Inleveren   | `factory inleveren`     | in de applicatie | → kolom **Wacht op merge**; de PR sluit z'n issue via `Closes #<issue>` (#598) |
+| 8. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen** (via deploy)                                             |
+| 9. Promoveren  | `pnpm promote`          | in de applicatie | Rolt door naar prod; het bord stond bij merge al op **Done** (#598)            |
+
+> **Done bij merge (#598).** Sinds #598 sluit een gemergede slice-PR z'n issue
+> via `Closes #<issue>`, en de GitHub-Projects-workflow "Item gesloten → Done"
+> verplaatst het item dán al naar **Done** — voor álle apps, niet alleen factory.
+> De acc/prod-uitrol (stap 8/9) loopt daarna machinaal door; een gefaalde deploy
+> surfacet via de ops-melding (#123), niet via het bord. "Done" betekent dus
+> "gemergd en gesloten", niet meer strikt "draait op prod".
 
 `/status` geeft het overzicht via het board (per `App`-veld en per kolom).
 
