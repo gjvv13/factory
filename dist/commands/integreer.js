@@ -211,13 +211,16 @@ function repoVan(repoDir) {
 }
 /**
  * Leest de factory-devDependency (git-url + tag) uit een ruwe package.json-string.
- * Geeft undefined als `devDependencies.factory` ontbreekt of leeg is.
+ * Zoekt eerst de scoped sleutel `@gjvv13/factory`, dan de oude `factory` als
+ * fallback — zodat zowel al-gemigreerde als nog-niet-gemigreerde apps werken.
+ * Geeft undefined als geen van beide aanwezig of leeg is.
  */
 export function parseFactoryDep(inhoud) {
     const data = JSON.parse(inhoud);
-    const dep = typeof data === 'object' && data !== null && 'devDependencies' in data
-        ? data.devDependencies?.factory
+    const deps = typeof data === 'object' && data !== null && 'devDependencies' in data
+        ? data.devDependencies
         : undefined;
+    const dep = deps?.['@gjvv13/factory'] ?? deps?.factory;
     return dep === undefined || dep === '' ? undefined : dep;
 }
 /** De factory-devDependency (git-url + tag) uit de app-package.json, voor de globale install. */
@@ -268,7 +271,7 @@ export function globaleFactoryVersie() {
     if (root === undefined || root === '')
         return undefined;
     try {
-        const pj = JSON.parse(readFileSync(path.join(root, 'factory', 'package.json'), 'utf8'));
+        const pj = JSON.parse(readFileSync(path.join(root, '@gjvv13', 'factory', 'package.json'), 'utf8'));
         return typeof pj === 'object' && pj !== null && 'version' in pj
             ? String(pj.version)
             : undefined;

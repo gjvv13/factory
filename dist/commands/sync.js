@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import { agentsDir, claudeCommandsDir, factoryPakketDir, hooksDir, skillsDir, syncBestanden, workflowsDir, } from '../paths.js';
@@ -84,6 +84,41 @@ export function syncVerschillen(appDir, negeer = []) {
     }
     return verschillen;
 }
+/** Bestanden waarin `factory sync` oude `'factory/…'`-importpaden herschrijft naar `'@gjvv13/factory/…'`. */
+const IMPORTPAD_BESTANDEN = [
+    'eslint.config.js',
+    'vitest.unit.config.ts',
+    'vitest.contract.config.ts',
+    'vitest.e2e.config.ts',
+    'vitest.pact-verify.config.ts',
+    'tsconfig.json',
+    'tsconfig.build.json',
+    '.prettierrc.json',
+    path.join('app', 'test', 'e2e', 'global-setup.ts'),
+];
+/**
+ * Herschrijft oude `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
+ * configuratiebestanden. Idempotent: al-herschreven paden worden niet geraakt.
+ * Geeft de lijst van bijgewerkte bestanden terug (relatieve paden).
+ */
+export function herschrijfImportpaden(appDir) {
+    const bijgewerkt = [];
+    // Patroon: 'factory/ of "factory/ aan het begin van een woord, maar niet als er
+    // al @gjvv13/ voor staat. Werkt voor ES-import, JSON-extends en prettierrc-string.
+    const patroon = /(?<=['"])factory\//g;
+    for (const rel of IMPORTPAD_BESTANDEN) {
+        const volledig = path.join(appDir, rel);
+        if (!existsSync(volledig))
+            continue;
+        const oud = readFileSync(volledig, 'utf8');
+        const nieuw = oud.replace(patroon, '@gjvv13/factory/');
+        if (nieuw !== oud) {
+            writeFileSync(volledig, nieuw);
+            bijgewerkt.push(rel);
+        }
+    }
+    return bijgewerkt;
+}
 /**
  * Zet de bestanden die de factory aanlevert maar die in de app-repo moeten staan
  * gelijk aan de versie uit het pakket: de slash commands, de skills, de git hook
@@ -119,6 +154,8 @@ export function syncNaarApp(appDir, negeer = []) {
             bijgewerkt.push(doel);
         }
     }
+    // Herschrijf oude factory-importpaden naar de scoped naam.
+    bijgewerkt.push(...herschrijfImportpaden(appDir));
     // De hook moet uitvoerbaar zijn en git moet hem via .githooks vinden.
     chmodSync(path.join(appDir, '.githooks', 'pre-commit'), 0o755);
     git(['config', 'core.hooksPath', '.githooks'], appDir);

@@ -35,7 +35,9 @@ export interface PlistOpzet {
 export declare function bouwPlist(opzet: PlistOpzet): string;
 /**
  * Leest de factory-devDependency (git-url + tag) uit een ruwe package.json-string.
- * Geeft undefined als `devDependencies.factory` ontbreekt of leeg is.
+ * Zoekt eerst de scoped sleutel `@gjvv13/factory`, dan de oude `factory` als
+ * fallback — zodat zowel al-gemigreerde als nog-niet-gemigreerde apps werken.
+ * Geeft undefined als geen van beide aanwezig of leeg is.
  */
 export declare function parseFactoryDep(inhoud: string): string | undefined;
 /**
