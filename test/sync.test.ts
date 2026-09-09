@@ -9,7 +9,7 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
+import { herschrijfImportpaden, sync, syncNaarApp, syncVerschillen } from '../src/commands/sync.js';
 import { skillsDir, syncBestanden } from '../src/paths.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep } from './helpers.js';
@@ -285,6 +285,56 @@ describe('sync', () => {
 
     expect(existsSync(overbodigPad)).toBe(true);
     expect(bijgewerkt).not.toContain(OVERBODIG);
+  });
+
+  // --- Importpad-hernoem (factory → @gjvv13/factory) ---
+
+  it('herschrijft oude factory-importpaden naar @gjvv13/factory', () => {
+    const app = maakAppMap();
+    writeFileSync(
+      path.join(app, 'eslint.config.js'),
+      "import { factoryEslint } from 'factory/eslint';\n",
+    );
+    writeFileSync(path.join(app, 'tsconfig.json'), '{ "extends": "factory/tsconfig.base.json" }\n');
+    writeFileSync(path.join(app, '.prettierrc.json'), '"factory/prettier"\n');
+
+    const bijgewerkt = herschrijfImportpaden(app);
+
+    expect(bijgewerkt).toContain('eslint.config.js');
+    expect(bijgewerkt).toContain('tsconfig.json');
+    expect(bijgewerkt).toContain('.prettierrc.json');
+    expect(readFileSync(path.join(app, 'eslint.config.js'), 'utf8')).toContain(
+      "'@gjvv13/factory/eslint'",
+    );
+    expect(readFileSync(path.join(app, 'tsconfig.json'), 'utf8')).toContain(
+      '"@gjvv13/factory/tsconfig.base.json"',
+    );
+    expect(readFileSync(path.join(app, '.prettierrc.json'), 'utf8')).toContain(
+      '"@gjvv13/factory/prettier"',
+    );
+  });
+
+  it('is idempotent: herschrijft al-bijgewerkte paden niet opnieuw', () => {
+    const app = maakAppMap();
+    writeFileSync(
+      path.join(app, 'eslint.config.js'),
+      "import { factoryEslint } from '@gjvv13/factory/eslint';\n",
+    );
+
+    const bijgewerkt = herschrijfImportpaden(app);
+
+    expect(bijgewerkt).toEqual([]);
+  });
+
+  it('laat bestanden zonder oude factory-import ongewijzigd', () => {
+    const app = maakAppMap();
+    const inhoud = "import { defineConfig } from 'vitest/config';\n";
+    writeFileSync(path.join(app, 'vitest.unit.config.ts'), inhoud);
+
+    const bijgewerkt = herschrijfImportpaden(app);
+
+    expect(bijgewerkt).toEqual([]);
+    expect(readFileSync(path.join(app, 'vitest.unit.config.ts'), 'utf8')).toBe(inhoud);
   });
 
   it('verwijdert geen losse bestandskopie die niet in de factory staat', () => {
