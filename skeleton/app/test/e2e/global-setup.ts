@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { e2eCoverageEnv, schrijfE2eDekking } from 'factory/e2e-coverage';
+import { e2eCoverageEnv, schrijfE2eDekking } from '@gjvv13/factory/e2e-coverage';
 import type { TestProject } from 'vitest/node';
 
 declare module 'vitest' {
