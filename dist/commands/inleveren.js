@@ -133,13 +133,20 @@ export function inleveren(opties = {}) {
         ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}` +
             ` — vertakt van #${String(opties.reeksInfo.basisIssue)} (${opties.reeksInfo.basisBranch})`
         : '';
+    // Issue uit de branchnaam: voegt `Closes #<N>` toe aan de PR-body zodat GitHub het
+    // issue sluit bij merge naar main (#598). Bij een branch zonder slice-vorm wordt
+    // niets toegevoegd — liever geen Closes dan een verkeerd issue sluiten.
+    const sliceIssue = issueUitBranch(branch);
+    const closesRegel = sliceIssue !== undefined ? `\n\nCloses #${String(sliceIssue)}` : '';
     const titelArgumenten = opties.titel === undefined
-        ? ['--fill']
+        ? sliceIssue !== undefined
+            ? ['--fill', '--body', `Closes #${String(sliceIssue)}`]
+            : ['--fill']
         : [
             '--title',
             opties.titel,
             '--body',
-            `Ingeleverd via \`factory inleveren\`.${reeksVermelding}`,
+            `Ingeleverd via \`factory inleveren\`.${reeksVermelding}${closesRegel}`,
         ];
     // Een bestaande PR hergebruiken mag alleen als hij nog open is. Een gemergede of
     // gesloten PR is geen inlevering: het werk zit in geen enkele open PR en bereikt
@@ -172,10 +179,9 @@ export function inleveren(opties = {}) {
     // Het item schuift zelf mee (#128). Vanaf hier wacht de slice op de merge — de
     // menselijke poort die bepaalt of het de main bereikt. Een branch zonder
     // slice-vorm hoort bij geen enkel backlog-item en verschuift daarom niets.
-    const issue = issueUitBranch(branch);
-    if (issue !== undefined && zetKolom(issue, 'Wacht op merge', repoDir)) {
-        plaatsComment(issue, `Ingeleverd via \`factory inleveren\`: ${prUrl}`, repoDir);
-        ok(`#${String(issue)} staat op Wacht op merge`);
+    if (sliceIssue !== undefined && zetKolom(sliceIssue, 'Wacht op merge', repoDir)) {
+        plaatsComment(sliceIssue, `Ingeleverd via \`factory inleveren\`: ${prUrl}`, repoDir);
+        ok(`#${String(sliceIssue)} staat op Wacht op merge`);
     }
     // Nu opzoeken, zolang de map er nog is: het opruimen hieronder maakt hem onvindbaar.
     const werkplek = werkplekVanSessie(repoDir);
@@ -194,9 +200,9 @@ export function inleveren(opties = {}) {
         // Tweedelijns-beveiliging (#364): het issue moet het `fastlane`-label dragen.
         // Dat label kan alleen een mens zetten (ADR 009); zonder label is de fastlane
         // niet toegestaan, ook al liet de hook het commando door.
-        if (issue !== undefined && !heeftLabel(issue, FASTLANE_LABEL, repoDir)) {
-            throw new GebruikersFout(`--fastlane vereist het label '${FASTLANE_LABEL}' op #${String(issue)}.\n` +
-                `  Zet het label eerst: gh issue edit ${String(issue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`);
+        if (sliceIssue !== undefined && !heeftLabel(sliceIssue, FASTLANE_LABEL, repoDir)) {
+            throw new GebruikersFout(`--fastlane vereist het label '${FASTLANE_LABEL}' op #${String(sliceIssue)}.\n` +
+                `  Zet het label eerst: gh issue edit ${String(sliceIssue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`);
         }
         if (lokaal) {
             zorgVoorWachtrijLabel(repoDir);
