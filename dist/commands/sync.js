@@ -97,12 +97,27 @@ const IMPORTPAD_BESTANDEN = [
     path.join('app', 'test', 'e2e', 'global-setup.ts'),
 ];
 /**
- * Herschrijft oude `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
- * configuratiebestanden. Idempotent: al-herschreven paden worden niet geraakt.
+ * Herschrijft `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
+ * configuratiebestanden — maar alléén als de app de factory-dep al onder de
+ * scoped sleutel `@gjvv13/factory` heeft. pnpm plaatst een git-dep op de
+ * dep-SLEUTEL, niet de echte pakketnaam, dus de import-prefix moet gelijk zijn
+ * aan de sleutel: op een app met bare sleutel `factory` zou een scoped import
+ * niet resolven (#612). Idempotent: al-herschreven paden worden niet geraakt.
  * Geeft de lijst van bijgewerkte bestanden terug (relatieve paden).
  */
 export function herschrijfImportpaden(appDir) {
     const bijgewerkt = [];
+    // De import-prefix volgt de dep-sleutel. Staat de app nog op de bare sleutel
+    // `factory` (of heeft hij geen factory-dep), dan blijven de imports `factory/…`.
+    const pkgPad = path.join(appDir, 'package.json');
+    if (!existsSync(pkgPad))
+        return bijgewerkt;
+    const data = JSON.parse(readFileSync(pkgPad, 'utf8'));
+    const deps = typeof data === 'object' && data !== null && 'devDependencies' in data
+        ? data.devDependencies
+        : undefined;
+    if (deps === undefined || !('@gjvv13/factory' in deps))
+        return bijgewerkt;
     // Patroon: 'factory/ of "factory/ aan het begin van een woord, maar niet als er
     // al @gjvv13/ voor staat. Werkt voor ES-import, JSON-extends en prettierrc-string.
     const patroon = /(?<=['"])factory\//g;

@@ -31,6 +31,16 @@ function schrijfAppConfig(appDir: string, extra: Record<string, unknown> = {}): 
   );
 }
 
+/** Schrijft een package.json met de factory-dep onder de gegeven sleutel. */
+function schrijfPkg(appDir: string, sleutel: '@gjvv13/factory' | 'factory'): void {
+  writeFileSync(
+    path.join(appDir, 'package.json'),
+    JSON.stringify({
+      devDependencies: { [sleutel]: 'git+https://github.com/gjvv13/factory.git#v1.0.0' },
+    }),
+  );
+}
+
 const BOUW = path.join('.claude', 'commands', 'bouw.md');
 const OVERBODIG = path.join('.claude', 'commands', 'oud-commando.md');
 const DEPENDABOT = path.join('.github', 'dependabot.yml');
@@ -291,6 +301,7 @@ describe('sync', () => {
 
   it('herschrijft oude factory-importpaden naar @gjvv13/factory', () => {
     const app = maakAppMap();
+    schrijfPkg(app, '@gjvv13/factory');
     writeFileSync(
       path.join(app, 'eslint.config.js'),
       "import { factoryEslint } from 'factory/eslint';\n",
@@ -316,6 +327,7 @@ describe('sync', () => {
 
   it('is idempotent: herschrijft al-bijgewerkte paden niet opnieuw', () => {
     const app = maakAppMap();
+    schrijfPkg(app, '@gjvv13/factory');
     writeFileSync(
       path.join(app, 'eslint.config.js'),
       "import { factoryEslint } from '@gjvv13/factory/eslint';\n",
@@ -328,6 +340,7 @@ describe('sync', () => {
 
   it('laat bestanden zonder oude factory-import ongewijzigd', () => {
     const app = maakAppMap();
+    schrijfPkg(app, '@gjvv13/factory');
     const inhoud = "import { defineConfig } from 'vitest/config';\n";
     writeFileSync(path.join(app, 'vitest.unit.config.ts'), inhoud);
 
@@ -335,6 +348,33 @@ describe('sync', () => {
 
     expect(bijgewerkt).toEqual([]);
     expect(readFileSync(path.join(app, 'vitest.unit.config.ts'), 'utf8')).toBe(inhoud);
+  });
+
+  it('herschrijft niet bij de bare sleutel `factory` (pnpm plaatst op node_modules/factory, #612)', () => {
+    const app = maakAppMap();
+    schrijfPkg(app, 'factory');
+    const inhoud = "import { factoryEslint } from 'factory/eslint';\n";
+    writeFileSync(path.join(app, 'eslint.config.js'), inhoud);
+
+    const bijgewerkt = herschrijfImportpaden(app);
+
+    expect(bijgewerkt).toEqual([]);
+    expect(readFileSync(path.join(app, 'eslint.config.js'), 'utf8')).toBe(inhoud);
+  });
+
+  it('herschrijft niet als package.json geen scoped factory-dep heeft', () => {
+    const app = maakAppMap();
+    writeFileSync(
+      path.join(app, 'package.json'),
+      JSON.stringify({ devDependencies: { vitest: '^4' } }),
+    );
+    const inhoud = "import x from 'factory/eslint';\n";
+    writeFileSync(path.join(app, 'eslint.config.js'), inhoud);
+
+    const bijgewerkt = herschrijfImportpaden(app);
+
+    expect(bijgewerkt).toEqual([]);
+    expect(readFileSync(path.join(app, 'eslint.config.js'), 'utf8')).toBe(inhoud);
   });
 
   it('verwijdert geen losse bestandskopie die niet in de factory staat', () => {
