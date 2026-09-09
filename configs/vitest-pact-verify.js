@@ -3,7 +3,7 @@
  * interacties tegen één app-instantie, dus bestanden draaien niet parallel.
  * Geen coverage: de Verifier herhaalt HTTP-interacties die e2e al dekt.
  *
- *   import { pactVerifyConfig } from 'factory/vitest-pact-verify';
+ *   import { pactVerifyConfig } from '@gjvv13/factory/vitest-pact-verify';
  *   export default pactVerifyConfig();
  *
  * @param {object} [overrides] Extra Vitest-opties die over de preset heen gaan.

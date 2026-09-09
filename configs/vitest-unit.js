@@ -3,7 +3,7 @@ import { coverageOptie, LAAG_INCLUDE } from './coverage.js';
 /**
  * Vitest-preset voor unit tests: snel, in-memory, geen netwerk.
  *
- *   import { unitTestConfig } from 'factory/vitest-unit';
+ *   import { unitTestConfig } from '@gjvv13/factory/vitest-unit';
  *   export default unitTestConfig();
  *
  * @param {object} [overrides] Extra Vitest-opties die over de preset heen gaan.
