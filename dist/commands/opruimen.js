@@ -81,7 +81,7 @@ function issueUitBranch(branch) {
  */
 export function opruimen(opties = {}) {
     const dry = opties.dry === true;
-    const cwd = process.cwd();
+    const cwd = opties.repoPad ?? process.cwd();
     // --- Eerst prunen, dan pas oordelen: zonder een verse `origin/main` vergelijk
     //     je tegen een verouderde stand en trek je de verkeerde conclusie (#126).
     kop('Ophalen en prunen');

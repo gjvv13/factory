@@ -22,6 +22,7 @@ import {
   eigenVersie,
   escalatieComment,
   leesEscalatie,
+  opruimenNaReeks,
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
@@ -34,8 +35,9 @@ import {
   TOKEN_SLEUTEL,
   type OrkestratorPaden,
 } from '../src/orkestrator-instellingen.js';
-import { herstelAsyncUitvoerder, herstelUitvoerder } from '../src/shell.js';
+import { herstelAsyncUitvoerder, herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import {
+  maakUitvoerderOpnemer,
   zetBeideUitvoerdersOp,
   zetBoardOmgeving,
   type ProcesAanroep,
@@ -2313,7 +2315,7 @@ describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {
   });
 });
 
-describe('veiligOpruimen (#422)', () => {
+describe('veiligOpruimen (#422, #588)', () => {
   let uitvoer: string[];
 
   beforeEach(() => {
@@ -2325,6 +2327,7 @@ describe('veiligOpruimen (#422)', () => {
   });
 
   afterEach(() => {
+    herstelUitvoerder();
     vi.restoreAllMocks();
   });
 
@@ -2346,5 +2349,187 @@ describe('veiligOpruimen (#422)', () => {
 
     expect(fn).toHaveBeenCalledOnce();
     expect(uitvoer.join('')).toContain('opruimen mislukt: git fetch mislukt');
+  });
+
+  it('zonder context alleen waarschuwing — geen schrijfLog of melding (#588)', () => {
+    const fn = vi.fn(() => {
+      throw new Error('onleesbare map');
+    });
+
+    veiligOpruimen(fn);
+
+    // Alleen de waarschuwing; geen curl-aanroep of log-schrijfactie.
+    expect(uitvoer.join('')).toContain('opruimen mislukt: onleesbare map');
+    // Geen ops-melding-waarschuwing (dat komt alleen bij context zonder URL).
+    expect(uitvoer.join('')).not.toContain('ops-melding');
+  });
+
+  it('met context en fout: schrijft naar runlog en stuurt ops-melding (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'veilig-opruim-'));
+    const paden = standaardPaden(home);
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    const fn = vi.fn(() => {
+      throw new Error('fetch faalde');
+    });
+
+    veiligOpruimen(fn, {
+      paden,
+      repoPad: '/spiegel/factory',
+      notifyUrl: 'https://ops.example.com/notify',
+      notifyToken: 'geheim',
+    });
+
+    // (a) schrijfLog: het logbestand bevat de WARNING inclusief repoPad.
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain('WARNING opruimen mislukt');
+    expect(logInhoud).toContain('fetch faalde');
+    expect(logInhoud).toContain('/spiegel/factory');
+
+    // (b) ops-melding: curl is aangeroepen, body bevat foutbericht én repoPad.
+    const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
+    expect(curlAanroepen).toHaveLength(1);
+    expect(curlAanroepen[0]?.argumenten).toContain('https://ops.example.com/notify');
+    expect(curlAanroepen[0]?.argumenten.join(' ')).toContain('Bearer geheim');
+    const bodyArg = curlAanroepen[0]?.argumenten[curlAanroepen[0].argumenten.indexOf('-d') + 1];
+    expect(bodyArg).toContain('fetch faalde');
+    expect(bodyArg).toContain('/spiegel/factory');
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('met context zonder notifyUrl: waarschuwt over ontbrekende URL (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'veilig-opruim-'));
+    const paden = standaardPaden(home);
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    const fn = vi.fn(() => {
+      throw new Error('onleesbaar');
+    });
+
+    veiligOpruimen(fn, { paden, repoPad: '/spiegel/factory' });
+
+    // Runlog is geschreven, inclusief repoPad.
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain('WARNING opruimen mislukt');
+    expect(logInhoud).toContain('onleesbaar');
+    expect(logInhoud).toContain('/spiegel/factory');
+
+    // Geen curl, maar wel een waarschuwing over de ontbrekende URL.
+    const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
+    expect(curlAanroepen).toHaveLength(0);
+    expect(uitvoer.join('')).toContain('ops-melding overgeslagen');
+    expect(uitvoer.join('')).toContain('DEPLOY_NOTIFY_URL');
+
+    rmSync(home, { recursive: true, force: true });
+  });
+});
+
+describe('opruimenNaReeks (#588)', () => {
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('gebruikt werkplaatsVan als repoPad, niet process.cwd()', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-na-reeks-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    // Schrijf een minimaal instellingenbestand zodat leesInstellingen niet faalt.
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    const opruimFn = vi.fn();
+
+    // We injecteren een opruimFn die niets doet; de helper bouwt het context-object
+    // maar roept onze fn aan i.p.v. de echte opruimen.
+    opruimenNaReeks(wortel, paden, opruimFn);
+
+    expect(opruimFn).toHaveBeenCalledOnce();
+
+    // Het verwachte pad is werkplaatsVan('factory', wortel) = wortel/factory.
+    const verwachtPad = path.join(wortel, 'factory');
+
+    // Forceer een fout om het context-object te inspecteren via de logmelding.
+    const failFn = vi.fn(() => {
+      throw new Error('test-fout');
+    });
+    opruimenNaReeks(wortel, paden, failFn);
+
+    // De logmelding bevat het verwachte pad (werkplaatsVan, niet process.cwd()).
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain(verwachtPad);
+    expect(logInhoud).not.toContain(process.cwd());
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('roept opruimen met het factory-spiegel-pad aan als geen opruimFn is meegegeven', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-na-reeks-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+    // De factory-spiegel moet bestaan, anders slaat opruimenNaReeks bewust over.
+    mkdirSync(path.join(wortel, 'factory'), { recursive: true });
+
+    // We mocken de uitvoerder om de git-aanroepen op te vangen; zonder mock
+    // zou de echte opruimen falen.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    opruimenNaReeks(wortel, paden);
+
+    // De git-aanroepen moeten het factory-spiegel-pad als cwd hebben.
+    const verwachtPad = path.join(wortel, 'factory');
+    const gitAanroepen = aanroepen.filter((a) => a.commando === 'git' && a.cwd !== undefined);
+    expect(gitAanroepen.length).toBeGreaterThan(0);
+    for (const aanroep of gitAanroepen) {
+      expect(aanroep.cwd).toBe(verwachtPad);
+    }
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('slaat over — geen git, geen ops-melding — als de factory-spiegel nog niet bestaat (#588)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-geen-spiegel-'));
+    const wortel = path.join(home, 'OrkestratorWerk'); // wortel/factory bestaat NIET
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    // Productiepad (geen opruimFn): de spiegel ontbreekt, dus de helper moet
+    // vroeg terugkeren zonder git aan te roepen en zonder een valse ops-melding.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    opruimenNaReeks(wortel, paden);
+
+    expect(aanroepen.some((a) => a.commando === 'git')).toBe(false);
+    expect(aanroepen.some((a) => a.commando === 'curl')).toBe(false);
+    // Geen WARNING naar het runlog geschreven.
+    expect(existsSync(paden.logPad)).toBe(false);
+
+    rmSync(home, { recursive: true, force: true });
   });
 });

@@ -66,11 +66,33 @@ export declare function bouwPrompt(item: Opdrachtitem, werkmap: string, factoryM
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export declare function orkestreer(opties?: OrkestreerOpties): Promise<void>;
 /**
+ * Context voor `veiligOpruimen`: bij een fout meldt hij via beide kanalen
+ * (schrijfLog + ops-room) in plaats van alleen een waarschuwing (#588).
+ */
+export interface OpruimContext {
+    /** Het repo-pad dat aan `opruimen` was meegegeven — voor de logmelding. */
+    readonly repoPad?: string | undefined;
+    readonly paden: OrkestratorPaden;
+    readonly notifyUrl?: string | undefined;
+    readonly notifyToken?: string | undefined;
+}
+/**
  * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
+ *
+ * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
+ * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
  */
-export declare function veiligOpruimen(fn?: () => void): void;
+export declare function veiligOpruimen(fn?: () => void, context?: OpruimContext): void;
+/**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ *
+ * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
+ * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
+ * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ */
+export declare function opruimenNaReeks(wortel: string, paden: OrkestratorPaden, opruimFn?: () => void): void;
 /**
  * Of een issue-body functionele secties bevat. Geëxporteerd voor tests (#364).
  *

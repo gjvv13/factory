@@ -1,6 +1,8 @@
 export interface OpruimOpties {
     /** Toont wat er zou gebeuren zonder iets te wijzigen. */
     readonly dry?: boolean;
+    /** Expliciet repo-pad; zonder dit valt `opruimen` terug op `process.cwd()`. */
+    readonly repoPad?: string;
 }
 /** Eén worktree-entry uit `git worktree list --porcelain`. */
 export interface WorktreeEntry {

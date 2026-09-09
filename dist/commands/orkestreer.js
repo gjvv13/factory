@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, leesIssueBody, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
@@ -254,7 +254,7 @@ export async function orkestreer(opties = {}) {
                 beschrijf: beschrijfRun,
                 beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
             }));
-            veiligOpruimen(opties.opruimFn);
+            opruimenNaReeks(wortel, paden, opties.opruimFn);
         }
         finally {
             geefLockVrij();
@@ -337,15 +337,74 @@ function beschrijfRun(uitkomst) {
  * Draai `opruimen()` als veilige afsluiter: een fout wordt gelogd maar verandert
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
+ *
+ * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
+ * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
  */
-export function veiligOpruimen(fn = opruimen) {
+export function veiligOpruimen(fn = opruimen, context) {
     try {
         fn();
     }
     catch (fout) {
         const bericht = fout instanceof Error ? fout.message : String(fout);
-        waarschuwing(`opruimen mislukt: ${bericht}`);
+        const padInfo = context?.repoPad !== undefined ? ` (repo: ${context.repoPad})` : '';
+        waarschuwing(`opruimen mislukt${padInfo}: ${bericht}`);
+        if (context !== undefined) {
+            // Runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
+            schrijfLog(context.paden, `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt${padInfo}: ${bericht}`);
+            // Ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
+            if (context.notifyUrl !== undefined) {
+                const args = [
+                    '-s',
+                    '-X',
+                    'POST',
+                    '-H',
+                    'Content-Type: application/json',
+                    ...(context.notifyToken !== undefined
+                        ? ['-H', `Authorization: Bearer ${context.notifyToken}`]
+                        : []),
+                    '-d',
+                    JSON.stringify({ text: `⚠️ opruimen mislukt${padInfo}: ${bericht}` }),
+                    context.notifyUrl,
+                ];
+                const result = run('curl', args, { capture: true, toleranter: true });
+                if (result.code !== 0) {
+                    waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
+                }
+            }
+            else {
+                waarschuwing('ops-melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
+            }
+        }
     }
+}
+/**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ *
+ * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
+ * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
+ * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ */
+export function opruimenNaReeks(wortel, paden, opruimFn) {
+    const repoPad = werkplaatsVan('factory', wortel);
+    // De factory-spiegel wordt pas door de eerste werker aangemaakt (versWerkplaats
+    // in werkAf). Bestaat hij nog niet — eerste nacht op een machine, of een lege
+    // wachtrij vóór de eerste werker — dan valt er niets op te ruimen; vroeg
+    // terugkeren i.p.v. `git fetch` op een niet-bestaand pad te laten falen en een
+    // valse ops-melding te sturen over een probleem dat er niet is (#588).
+    if (opruimFn === undefined && !existsSync(repoPad)) {
+        return;
+    }
+    const instellingen = leesInstellingen(paden);
+    veiligOpruimen(opruimFn ??
+        (() => {
+            opruimen({ repoPad });
+        }), {
+        paden,
+        repoPad,
+        notifyUrl: instellingen.notifyUrl,
+        notifyToken: instellingen.notifyToken,
+    });
 }
 /**
  * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
@@ -414,7 +473,7 @@ async function draaiNacht(cwd, wortel, paden, nu, opruimFn) {
         else if (uitkomst.einde === 'niets-nieuws') {
             ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
         }
-        veiligOpruimen(opruimFn);
+        opruimenNaReeks(wortel, paden, opruimFn);
     }
     finally {
         geefLockVrij();

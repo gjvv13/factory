@@ -3,6 +3,8 @@ import { kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
 export interface OpruimOpties {
   /** Toont wat er zou gebeuren zonder iets te wijzigen. */
   readonly dry?: boolean;
+  /** Expliciet repo-pad; zonder dit valt `opruimen` terug op `process.cwd()`. */
+  readonly repoPad?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ function issueUitBranch(branch: string): number | undefined {
  */
 export function opruimen(opties: OpruimOpties = {}): void {
   const dry = opties.dry === true;
-  const cwd = process.cwd();
+  const cwd = opties.repoPad ?? process.cwd();
 
   // --- Eerst prunen, dan pas oordelen: zonder een verse `origin/main` vergelijk
   //     je tegen een verouderde stand en trek je de verkeerde conclusie (#126).
