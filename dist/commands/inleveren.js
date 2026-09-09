@@ -137,10 +137,14 @@ export function inleveren(opties = {}) {
     // issue sluit bij merge naar main (#598). Bij een branch zonder slice-vorm wordt
     // niets toegevoegd — liever geen Closes dan een verkeerd issue sluiten.
     const sliceIssue = issueUitBranch(branch);
-    const closesRegel = sliceIssue !== undefined ? `\n\nCloses #${String(sliceIssue)}` : '';
+    // Eén bron voor de afspraak "Closes #<N> aan het eind van de body" (#598):
+    // `closesTekst` is de kale regel, `closesRegel` de variant met witregels voor
+    // de opgebouwde body. Beide PR-paden gebruiken dezelfde tekst.
+    const closesTekst = sliceIssue !== undefined ? `Closes #${String(sliceIssue)}` : '';
+    const closesRegel = closesTekst !== '' ? `\n\n${closesTekst}` : '';
     const titelArgumenten = opties.titel === undefined
-        ? sliceIssue !== undefined
-            ? ['--fill', '--body', `Closes #${String(sliceIssue)}`]
+        ? closesTekst !== ''
+            ? ['--fill', '--body', closesTekst]
             : ['--fill']
         : [
             '--title',
