@@ -22,6 +22,7 @@ import {
   eigenVersie,
   escalatieComment,
   leesEscalatie,
+  opruimenNaReeks,
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
@@ -2381,19 +2382,21 @@ describe('veiligOpruimen (#422, #588)', () => {
       notifyToken: 'geheim',
     });
 
-    // (a) schrijfLog: het logbestand bevat de WARNING.
+    // (a) schrijfLog: het logbestand bevat de WARNING inclusief repoPad.
     expect(existsSync(paden.logPad)).toBe(true);
     const logInhoud = readFileSync(paden.logPad, 'utf-8');
-    expect(logInhoud).toContain('WARNING opruimen mislukt: fetch faalde');
+    expect(logInhoud).toContain('WARNING opruimen mislukt');
+    expect(logInhoud).toContain('fetch faalde');
+    expect(logInhoud).toContain('/spiegel/factory');
 
-    // (b) ops-melding: curl is aangeroepen.
+    // (b) ops-melding: curl is aangeroepen, body bevat foutbericht én repoPad.
     const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
     expect(curlAanroepen).toHaveLength(1);
     expect(curlAanroepen[0]?.argumenten).toContain('https://ops.example.com/notify');
     expect(curlAanroepen[0]?.argumenten.join(' ')).toContain('Bearer geheim');
-    // De body bevat het foutbericht.
     const bodyArg = curlAanroepen[0]?.argumenten[curlAanroepen[0].argumenten.indexOf('-d') + 1];
     expect(bodyArg).toContain('fetch faalde');
+    expect(bodyArg).toContain('/spiegel/factory');
 
     rmSync(home, { recursive: true, force: true });
   });
@@ -2411,16 +2414,96 @@ describe('veiligOpruimen (#422, #588)', () => {
 
     veiligOpruimen(fn, { paden, repoPad: '/spiegel/factory' });
 
-    // Runlog is geschreven.
+    // Runlog is geschreven, inclusief repoPad.
     expect(existsSync(paden.logPad)).toBe(true);
     const logInhoud = readFileSync(paden.logPad, 'utf-8');
-    expect(logInhoud).toContain('WARNING opruimen mislukt: onleesbaar');
+    expect(logInhoud).toContain('WARNING opruimen mislukt');
+    expect(logInhoud).toContain('onleesbaar');
+    expect(logInhoud).toContain('/spiegel/factory');
 
     // Geen curl, maar wel een waarschuwing over de ontbrekende URL.
     const curlAanroepen = aanroepen.filter((a) => a.commando === 'curl');
     expect(curlAanroepen).toHaveLength(0);
     expect(uitvoer.join('')).toContain('ops-melding overgeslagen');
     expect(uitvoer.join('')).toContain('DEPLOY_NOTIFY_URL');
+
+    rmSync(home, { recursive: true, force: true });
+  });
+});
+
+describe('opruimenNaReeks (#588)', () => {
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+  });
+
+  afterEach(() => {
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  it('gebruikt werkplaatsVan als repoPad, niet process.cwd()', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-na-reeks-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    // Schrijf een minimaal instellingenbestand zodat leesInstellingen niet faalt.
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    const opruimFn = vi.fn();
+
+    // We injecteren een opruimFn die niets doet; de helper bouwt het context-object
+    // maar roept onze fn aan i.p.v. de echte opruimen.
+    opruimenNaReeks(wortel, paden, opruimFn);
+
+    expect(opruimFn).toHaveBeenCalledOnce();
+
+    // Het verwachte pad is werkplaatsVan('factory', wortel) = wortel/factory.
+    const verwachtPad = path.join(wortel, 'factory');
+
+    // Forceer een fout om het context-object te inspecteren via de logmelding.
+    const failFn = vi.fn(() => {
+      throw new Error('test-fout');
+    });
+    opruimenNaReeks(wortel, paden, failFn);
+
+    // De logmelding bevat het verwachte pad (werkplaatsVan, niet process.cwd()).
+    expect(existsSync(paden.logPad)).toBe(true);
+    const logInhoud = readFileSync(paden.logPad, 'utf-8');
+    expect(logInhoud).toContain(verwachtPad);
+    expect(logInhoud).not.toContain(process.cwd());
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('roept opruimen met het factory-spiegel-pad aan als geen opruimFn is meegegeven', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-na-reeks-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    // We mocken de uitvoerder om de git-aanroepen op te vangen; zonder mock
+    // zou de echte opruimen falen.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    opruimenNaReeks(wortel, paden);
+
+    // De git-aanroepen moeten het factory-spiegel-pad als cwd hebben.
+    const verwachtPad = path.join(wortel, 'factory');
+    const gitAanroepen = aanroepen.filter((a) => a.commando === 'git' && a.cwd !== undefined);
+    expect(gitAanroepen.length).toBeGreaterThan(0);
+    for (const aanroep of gitAanroepen) {
+      expect(aanroep.cwd).toBe(verwachtPad);
+    }
 
     rmSync(home, { recursive: true, force: true });
   });

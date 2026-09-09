@@ -401,18 +401,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
           beoordeel: (u) => (u.afloop === 'klaar' ? 'gelukt' : u.afloop),
         }),
       );
-      veiligOpruimen(
-        opties.opruimFn ??
-          (() => {
-            opruimen({ repoPad: cwd });
-          }),
-        {
-          paden,
-          repoPad: cwd,
-          notifyUrl: instellingen.notifyUrl,
-          notifyToken: instellingen.notifyToken,
-        },
-      );
+      opruimenNaReeks(wortel, paden, opties.opruimFn);
     } finally {
       geefLockVrij();
     }
@@ -537,13 +526,14 @@ export function veiligOpruimen(fn: () => void = opruimen, context?: OpruimContex
     fn();
   } catch (fout: unknown) {
     const bericht = fout instanceof Error ? fout.message : String(fout);
-    waarschuwing(`opruimen mislukt: ${bericht}`);
+    const padInfo = context?.repoPad !== undefined ? ` (repo: ${context.repoPad})` : '';
+    waarschuwing(`opruimen mislukt${padInfo}: ${bericht}`);
 
     if (context !== undefined) {
       // Kanaal 2: runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
       schrijfLog(
         context.paden,
-        `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt: ${bericht}`,
+        `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt${padInfo}: ${bericht}`,
       );
 
       // Kanaal 1: ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
@@ -558,7 +548,7 @@ export function veiligOpruimen(fn: () => void = opruimen, context?: OpruimContex
             ? ['-H', `Authorization: Bearer ${context.notifyToken}`]
             : []),
           '-d',
-          JSON.stringify({ text: `⚠️ opruimen mislukt: ${bericht}` }),
+          JSON.stringify({ text: `⚠️ opruimen mislukt${padInfo}: ${bericht}` }),
           context.notifyUrl,
         ];
         const result = run('curl', args, { capture: true, toleranter: true });
@@ -570,6 +560,34 @@ export function veiligOpruimen(fn: () => void = opruimen, context?: OpruimContex
       }
     }
   }
+}
+
+/**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ *
+ * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
+ * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
+ * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ */
+export function opruimenNaReeks(
+  wortel: string,
+  paden: OrkestratorPaden,
+  opruimFn?: () => void,
+): void {
+  const repoPad = werkplaatsVan('factory', wortel);
+  const instellingen = leesInstellingen(paden);
+  veiligOpruimen(
+    opruimFn ??
+      (() => {
+        opruimen({ repoPad });
+      }),
+    {
+      paden,
+      repoPad,
+      notifyUrl: instellingen.notifyUrl,
+      notifyToken: instellingen.notifyToken,
+    },
+  );
 }
 
 /**
@@ -649,18 +667,7 @@ async function draaiNacht(
     } else if (uitkomst.einde === 'niets-nieuws') {
       ok('niets nieuws meer in de wachtrij; klaar voor vannacht.');
     }
-    veiligOpruimen(
-      opruimFn ??
-        (() => {
-          opruimen({ repoPad: cwd });
-        }),
-      {
-        paden,
-        repoPad: cwd,
-        notifyUrl: instellingen.notifyUrl,
-        notifyToken: instellingen.notifyToken,
-      },
-    );
+    opruimenNaReeks(wortel, paden, opruimFn);
   } finally {
     geefLockVrij();
   }

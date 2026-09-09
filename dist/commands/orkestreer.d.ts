@@ -86,6 +86,14 @@ export interface OpruimContext {
  */
 export declare function veiligOpruimen(fn?: () => void, context?: OpruimContext): void;
 /**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ *
+ * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
+ * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
+ * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ */
+export declare function opruimenNaReeks(wortel: string, paden: OrkestratorPaden, opruimFn?: () => void): void;
+/**
  * Of een issue-body functionele secties bevat. Geëxporteerd voor tests (#364).
  *
  * Een issue hoeft alleen functionele secties te bevatten als het ook technische
