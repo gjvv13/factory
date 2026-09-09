@@ -2209,13 +2209,13 @@ describe('orkestreer --installeer en --verwijder', () => {
 
   it('slaat de install over als er al een even nieuwe globale factory staat', async () => {
     metToken();
-    mkdirSync(path.join(home, 'globaal', 'factory'), { recursive: true });
+    mkdirSync(path.join(home, 'globaal', '@gjvv13', 'factory'), { recursive: true });
     const bepaal: UitkomstBepaler = (aanroep, index) =>
       aanroep.commando === 'npm' && aanroep.argumenten[0] === 'root'
         ? { stdout: path.join(home, 'globaal') }
         : machine()(aanroep, index);
     writeFileSync(
-      path.join(home, 'globaal', 'factory', 'package.json'),
+      path.join(home, 'globaal', '@gjvv13', 'factory', 'package.json'),
       JSON.stringify({ version: '1.15.13' }),
     );
     const { aanroepen } = zetBeideUitvoerdersOp(bepaal);

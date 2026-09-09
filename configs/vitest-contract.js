@@ -4,7 +4,7 @@ import { coverageOptie, LAAG_INCLUDE } from './coverage.js';
  * Vitest-preset voor contract tests. Pact start per test een mockserver op,
  * dus bestanden draaien niet parallel: dat zou poortconflicten geven.
  *
- *   import { contractTestConfig } from 'factory/vitest-contract';
+ *   import { contractTestConfig } from '@gjvv13/factory/vitest-contract';
  *   export default contractTestConfig();
  *
  * @param {object} [overrides] Extra Vitest-opties die over de preset heen gaan.

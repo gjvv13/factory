@@ -12,6 +12,12 @@ export interface SyncVerschil {
  */
 export declare function syncVerschillen(appDir: string, negeer?: readonly string[]): SyncVerschil[];
 /**
+ * Herschrijft oude `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
+ * configuratiebestanden. Idempotent: al-herschreven paden worden niet geraakt.
+ * Geeft de lijst van bijgewerkte bestanden terug (relatieve paden).
+ */
+export declare function herschrijfImportpaden(appDir: string): string[];
+/**
  * Zet de bestanden die de factory aanlevert maar die in de app-repo moeten staan
  * gelijk aan de versie uit het pakket: de slash commands, de skills, de git hook
  * en de CI-workflow. Deze kunnen niet uit node_modules komen omdat Claude Code,

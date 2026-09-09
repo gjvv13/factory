@@ -71,15 +71,36 @@ describe('parseWachtrij — gh pr list --json parse tegen opgenomen respons', ()
 });
 
 // ---------------------------------------------------------------------------
-// parseFactoryDep: devDependencies.factory uit package.json
+// parseFactoryDep: devDependencies['@gjvv13/factory'] uit package.json
 // ---------------------------------------------------------------------------
 
 describe('parseFactoryDep — factory-dependency uit opgenomen package.json', () => {
-  it('leest de factory-dependency uit devDependencies', () => {
+  it('leest de factory-dependency uit de scoped sleutel @gjvv13/factory', () => {
     const inhoud = leesFixture('app-package.json');
     const dep = parseFactoryDep(inhoud);
 
     expect(dep).toBe('git+https://github.com/gjvv13/factory.git#v1.15.54');
+  });
+
+  it('valt terug op de oude sleutel factory als de scoped ontbreekt', () => {
+    const inhoud = JSON.stringify({
+      name: 'test',
+      devDependencies: { factory: 'git+https://github.com/gjvv13/factory.git#v1.10.0' },
+    });
+
+    expect(parseFactoryDep(inhoud)).toBe('git+https://github.com/gjvv13/factory.git#v1.10.0');
+  });
+
+  it('geeft de scoped sleutel voorrang als beide aanwezig zijn', () => {
+    const inhoud = JSON.stringify({
+      name: 'test',
+      devDependencies: {
+        '@gjvv13/factory': 'git+https://github.com/gjvv13/factory.git#v1.16.0',
+        factory: 'git+https://github.com/gjvv13/factory.git#v1.15.0',
+      },
+    });
+
+    expect(parseFactoryDep(inhoud)).toBe('git+https://github.com/gjvv13/factory.git#v1.16.0');
   });
 
   it('geeft undefined als devDependencies ontbreekt', () => {
@@ -88,7 +109,7 @@ describe('parseFactoryDep — factory-dependency uit opgenomen package.json', ()
     expect(parseFactoryDep(inhoud)).toBeUndefined();
   });
 
-  it('geeft undefined als factory niet in devDependencies staat', () => {
+  it('geeft undefined als geen factory-sleutel in devDependencies staat', () => {
     const inhoud = JSON.stringify({
       name: 'test',
       devDependencies: { typescript: '^6.0.0' },
@@ -99,7 +120,7 @@ describe('parseFactoryDep — factory-dependency uit opgenomen package.json', ()
 
   it('geeft undefined bij een lege string als waarde', () => {
     const inhoud = JSON.stringify({
-      devDependencies: { factory: '' },
+      devDependencies: { '@gjvv13/factory': '' },
     });
 
     expect(parseFactoryDep(inhoud)).toBeUndefined();

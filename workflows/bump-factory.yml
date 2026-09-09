@@ -74,7 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PUSH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         run: |
-          huidig=$(node -p "require('./package.json').devDependencies.factory.split('#').pop()")
+          # Lees de factory-dep: probeer eerst de scoped sleutel, dan de oude als fallback.
+          huidig=$(node -p "const d=require('./package.json').devDependencies;(d['@gjvv13/factory']||d.factory).split('#').pop()")
           # Nieuwste factory-tag, semver-gesorteerd. De factory-repo is publiek, dus
           # ls-remote heeft geen sleutel nodig. Een mislukte opzoeking mag niet
           # doorgaan als "niets te doen": dat verbergt een netwerkblip achter een
@@ -99,7 +100,9 @@ jobs:
             exit 1
           fi
           echo "::notice::factory bumpen van $huidig naar $nieuwste"
-          node -e "const fs=require('fs');const p=require('./package.json');p.devDependencies.factory='git+https://github.com/gjvv13/factory.git#'+process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste"
+          # Migreer de dep-sleutel van `factory` naar `@gjvv13/factory` als de oude
+          # nog aanwezig is, en schrijf de nieuwe tag.
+          node -e "const fs=require('fs');const p=require('./package.json');if(p.devDependencies.factory){delete p.devDependencies.factory}p.devDependencies['@gjvv13/factory']='git+https://github.com/gjvv13/factory.git#'+process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste"
           # Volledige install (niet --lockfile-only): we hebben de nieuwe factory in
           # node_modules nodig om `factory sync` ermee te draaien. `--no-frozen-lockfile`
           # is nodig omdat pnpm in CI standaard frozen is: we hebben net de factory-pin

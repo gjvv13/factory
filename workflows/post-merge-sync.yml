@@ -75,7 +75,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Geen wijzigingen na factory sync — niets te committen."
           else
-            versie=$(node -p "require('./package.json').devDependencies.factory.split('#').pop()")
+            versie=$(node -p "const d=require('./package.json').devDependencies;(d['@gjvv13/factory']||d.factory).split('#').pop()")
             git commit -m "sync: factory $versie propagatie"
             git push origin main
           fi

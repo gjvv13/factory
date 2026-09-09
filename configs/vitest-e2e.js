@@ -3,7 +3,7 @@
  * Eén instantie met één database, dus niet parallel: de tests delen die en
  * zetten de testdata per test terug.
  *
- *   import { e2eTestConfig } from 'factory/vitest-e2e';
+ *   import { e2eTestConfig } from '@gjvv13/factory/vitest-e2e';
  *   export default e2eTestConfig();
  *
  * @param {object} [overrides] Extra Vitest-opties die over de preset heen gaan.
