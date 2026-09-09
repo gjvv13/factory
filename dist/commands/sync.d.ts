@@ -12,8 +12,12 @@ export interface SyncVerschil {
  */
 export declare function syncVerschillen(appDir: string, negeer?: readonly string[]): SyncVerschil[];
 /**
- * Herschrijft oude `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
- * configuratiebestanden. Idempotent: al-herschreven paden worden niet geraakt.
+ * Herschrijft `factory/…`-importpaden naar `@gjvv13/factory/…` in de bekende
+ * configuratiebestanden — maar alléén als de app de factory-dep al onder de
+ * scoped sleutel `@gjvv13/factory` heeft. pnpm plaatst een git-dep op de
+ * dep-SLEUTEL, niet de echte pakketnaam, dus de import-prefix moet gelijk zijn
+ * aan de sleutel: op een app met bare sleutel `factory` zou een scoped import
+ * niet resolven (#612). Idempotent: al-herschreven paden worden niet geraakt.
  * Geeft de lijst van bijgewerkte bestanden terug (relatieve paden).
  */
 export declare function herschrijfImportpaden(appDir: string): string[];
