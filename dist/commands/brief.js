@@ -20,9 +20,13 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
  * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
  * de brief mag niet omvallen op een niet-bereikbare app.
  */
+/** Apps die geen actieve deploy-monitoring hebben; verschijnen niet in de brief. */
+const UITGEFILTERDE_APPS = new Set(['proefapp']);
 export function haalDeployRuns(apps, leesRun = ghRunList) {
     const resultaten = [];
     for (const app of apps) {
+        if (UITGEFILTERDE_APPS.has(app))
+            continue;
         const ruw = leesRun(app);
         if (ruw === undefined || ruw === '' || ruw === '[]')
             continue;
@@ -40,9 +44,11 @@ export function haalDeployRuns(apps, leesRun = ghRunList) {
         if (eerste === undefined || eerste === null || typeof eerste !== 'object')
             continue;
         const obj = eerste;
+        const rawConclusion = typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown';
         resultaten.push({
             app,
-            conclusion: typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown',
+            conclusion: rawConclusion === '' ? 'unknown' : rawConclusion,
+            status: typeof obj['status'] === 'string' ? obj['status'] : 'unknown',
             url: typeof obj['url'] === 'string' ? obj['url'] : '',
             createdAt: typeof obj['createdAt'] === 'string' ? obj['createdAt'] : '',
         });
@@ -58,7 +64,7 @@ function ghRunList(app) {
         '--workflow=deploy.yml',
         '--limit=1',
         '--json',
-        'conclusion,createdAt,url',
+        'conclusion,createdAt,status,url',
     ]);
 }
 // ---------------------------------------------------------------------------

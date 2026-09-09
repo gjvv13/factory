@@ -35,12 +35,16 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
  * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
  * de brief mag niet omvallen op een niet-bereikbare app.
  */
+/** Apps die geen actieve deploy-monitoring hebben; verschijnen niet in de brief. */
+const UITGEFILTERDE_APPS: ReadonlySet<string> = new Set(['proefapp']);
+
 export function haalDeployRuns(
   apps: readonly string[],
   leesRun: (app: string) => string | undefined = ghRunList,
 ): DeployRunStatus[] {
   const resultaten: DeployRunStatus[] = [];
   for (const app of apps) {
+    if (UITGEFILTERDE_APPS.has(app)) continue;
     const ruw = leesRun(app);
     if (ruw === undefined || ruw === '' || ruw === '[]') continue;
     let runs: unknown;
@@ -54,9 +58,11 @@ export function haalDeployRuns(
     const eerste: unknown = runs[0];
     if (eerste === undefined || eerste === null || typeof eerste !== 'object') continue;
     const obj = eerste as Record<string, unknown>;
+    const rawConclusion = typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown';
     resultaten.push({
       app,
-      conclusion: typeof obj['conclusion'] === 'string' ? obj['conclusion'] : 'unknown',
+      conclusion: rawConclusion === '' ? 'unknown' : rawConclusion,
+      status: typeof obj['status'] === 'string' ? obj['status'] : 'unknown',
       url: typeof obj['url'] === 'string' ? obj['url'] : '',
       createdAt: typeof obj['createdAt'] === 'string' ? obj['createdAt'] : '',
     });
@@ -73,7 +79,7 @@ function ghRunList(app: string): string | undefined {
     '--workflow=deploy.yml',
     '--limit=1',
     '--json',
-    'conclusion,createdAt,url',
+    'conclusion,createdAt,status,url',
   ]);
 }
 

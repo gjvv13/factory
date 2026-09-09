@@ -76,6 +76,10 @@ function deployStatusSectie(bronnen) {
     if (bronnen.deployRuns.length === 0)
         return undefined;
     const regels = bronnen.deployRuns.map((run) => {
+        if (run.status === 'in_progress' || run.status === 'queued') {
+            const label = run.status === 'queued' ? 'in wachtrij' : 'loopt';
+            return `- ${run.app}: 🔄 ${label} — [run](${run.url})`;
+        }
         const icoon = run.conclusion === 'success' ? '✅' : '❌';
         return `- ${run.app}: ${icoon} ${run.conclusion} — [run](${run.url})`;
     });

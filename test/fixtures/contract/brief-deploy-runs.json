@@ -2,11 +2,19 @@
   {
     "conclusion": "success",
     "createdAt": "2026-09-04T04:12:34Z",
+    "status": "completed",
     "url": "https://github.com/gjvv13/assistant/actions/runs/12345678901"
   },
   {
     "conclusion": "failure",
     "createdAt": "2026-09-03T04:00:00Z",
+    "status": "completed",
     "url": "https://github.com/gjvv13/assistant/actions/runs/12345678900"
+  },
+  {
+    "conclusion": "",
+    "createdAt": "2026-09-05T06:00:00Z",
+    "status": "in_progress",
+    "url": "https://github.com/gjvv13/assistant/actions/runs/12345678902"
   }
 ]
