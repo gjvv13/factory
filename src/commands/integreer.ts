@@ -295,14 +295,17 @@ function repoVan(repoDir: string): string {
 
 /**
  * Leest de factory-devDependency (git-url + tag) uit een ruwe package.json-string.
- * Geeft undefined als `devDependencies.factory` ontbreekt of leeg is.
+ * Zoekt eerst de scoped sleutel `@gjvv13/factory`, dan de oude `factory` als
+ * fallback — zodat zowel al-gemigreerde als nog-niet-gemigreerde apps werken.
+ * Geeft undefined als geen van beide aanwezig of leeg is.
  */
 export function parseFactoryDep(inhoud: string): string | undefined {
   const data: unknown = JSON.parse(inhoud);
-  const dep =
+  const deps =
     typeof data === 'object' && data !== null && 'devDependencies' in data
-      ? (data as { devDependencies?: Record<string, string> }).devDependencies?.factory
+      ? (data as { devDependencies?: Record<string, string> }).devDependencies
       : undefined;
+  const dep = deps?.['@gjvv13/factory'] ?? deps?.factory;
   return dep === undefined || dep === '' ? undefined : dep;
 }
 
@@ -356,7 +359,7 @@ export function globaleFactoryVersie(): string | undefined {
   if (root === undefined || root === '') return undefined;
   try {
     const pj: unknown = JSON.parse(
-      readFileSync(path.join(root, 'factory', 'package.json'), 'utf8'),
+      readFileSync(path.join(root, '@gjvv13', 'factory', 'package.json'), 'utf8'),
     );
     return typeof pj === 'object' && pj !== null && 'version' in pj
       ? String((pj as { version?: unknown }).version)
