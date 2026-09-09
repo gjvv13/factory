@@ -245,6 +245,42 @@ describe('bouwBrief', () => {
     expect(tekst).not.toContain('❌');
   });
 
+  it.each(['waiting', 'requested', 'pending'])(
+    'toont een %s-run (nog niet completed) als 🔄, niet als ❌ (#587)',
+    (status) => {
+      const deployRuns: DeployRunStatus[] = [
+        {
+          app: 'beheer',
+          conclusion: 'unknown',
+          status,
+          url: 'https://github.com/gjvv13/beheer/actions/runs/1234',
+          createdAt: '2026-09-08T15:00:00.000Z',
+        },
+      ];
+      const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+      expect(tekst).toContain('🔄');
+      expect(tekst).not.toContain('❌');
+    },
+  );
+
+  it('toont een onbekende status zónder conclusion als ❌ unknown (#587)', () => {
+    const deployRuns: DeployRunStatus[] = [
+      {
+        app: 'apple',
+        conclusion: 'unknown',
+        status: 'unknown',
+        url: 'https://github.com/gjvv13/apple/actions/runs/5678',
+        createdAt: '2026-09-08T15:00:00.000Z',
+      },
+    ];
+    const tekst = bouwBrief(maakBronnen({ deployRuns }));
+
+    expect(tekst).toContain('❌');
+    expect(tekst).toContain('unknown');
+    expect(tekst).not.toContain('🔄');
+  });
+
   it('verbergt lege secties (geen ruis)', () => {
     // Alleen een deploy-run, geen andere data
     const deployRuns: DeployRunStatus[] = [

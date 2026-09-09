@@ -76,12 +76,24 @@ function deployStatusSectie(bronnen) {
     if (bronnen.deployRuns.length === 0)
         return undefined;
     const regels = bronnen.deployRuns.map((run) => {
-        if (run.status === 'in_progress' || run.status === 'queued') {
-            const label = run.status === 'queued' ? 'in wachtrij' : 'loopt';
+        // Een run die nog niet 'completed' is, loopt nog — ongeacht de precieze
+        // status. GitHub kent naast in_progress/queued ook waiting (wacht op
+        // goedkeuring), requested en pending; die tonen we als 🔄, niet als ❌.
+        // Alleen een onbekende status valt door naar de conclusion-terugval.
+        if (run.status !== 'completed' && run.status !== 'unknown') {
+            const label = run.status === 'queued'
+                ? 'in wachtrij'
+                : run.status === 'in_progress'
+                    ? 'loopt'
+                    : run.status;
             return `- ${run.app}: 🔄 ${label} — [run](${run.url})`;
         }
-        const icoon = run.conclusion === 'success' ? '✅' : '❌';
-        return `- ${run.app}: ${icoon} ${run.conclusion} — [run](${run.url})`;
+        if (run.conclusion === 'success') {
+            return `- ${run.app}: ✅ ${run.conclusion} — [run](${run.url})`;
+        }
+        // Terugval: mislukt/afgebroken, of een onbekende status zonder conclusion
+        // (die is in haalDeployRuns al tot 'unknown' genormaliseerd) → ❌.
+        return `- ${run.app}: ❌ ${run.conclusion} — [run](${run.url})`;
     });
     return { kop: '🚀 Laatste deploy per app', regels };
 }

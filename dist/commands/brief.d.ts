@@ -7,6 +7,12 @@
  */
 import { type BacklogItem } from '../board.js';
 import { type DeployRunStatus, type EscalatieContext } from '../regie-brief.js';
+/**
+ * Haalt de recentste deploy-run per app op via `gh run list`.
+ *
+ * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
+ * de brief mag niet omvallen op een niet-bereikbare app.
+ */
 export declare function haalDeployRuns(apps: readonly string[], leesRun?: (app: string) => string | undefined): DeployRunStatus[];
 export declare function haalEscalatieContext(geescaleerdeItems: readonly BacklogItem[], cwd?: string): EscalatieContext[];
 export declare function brief(nu?: Date): void;

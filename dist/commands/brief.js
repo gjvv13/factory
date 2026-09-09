@@ -15,17 +15,21 @@ import { uitvoerVan, waarschuwing } from '../shell.js';
 // Deploy-run-status ophalen
 // ---------------------------------------------------------------------------
 /**
+ * Namen die in de deploy-lijst kunnen opduiken maar geen echte app zijn
+ * (proefapp = wegwerp-testapp uit een afgeronde proef); ze horen niet in de
+ * brief. Het register telt vijf echte apps — zie [[app-register-vijf-apps]].
+ */
+const GEEN_ECHTE_APPS = new Set(['proefapp']);
+/**
  * Haalt de recentste deploy-run per app op via `gh run list`.
  *
  * REST (aparte pot), 1 aanroep per app. Bij een fout: waarschuwen en overslaan,
  * de brief mag niet omvallen op een niet-bereikbare app.
  */
-/** Apps die geen actieve deploy-monitoring hebben; verschijnen niet in de brief. */
-const UITGEFILTERDE_APPS = new Set(['proefapp']);
 export function haalDeployRuns(apps, leesRun = ghRunList) {
     const resultaten = [];
     for (const app of apps) {
-        if (UITGEFILTERDE_APPS.has(app))
+        if (GEEN_ECHTE_APPS.has(app))
             continue;
         const ruw = leesRun(app);
         if (ruw === undefined || ruw === '' || ruw === '[]')
