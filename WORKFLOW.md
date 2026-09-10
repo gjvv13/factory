@@ -117,20 +117,22 @@ Slice 3 mag dus blijven liggen terwijl slice 1 en 2 gebouwd worden.
 
 ## De pijplijn
 
-| Stap           | Commando                | Waar             | Wat er met het issue gebeurt                                                   |
-| -------------- | ----------------------- | ---------------- | ------------------------------------------------------------------------------ |
-| 1. Idee        | `/idee <beschrijving>`  | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**           |
-| 2. Functioneel | `/functioneel <issue#>` | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**            |
-| 3. Technisch   | `/refine <issue#>`      | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan          |
-| 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij                     |
-| 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue                   |
-| 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                              |
-| 7. Inleveren   | `factory inleveren`     | in de applicatie | → kolom **Wacht op merge**; de PR sluit z'n issue via `Closes #<issue>` (#598) |
-| 8. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen** (via deploy)                                             |
-| 9. Promoveren  | `pnpm promote`          | in de applicatie | Rolt door naar prod; het bord stond bij merge al op **Done** (#598)            |
+| Stap           | Commando                | Waar             | Wat er met het issue gebeurt                                                                       |
+| -------------- | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------- |
+| 1. Idee        | `/idee <beschrijving>`  | factory          | Nieuw issue, `App`-veld gezet + label `type:<soort>`; kolom **Idee**                               |
+| 2. Functioneel | `/functioneel <issue#>` | factory          | Wát het moet doen ligt vast; → **Klaar voor technische refinement**                                |
+| 3. Technisch   | `/refine <issue#>`      | factory          | Pakt uit die wachtrij, zet **Technisch refinen**, laat het daar staan                              |
+| 4. Akkoord     | kolom omzetten          | factory          | **Technisch refinen** → **Klaar voor Bouwen** — alleen jij                                         |
+| 5. Bouwen      | `/bouw <issue#>`        | in de applicatie | → kolom **Bouwen**; acceptatiecriteria afvinken in het issue                                       |
+| 6. Testen      | `pnpm verify`           | in de applicatie | —                                                                                                  |
+| 7. Inleveren   | `factory inleveren`     | in de applicatie | → kolom **Wacht op merge**; de PR sluit z'n issue via `Closes gjvv13/factory#<issue>` (#598, #619) |
+| 8. Releasen    | `pnpm release`          | in de applicatie | → kolom **Uitrollen** (via deploy)                                                                 |
+| 9. Promoveren  | `pnpm promote`          | in de applicatie | Rolt door naar prod; het bord stond bij merge al op **Done** (#598)                                |
 
 > **Done bij merge (#598).** Sinds #598 sluit een gemergede slice-PR z'n issue
-> via `Closes #<issue>`, en de GitHub-Projects-workflow "Item gesloten → Done"
+> via `Closes gjvv13/factory#<issue>` (volledig gekwalificeerd sinds #619, zodat
+> een merge in een app-repo het factory-issue óók cross-repo sluit), en de
+> GitHub-Projects-workflow "Item gesloten → Done"
 > verplaatst het item dán al naar **Done** — voor álle apps, niet alleen factory.
 > De acc/prod-uitrol (stap 8/9) loopt daarna machinaal door; een gefaalde deploy
 > surfacet via de ops-melding (#123), niet via het bord. "Done" betekent dus

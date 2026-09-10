@@ -139,7 +139,7 @@ describe('inleveren', () => {
     expect(verify).toHaveBeenCalledTimes(1);
     // Branch gepusht met upstream.
     expect(argsVan(aanroepen, 'git')).toContainEqual(['push', '-q', '-u', 'origin', BRANCH]);
-    // PR aangemaakt naar main met --fill en --body met Closes (geen titel meegegeven).
+    // PR aangemaakt naar main met --fill en --body met gekwalificeerde Closes (geen titel meegegeven).
     expect(argsVan(aanroepen, 'gh')).toContainEqual([
       'pr',
       'create',
@@ -149,7 +149,7 @@ describe('inleveren', () => {
       BRANCH,
       '--fill',
       '--body',
-      'Closes #58',
+      'Closes gjvv13/factory#58',
     ]);
     // Auto-merge op de teruggegeven PR-url → belandt in de merge-queue.
     expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
@@ -228,8 +228,8 @@ describe('inleveren', () => {
     expect(body).toContain('Ingeleverd via');
   });
 
-  describe('Closes #<issue> in de PR-body (#598)', () => {
-    it('bevat Closes #<issue> in de body bij een PR met titel', () => {
+  describe('Closes owner/repo#<issue> in de PR-body (#598, #619)', () => {
+    it('bevat Closes owner/repo#<issue> in de body bij een PR met titel', () => {
       process.chdir(maakRepo());
       const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
       stelUitvoerderIn(uitvoerder);
@@ -241,10 +241,10 @@ describe('inleveren', () => {
       const bodyIndex = prCreate!.argumenten.indexOf('--body');
       expect(bodyIndex).toBeGreaterThan(-1);
       const body = prCreate!.argumenten[bodyIndex + 1];
-      expect(body).toContain('Closes #58');
+      expect(body).toContain('Closes gjvv13/factory#58');
     });
 
-    it('bevat Closes #<issue> in de body bij een PR zonder titel (--fill pad)', () => {
+    it('bevat Closes owner/repo#<issue> in de body bij een PR zonder titel (--fill pad)', () => {
       process.chdir(maakRepo());
       const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
       stelUitvoerderIn(uitvoerder);
@@ -257,7 +257,7 @@ describe('inleveren', () => {
       expect(args).toContain('--fill');
       expect(args).toContain('--body');
       const bodyIndex = args.indexOf('--body');
-      expect(args[bodyIndex + 1]).toBe('Closes #58');
+      expect(args[bodyIndex + 1]).toBe('Closes gjvv13/factory#58');
     });
 
     it('voegt geen Closes toe bij een branch zonder slice-vorm', () => {
@@ -294,7 +294,7 @@ describe('inleveren', () => {
       const bodyIndex = prCreate!.argumenten.indexOf('--body');
       const body = prCreate!.argumenten[bodyIndex + 1];
       expect(body).toContain('🔗 Reeks 2/3');
-      expect(body).toContain('Closes #58');
+      expect(body).toContain('Closes gjvv13/factory#58');
     });
   });
 
