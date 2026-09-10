@@ -44,8 +44,8 @@ function uitvoerMetEnv(commando, argumenten, cwd, env) {
         ghReden(uitkomst.stderr));
     return undefined;
 }
-const EIGENAAR = 'gjvv13';
-const BACKLOG_REPO = 'factory';
+export const EIGENAAR = 'gjvv13';
+export const BACKLOG_REPO = 'factory';
 const PROJECT_NUMMER = 2;
 /** De kolommen van het board, in pijplijnvolgorde. Zie WORKFLOW.md. */
 export const KOLOMMEN = [
