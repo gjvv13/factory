@@ -1,7 +1,14 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { leesAppConfig, zoekAppDir } from '../app-config.js';
-import { heeftLabel, issueUitBranch, plaatsComment, zetKolom } from '../board.js';
+import {
+  BACKLOG_REPO,
+  EIGENAAR,
+  heeftLabel,
+  issueUitBranch,
+  plaatsComment,
+  zetKolom,
+} from '../board.js';
 import {
   draaiCodeReview,
   maakGateComment,
@@ -237,14 +244,18 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
       ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}` +
         ` — vertakt van #${String(opties.reeksInfo.basisIssue)} (${opties.reeksInfo.basisBranch})`
       : '';
-  // Issue uit de branchnaam: voegt `Closes #<N>` toe aan de PR-body zodat GitHub het
-  // issue sluit bij merge naar main (#598). Bij een branch zonder slice-vorm wordt
-  // niets toegevoegd — liever geen Closes dan een verkeerd issue sluiten.
+  // Issue uit de branchnaam: voegt `Closes owner/repo#<N>` toe aan de PR-body zodat
+  // GitHub het issue sluit bij merge — ook cross-repo (#598, #619). Bij een branch
+  // zonder slice-vorm wordt niets toegevoegd — liever geen Closes dan een verkeerd
+  // issue sluiten.
   const sliceIssue = issueUitBranch(branch);
-  // Eén bron voor de afspraak "Closes #<N> aan het eind van de body" (#598):
-  // `closesTekst` is de kale regel, `closesRegel` de variant met witregels voor
-  // de opgebouwde body. Beide PR-paden gebruiken dezelfde tekst.
-  const closesTekst = sliceIssue !== undefined ? `Closes #${String(sliceIssue)}` : '';
+  // Eén bron voor de afspraak "Closes owner/repo#<N> aan het eind van de body" (#598,
+  // #619): `closesTekst` is de kale regel, `closesRegel` de variant met witregels voor
+  // de opgebouwde body. Beide PR-paden gebruiken dezelfde tekst. De gekwalificeerde
+  // vorm (`owner/repo#N`) is nodig zodat een merge in een app-repo het factory-issue
+  // sluit; een kale `#N` werkt alleen binnen dezelfde repo.
+  const closesTekst =
+    sliceIssue !== undefined ? `Closes ${EIGENAAR}/${BACKLOG_REPO}#${String(sliceIssue)}` : '';
   const closesRegel = closesTekst !== '' ? `\n\n${closesTekst}` : '';
   const titelArgumenten =
     opties.titel === undefined
