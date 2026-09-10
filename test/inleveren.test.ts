@@ -12,7 +12,7 @@ vi.mock('../src/commands/integreer.js', async (importOriginal) => {
   return { ...actual, heeftIntegreerAgent: vi.fn(() => true) };
 });
 
-import { inleveren } from '../src/commands/inleveren.js';
+import { AUTO_MERGE_OK_LABEL, inleveren } from '../src/commands/inleveren.js';
 import { heeftIntegreerAgent } from '../src/commands/integreer.js';
 import { verify } from '../src/commands/verify.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -98,6 +98,66 @@ function argsVan(aanroepen: ProcesAanroep[], commando: string): string[][] {
   return aanroepen.filter((a) => a.commando === commando).map((a) => a.argumenten);
 }
 
+/** Fixture met bevindingen, alsof `claude -p` dit teruggeeft. */
+const REVIEW_MET_BEVINDINGEN = JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  session_id: 'gate-1',
+  structured_output: {
+    bevindingen: [{ bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'bug' }],
+    oordeel: 'Eén bug gevonden.',
+  },
+});
+
+const REVIEW_SCHOON = JSON.stringify({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  session_id: 'gate-2',
+  structured_output: { bevindingen: [], oordeel: 'Ziet er goed uit.' },
+});
+
+/** Bepaler die de code-review-gate laat draaien met een diff en een claude-antwoord. */
+function metReview(reviewUitvoer: string): UitkomstBepaler {
+  return (aanroep, index) => {
+    if (aanroep.commando === 'claude' && aanroep.argumenten[0] === '--version')
+      return { stdout: '2.3.0' };
+    if (
+      aanroep.commando === 'git' &&
+      aanroep.argumenten[0] === 'rev-parse' &&
+      aanroep.argumenten.includes('--verify')
+    )
+      return { stdout: 'abc123' };
+    if (
+      aanroep.commando === 'git' &&
+      aanroep.argumenten[0] === 'diff' &&
+      aanroep.argumenten[1] === 'origin/main...HEAD'
+    )
+      return { stdout: '--- a/foo\n+++ b/foo\n-old\n+new' };
+    if (aanroep.commando === 'claude' && aanroep.argumenten.includes('-p'))
+      return { stdout: reviewUitvoer };
+    return gelukkig(aanroep, index);
+  };
+}
+
+/**
+ * Wraps een bepaler zodat de heeftLabel-call voor `auto-merge-ok` het label
+ * retourneert. Bestaande labels (fastlane etc.) blijven intact.
+ */
+function metAutoMergeOkLabel(basis: UitkomstBepaler): UitkomstBepaler {
+  return (aanroep, index) => {
+    // heeftLabel roept `gh api repos/gjvv13/factory/issues/<N> --jq [.labels[].name]` aan.
+    if (
+      aanroep.commando === 'gh' &&
+      aanroep.argumenten[0] === 'api' &&
+      aanroep.argumenten[1]?.includes('/issues/')
+    )
+      return { stdout: `["type:task","fastlane","${AUTO_MERGE_OK_LABEL}"]` };
+    return basis(aanroep, index);
+  };
+}
+
 describe('inleveren', () => {
   let oorspronkelijkeCwd: string;
   let herstelOmgeving: () => void;
@@ -129,8 +189,9 @@ describe('inleveren', () => {
     herstelUitvoerder();
   });
 
-  it('draait de poort, pusht de branch, opent een PR en zet auto-merge aan', () => {
+  it('draait de poort, pusht de branch, opent een PR zonder auto-merge (#573 default)', () => {
     process.chdir(maakRepo());
+    const regels = vangStdout();
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
     stelUitvoerderIn(uitvoerder);
 
@@ -151,8 +212,9 @@ describe('inleveren', () => {
       '--body',
       'Closes gjvv13/factory#58',
     ]);
-    // Auto-merge op de teruggegeven PR-url → belandt in de merge-queue.
-    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+    // Geen auto-merge: het issue heeft geen `auto-merge-ok`-label (#573).
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+    expect(regels.join('')).toContain('zonder auto-merge');
     // Lockfile ongewijzigd → geen commit.
     expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'commit')).toBe(false);
   });
@@ -355,7 +417,8 @@ describe('inleveren', () => {
     inleveren();
 
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(false);
-    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+    // Zonder `auto-merge-ok`-label: geen auto-merge (#573).
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
   });
 
   it('opent een nieuwe PR als de bestaande al gemerged is', () => {
@@ -380,15 +443,9 @@ describe('inleveren', () => {
     // Waarschuwt over de gemergede PR.
     expect(regels.join('')).toContain('al gemerged');
     expect(regels.join('')).toContain(MERGED_URL);
-    // Opent een nieuwe PR en zet daar auto-merge op.
+    // Opent een nieuwe PR, maar zonder auto-merge (geen label, #573).
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
-    expect(argsVan(aanroepen, 'gh')).toContainEqual([
-      'pr',
-      'merge',
-      NIEUWE_URL,
-      '--auto',
-      '--merge',
-    ]);
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
   });
 
   it('faalt met een duidelijke reden als de branch niets nieuws heeft na een gemergede PR', () => {
@@ -457,13 +514,8 @@ describe('inleveren', () => {
 
     expect(regels.join('')).toContain('al gesloten');
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
-    expect(argsVan(aanroepen, 'gh')).toContainEqual([
-      'pr',
-      'merge',
-      NIEUWE_URL,
-      '--auto',
-      '--merge',
-    ]);
+    // Zonder `auto-merge-ok`-label: geen auto-merge (#573).
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
   });
 
   it('geeft een expliciete titel door aan de PR', () => {
@@ -523,30 +575,31 @@ describe('inleveren', () => {
     expect(regels.join('')).toContain('zonder auto-merge');
   });
 
-  it('lokale wachtrij-route: labelt de PR i.p.v. auto-merge', () => {
+  it('lokale wachtrij-route zonder auto-merge-ok: PR zonder auto-merge (#573)', () => {
     process.chdir(maakLokaleRepo());
+    const regels = vangStdout();
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
     stelUitvoerderIn(uitvoerder);
 
     inleveren();
 
-    // Label (idempotent) aangemaakt en op de PR gezet; géén auto-merge.
-    expect(argsVan(aanroepen, 'gh').some((a) => a[0] === 'label' && a[1] === 'create')).toBe(true);
-    expect(argsVan(aanroepen, 'gh')).toContainEqual([
-      'pr',
-      'edit',
-      PR_URL,
-      '--add-label',
-      'wachtrij',
-    ]);
+    // Zonder `auto-merge-ok`: geen wachtrij-label, geen auto-merge.
+    expect(
+      argsVan(aanroepen, 'gh').some(
+        (a) => a[1] === 'edit' && a.includes('--add-label') && a.includes('wachtrij'),
+      ),
+    ).toBe(false);
     expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+    expect(regels.join('')).toContain('zonder auto-merge');
   });
 
-  it('waarschuwt als er voor een lokale-wachtrij-app geen integreer-agent is', () => {
+  it('waarschuwt als er voor een lokale-wachtrij-app geen integreer-agent is (met auto-merge-ok)', () => {
     process.chdir(maakLokaleRepo());
     vi.mocked(heeftIntegreerAgent).mockReturnValue(false);
     const regels = vangStdout();
-    stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(metAutoMergeOkLabel(metReview(REVIEW_SCHOON))).uitvoerder,
+    );
 
     inleveren();
 
@@ -559,11 +612,13 @@ describe('inleveren', () => {
     expect(uitvoer).not.toContain('integreert slice/58-1 serieel naar main');
   });
 
-  it('waarschuwt niet als de integreer-agent er wél is', () => {
+  it('waarschuwt niet als de integreer-agent er wél is (met auto-merge-ok)', () => {
     process.chdir(maakLokaleRepo());
     vi.mocked(heeftIntegreerAgent).mockReturnValue(true);
     const regels = vangStdout();
-    stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+    stelUitvoerderIn(
+      maakUitvoerderOpnemer(metAutoMergeOkLabel(metReview(REVIEW_SCHOON))).uitvoerder,
+    );
 
     inleveren();
 
@@ -626,7 +681,8 @@ describe('inleveren', () => {
     // Geen throw: de PR is het product, de administratie is bijvangst.
     inleveren();
 
-    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+    // Geen auto-merge (geen label), maar de PR staat er; het board was bijvangst.
+    expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
     expect(regels.join('')).toContain('kon #58 niet op het board');
   });
 
@@ -1018,54 +1074,180 @@ describe('inleveren', () => {
     });
   });
 
-  describe('code-review gate (#368)', () => {
-    /** Fixture met bevindingen, alsof `claude -p` dit teruggeeft. */
-    const REVIEW_MET_BEVINDINGEN = JSON.stringify({
-      type: 'result',
-      subtype: 'success',
-      is_error: false,
-      session_id: 'gate-1',
-      structured_output: {
-        bevindingen: [{ bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'bug' }],
-        oordeel: 'Eén bug gevonden.',
-      },
+  describe('label-gebaseerde auto-merge (#573)', () => {
+    it('auto-merget met auto-merge-ok label en schone review', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        metAutoMergeOkLabel(metReview(REVIEW_SCHOON)),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
     });
 
-    const REVIEW_SCHOON = JSON.stringify({
-      type: 'result',
-      subtype: 'success',
-      is_error: false,
-      session_id: 'gate-2',
-      structured_output: { bevindingen: [], oordeel: 'Ziet er goed uit.' },
-    });
-
-    /** Bepaler die de code-review-gate laat draaien met een diff en een claude-antwoord. */
-    function metReview(reviewUitvoer: string): UitkomstBepaler {
-      return (aanroep, index) => {
-        // claude --version → slaagt
+    it('auto-merget met auto-merge-ok en review-reden geen-diff', () => {
+      process.chdir(maakRepo());
+      // geen-diff: er is geen diff → review overgeslagen, maar dat is schoon.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (
+          aanroep.commando === 'gh' &&
+          aanroep.argumenten[0] === 'api' &&
+          aanroep.argumenten[1]?.includes('/issues/')
+        )
+          return { stdout: `["type:task","${AUTO_MERGE_OK_LABEL}"]` };
+        // claude is beschikbaar (versie teruggegeven); de lege diff hieronder maakt het geen-diff.
         if (aanroep.commando === 'claude' && aanroep.argumenten[0] === '--version')
           return { stdout: '2.3.0' };
-        // git rev-parse --verify origin/main → bestaat
         if (
           aanroep.commando === 'git' &&
           aanroep.argumenten[0] === 'rev-parse' &&
           aanroep.argumenten.includes('--verify')
         )
           return { stdout: 'abc123' };
-        // git diff origin/main...HEAD → niet-lege diff
+        // Lege diff → geen-diff
         if (
           aanroep.commando === 'git' &&
           aanroep.argumenten[0] === 'diff' &&
           aanroep.argumenten[1] === 'origin/main...HEAD'
         )
-          return { stdout: '--- a/foo\n+++ b/foo\n-old\n+new' };
-        // De echte review-call
-        if (aanroep.commando === 'claude' && aanroep.argumenten.includes('-p'))
-          return { stdout: reviewUitvoer };
+          return { stdout: '' };
         return gelukkig(aanroep, index);
       };
-    }
+      const opnemer = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(opnemer.uitvoerder);
 
+      inleveren();
+
+      // geen-diff is een schone gate: auto-merge mag.
+      expect(argsVan(opnemer.aanroepen, 'gh')).toContainEqual([
+        'pr',
+        'merge',
+        PR_URL,
+        '--auto',
+        '--merge',
+      ]);
+    });
+
+    it('weigert auto-merge als review bevindingen heeft, met melding', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        metAutoMergeOkLabel(metReview(REVIEW_MET_BEVINDINGEN)),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+      expect(regels.join('')).toContain('auto-merge-ok aanwezig maar gate niet schoon');
+      expect(regels.join('')).toContain('bevindingen');
+      // PR-comment met de waarschuwing.
+      const prComment = aanroepen.find(
+        (a) =>
+          a.commando === 'gh' &&
+          a.argumenten[0] === 'pr' &&
+          a.argumenten[1] === 'comment' &&
+          a.argumenten[4]?.includes('auto-merge-ok'),
+      );
+      expect(prComment).toBeDefined();
+    });
+
+    it('weigert auto-merge als review niet gelopen is (uit)', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // Zonder claude: draaiCodeReview geeft reden 'niet-beschikbaar' of 'uit'.
+      // Hier simuleren we dat claude --version faalt → niet-beschikbaar.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (
+          aanroep.commando === 'gh' &&
+          aanroep.argumenten[0] === 'api' &&
+          aanroep.argumenten[1]?.includes('/issues/')
+        )
+          return { stdout: `["type:task","${AUTO_MERGE_OK_LABEL}"]` };
+        if (aanroep.commando === 'claude' && aanroep.argumenten[0] === '--version')
+          return { code: 1 };
+        return gelukkig(aanroep, index);
+      };
+      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+      inleveren();
+
+      expect(regels.join('')).toContain('auto-merge-ok aanwezig maar gate niet schoon');
+    });
+
+    it('weigert auto-merge als review niet gedraaid is (--geen-review)', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (
+          aanroep.commando === 'gh' &&
+          aanroep.argumenten[0] === 'api' &&
+          aanroep.argumenten[1]?.includes('/issues/')
+        )
+          return { stdout: `["type:task","${AUTO_MERGE_OK_LABEL}"]` };
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ geenReview: true });
+
+      // reviewVerdict is undefined → gate niet schoon → geen auto-merge.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+      expect(regels.join('')).toContain('auto-merge-ok aanwezig maar gate niet schoon');
+    });
+
+    it('--geen-automerge override wint van auto-merge-ok label', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        metAutoMergeOkLabel(metReview(REVIEW_SCHOON)),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren({ geenAutomerge: true });
+
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+      expect(regels.join('')).toContain('zonder auto-merge');
+    });
+
+    it('auto-merget op een lokale-wachtrij-app met auto-merge-ok en schone review', () => {
+      process.chdir(maakLokaleRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        metAutoMergeOkLabel(metReview(REVIEW_SCHOON)),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Wachtrij-label gezet (de lokale equivalent van auto-merge).
+      expect(argsVan(aanroepen, 'gh')).toContainEqual([
+        'pr',
+        'edit',
+        PR_URL,
+        '--add-label',
+        'wachtrij',
+      ]);
+      // Geen gh pr merge (dat is voor de merge-queue).
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'merge')).toBe(false);
+    });
+
+    it('meldt geen auto-merge-ok-waarschuwing als het label er niet is', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+
+      inleveren();
+
+      // Geen misleidende waarschuwing over het label.
+      expect(regels.join('')).not.toContain('auto-merge-ok aanwezig');
+      expect(regels.join('')).toContain('zonder auto-merge');
+    });
+  });
+
+  describe('code-review gate (#368)', () => {
     it('slaat de review over met --geen-review', () => {
       process.chdir(maakRepo());
       const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);

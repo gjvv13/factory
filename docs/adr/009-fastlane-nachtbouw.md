@@ -17,6 +17,12 @@ zichzelf zodra CI (`verify`) en de dekkings-ratchet groen zijn, zonder
 ochtend-akkoord. Dit is een **bewuste, afgebakende afwijking** van het principe
 dat code pas landt na een mensbesluit.
 
+> **Aangevuld door #573 (2026-09-10):** naast de fastlane bestaat nu een tweede,
+> algemenere auto-merge-poort — een issue met het label `auto-merge-ok` merget
+> achter de schone code-review-gate (`verify` groen + code-review #586 zonder
+> bevindingen). De fastlane (dit ADR) blijft ongewijzigd náást die poort bestaan;
+> #573 verving 'm bewust niet.
+
 ### Drie randvoorwaarden maken de afwijking verantwoord
 
 1. **Groene poort.** `verify` (opmaak, lint, types, unit, contract, e2e, build)

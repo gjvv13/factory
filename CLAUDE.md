@@ -373,8 +373,10 @@ Met `--eenmalig` bouwt hij echt: hij claimt het item op **Bouwen**, ververst zij
 maakt via `factory werkplek` een worktree op `slice/<issue>-1`, en draait één `claude`-run
 met het `/bouw`-contract. Deze werker **mag schrijven** — dat is de opdracht — maar niet
 pushen en geen PR openen: `git push` en `gh pr` staan op zijn verbodslijst, en het
-inleveren doet de supervisor met `factory inleveren --geen-automerge`. De PR is de grens
-tussen voorstellen en landen, en die grens blijft bij jou.
+inleveren doet de supervisor met `factory inleveren`. Dat opent standaard een PR zonder
+auto-merge; de PR is de grens tussen voorstellen en landen, en die grens blijft bij jou —
+behalve wanneer het issue `auto-merge-ok` draagt en de code-review-gate schoon is, dan
+merget de PR zichzelf achter de poort (#573).
 
 Zijn gereedschapslijst bevat naast schrijven ook de gewone **lees- en tmp-werkwoorden**
 (`ls`, `cat`, `head`, `grep`, `echo`, `mkdir`, `mktemp`): die geven geen macht die `Write`

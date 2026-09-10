@@ -48,6 +48,9 @@ Als de poort rood is, stopt het proces. Er is geen `--force`.
 
 ## Onbemand inleveren
 
-Een bouw-werker levert niet zelf in — dat doet de supervisor met
-`factory inleveren --geen-automerge`. De PR is de grens tussen voorstellen en
-landen; die grens blijft bij een mens.
+Een bouw-werker schrijft code maar levert niet zelf in: `git push` en `gh pr`
+staan op zijn verbodslijst. Het inleveren doet de supervisor/orkestrator met
+`factory inleveren`. Standaard opent dat een PR **zonder** auto-merge — de merge
+blijft een mensbesluit. Alleen als het issue het label `auto-merge-ok` draagt
+én de code-review-gate schoon is, merget de PR zichzelf achter de groene poort
+(#573); zonder dat label blijft de PR-grens bij een mens.

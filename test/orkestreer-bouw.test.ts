@@ -915,18 +915,15 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(claim).toBeGreaterThanOrEqual(0);
     expect(claim).toBeLessThan(werker);
 
-    // Inleveren gebeurt met geenAutomerge, en nooit via `gh pr merge --auto`.
+    // Inleveren zonder fastlane: geen geenAutomerge-vlag (#573). De label-check in
+    // `inleveren` bepaalt of auto-merge aangaat; de orkestrator stuurt niet meer mee.
     expect(geleverd).toEqual([
       {
         cwd: path.join(wortel, 'factory-wt', '177'),
-        geenAutomerge: true,
         // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/177 1".
         titel: '#177 — Slice onder een epic dat geen Status heeft',
       },
     ]);
-    expect(
-      aanroepen.some((a) => a.argumenten.includes('--auto') || a.argumenten[1] === 'merge'),
-    ).toBe(false);
   });
 
   it('geeft het bouwbudget mee, niet het refinement-budget', async () => {

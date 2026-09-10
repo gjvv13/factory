@@ -14,6 +14,12 @@ import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js'
  * `orkestreer-bouw` importeert `inleveren`, dus de omgekeerde richting mag niet.
  */
 const FASTLANE_LABEL = 'fastlane';
+/**
+ * Label-gebaseerde auto-merge (#573): een PR merget alleen met dit label op het
+ * issue én een schone code-review-gate. Geen label = mens-poort. Het label wordt
+ * door een mens gezet (tijdens grooming), niet door een werker.
+ */
+export const AUTO_MERGE_OK_LABEL = 'auto-merge-ok';
 /** Committeert een gewijzigd bestand met een korte melding; slaat over als het niet wijzigde. */
 function commitAlsGewijzigd(repoDir, bestand, melding) {
     if (!existsSync(path.join(repoDir, bestand))) {
@@ -211,41 +217,60 @@ export function inleveren(opties = {}) {
             throw new GebruikersFout(`--fastlane vereist het label '${FASTLANE_LABEL}' op #${String(sliceIssue)}.\n` +
                 `  Zet het label eerst: gh issue edit ${String(sliceIssue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`);
         }
-        if (lokaal) {
-            zorgVoorWachtrijLabel(repoDir);
-            run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
-        }
-        else {
-            run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
-        }
+        zetInWachtrijOfMerge(repoDir, prUrl, lokaal);
         ok(`fastlane-PR met auto-merge: ${prUrl}`);
         process.stdout.write(`\n${branch} merget zichzelf zodra de poort groen is.\n`);
     }
-    else if (lokaal) {
-        // Factory-eigen wachtrij: label de PR. `factory integreer` op de mini werkt de rij
-        // serieel af (voor private apps waar de GitHub merge-queue niet beschikbaar is).
-        zorgVoorWachtrijLabel(repoDir);
-        run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
-        ok(`in de wachtrij gezet: ${prUrl}`);
-        // Zonder een integreer-agent werkt niemand de rij af: de PR blijft stil staan
-        // (de storing uit #108). Waarschuw expliciet en wijs de twee uitwegen aan.
-        // `config` is hier non-undefined: `lokaal` kan alleen waar zijn als het gelezen is.
-        if (heeftIntegreerAgent(config.naam)) {
-            process.stdout.write(`\nDe factory-wachtrij integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`);
+    else {
+        // Label-gebaseerde auto-merge (#573): de default is geen auto-merge. Auto-merge
+        // gaat alleen aan als het issue `auto-merge-ok` draagt én de code-review-gate
+        // schoon is (reden 'schoon' of 'geen-diff'). Zonder label, zonder schone gate,
+        // of zonder slice-issue: mens-poort.
+        const heeftAutoMerge = sliceIssue !== undefined && heeftLabel(sliceIssue, AUTO_MERGE_OK_LABEL, repoDir);
+        const gateIsSchoon = reviewGateSchoon(reviewVerdict);
+        if (heeftAutoMerge && gateIsSchoon) {
+            if (config !== undefined && lokaal) {
+                // `lokaal` impliceert `config !== undefined`, maar de expliciete guard
+                // voorkomt een non-null-assertion die ESLint (terecht) weigert.
+                zetInWachtrijOfMerge(repoDir, prUrl, true);
+                ok(`in de wachtrij gezet (auto-merge-ok): ${prUrl}`);
+                if (heeftIntegreerAgent(config.naam)) {
+                    process.stdout.write(`\nDe factory-wachtrij integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`);
+                }
+                else {
+                    const doel = ghDoelVanUrl(prUrl) ?? config.naam;
+                    waarschuwing(`geen integreer-agent voor ${config.naam} — deze PR blijft in de wachtrij staan.\n` +
+                        `  Installeer 'm met \`factory integreer --installeer\` (in de app-map),\n` +
+                        `  of werk de rij nu af met \`factory integreer --repo=${doel}\`.`);
+                }
+            }
+            else {
+                zetInWachtrijOfMerge(repoDir, prUrl, false);
+                ok(`auto-merge (auto-merge-ok): ${prUrl}`);
+                process.stdout.write(`\nDe merge-queue integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`);
+            }
         }
         else {
-            const doel = ghDoelVanUrl(prUrl) ?? config.naam;
-            waarschuwing(`geen integreer-agent voor ${config.naam} — deze PR blijft in de wachtrij staan.\n` +
-                `  Installeer 'm met \`factory integreer --installeer\` (in de app-map),\n` +
-                `  of werk de rij nu af met \`factory integreer --repo=${doel}\`.`);
+            // Geen auto-merge: het label ontbreekt, of de gate is niet schoon.
+            if (heeftAutoMerge && !gateIsSchoon) {
+                const reden = reviewVerdict?.reden ?? 'geen review';
+                waarschuwing(`auto-merge-ok aanwezig maar gate niet schoon (${reden}) — menselijke merge vereist.`);
+                // Alleen een PR-comment als de review echt bevindingen had of geen verdict
+                // gaf. `'uit'` (review bewust uitgezet) en `'niet-beschikbaar'` zijn geen
+                // storing maar een toestand; die op de PR melden leest als een fout (#573-review).
+                if (reden === 'bevindingen' || reden === 'geen-verdict') {
+                    run('gh', [
+                        'pr',
+                        'comment',
+                        prUrl,
+                        '--body',
+                        `⚠️ \`auto-merge-ok\` aanwezig maar code-review-gate niet schoon (${reden}) — menselijke merge vereist.`,
+                    ], { cwd: repoDir, toleranter: true });
+                }
+            }
+            ok(`PR geopend zonder auto-merge: ${prUrl}`);
+            process.stdout.write(`\n${branch} wacht op een menselijke merge; er is niets in een wachtrij gezet.\n`);
         }
-    }
-    else {
-        // Auto-merge aanzetten: met een ingeschakelde merge-queue plaatst dit de PR in de
-        // wachtrij zodra de checks groen zijn. De queue merget serieel naar main.
-        run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
-        ok(`ingeleverd: ${prUrl}`);
-        process.stdout.write(`\nDe merge-queue integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`);
     }
     // Allerlaatste stap (#118): het werk zit in de PR, dus de werkmap heeft zijn dienst
     // gedaan. Blijft hij staan, dan stapelen de werkplekken zich op en weet niemand meer
@@ -259,6 +284,29 @@ export function inleveren(opties = {}) {
         }
     }
     return reviewVerdict?.reden !== undefined ? { reviewReden: reviewVerdict.reden } : {};
+}
+/**
+ * Of de code-review-gate schoon is: de review is gelopen en er zijn geen bevindingen.
+ * Alleen `'schoon'` en `'geen-diff'` tellen als schoon; `'uit'`, `'niet-beschikbaar'`,
+ * `'geen-verdict'` en `'bevindingen'` niet (#573, besluit 6).
+ */
+function reviewGateSchoon(verdict) {
+    return verdict?.reden === 'schoon' || verdict?.reden === 'geen-diff';
+}
+/**
+ * Zet de PR op auto-merge: lokaal via het `wachtrij`-label (de integreer-agent
+ * pikt 'm op), op een merge-queue-app via `gh pr merge --auto`. Eén bron voor de
+ * twee poorten (fastlane #401 en label-auto-merge #573), zodat ze in de pas
+ * blijven als er een derde bij komt.
+ */
+function zetInWachtrijOfMerge(repoDir, prUrl, lokaal) {
+    if (lokaal) {
+        zorgVoorWachtrijLabel(repoDir);
+        run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+    }
+    else {
+        run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
+    }
 }
 /**
  * De bestanden waarop deze branch botst met `origin/main`, of undefined als het schoon

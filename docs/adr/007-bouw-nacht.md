@@ -19,7 +19,10 @@ van de refine-nacht. Kenmerken:
 - **Eén gedeeld slot** (`factory-orkestreer.lock`): twee werkers tegelijk is
   het probleem, ongeacht de soort. Slot bezet → overslaan.
 - **Auto-merge blijft uit** (`--geen-automerge`): de PR's staan 's ochtends
-  open voor review.
+  open voor review. _Bijgewerkt door #573 (2026-09-10): auto-merge is niet meer
+  altijd uit — een issue met het label `auto-merge-ok` merget achter de schone
+  code-review-gate (ook onbemand 's nachts, met akkoord van de gebruiker); zonder
+  dat label blijven de PR's zoals hier beschreven 's ochtends open voor review._
 - **Eigen teller** (`nachtBouw`), los van de refine-teller, zodat het
   dagmaximum per soort geldt.
 

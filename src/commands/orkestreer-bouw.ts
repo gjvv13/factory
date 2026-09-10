@@ -876,7 +876,9 @@ function verwerkBouw(
   // inleveren: stuit `leverIn` op een omgevingsfout, dan is er géén PR en zou die comment
   // liegen (#383).
   const reviewComment = maakReviewComment(reviewUitkomst);
-  // Fastlane-items (#401) mergen zichzelf op groen; gewone items wachten op een mens.
+  // Fastlane-items (#401) mergen zichzelf op groen; gewone items laten de label-check
+  // in `inleveren` bepalen of auto-merge aangaat (#573): `auto-merge-ok` op het issue
+  // is de gate, niet de `geenAutomerge`-vlag.
   const isFastlane = baan === 'fastlane';
   let inleverResultaat: InleverenResultaat;
   try {
@@ -884,7 +886,7 @@ function verwerkBouw(
     // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
     inleverResultaat = leverIn({
       cwd: werkmap,
-      ...(isFastlane ? { fastlane: true } : { geenAutomerge: true }),
+      ...(isFastlane ? { fastlane: true } : {}),
       titel: `#${String(item.issue)} — ${item.titel}`,
       // Ops-melding-config doorgeven zodat de review-gate bij falen de ops-room bedient (#586).
       ...(opsMelding !== undefined ? { opsMelding } : {}),
