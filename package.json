@@ -1,6 +1,6 @@
 {
   "name": "@gjvv13/factory",
-  "version": "1.15.131",
+  "version": "1.15.132",
   "private": false,
   "type": "module",
   "description": "Software factory: pipeline, gereedschap en gedeelde configuratie voor de applicaties.",
