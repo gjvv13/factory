@@ -346,12 +346,7 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
           `  Zet het label eerst: gh issue edit ${String(sliceIssue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`,
       );
     }
-    if (lokaal) {
-      zorgVoorWachtrijLabel(repoDir);
-      run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
-    } else {
-      run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
-    }
+    zetInWachtrijOfMerge(repoDir, prUrl, lokaal);
     ok(`fastlane-PR met auto-merge: ${prUrl}`);
     process.stdout.write(`\n${branch} merget zichzelf zodra de poort groen is.\n`);
   } else {
@@ -367,8 +362,7 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
       if (config !== undefined && lokaal) {
         // `lokaal` impliceert `config !== undefined`, maar de expliciete guard
         // voorkomt een non-null-assertion die ESLint (terecht) weigert.
-        zorgVoorWachtrijLabel(repoDir);
-        run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+        zetInWachtrijOfMerge(repoDir, prUrl, true);
         ok(`in de wachtrij gezet (auto-merge-ok): ${prUrl}`);
         if (heeftIntegreerAgent(config.naam)) {
           process.stdout.write(
@@ -383,7 +377,7 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
           );
         }
       } else {
-        run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
+        zetInWachtrijOfMerge(repoDir, prUrl, false);
         ok(`auto-merge (auto-merge-ok): ${prUrl}`);
         process.stdout.write(
           `\nDe merge-queue integreert ${branch} serieel naar main. Je kunt doorbouwen.\n`,
@@ -396,17 +390,22 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
         waarschuwing(
           `auto-merge-ok aanwezig maar gate niet schoon (${reden}) — menselijke merge vereist.`,
         );
-        run(
-          'gh',
-          [
-            'pr',
-            'comment',
-            prUrl,
-            '--body',
-            `⚠️ \`auto-merge-ok\` aanwezig maar code-review-gate niet schoon (${reden}) — menselijke merge vereist.`,
-          ],
-          { cwd: repoDir, toleranter: true },
-        );
+        // Alleen een PR-comment als de review echt bevindingen had of geen verdict
+        // gaf. `'uit'` (review bewust uitgezet) en `'niet-beschikbaar'` zijn geen
+        // storing maar een toestand; die op de PR melden leest als een fout (#573-review).
+        if (reden === 'bevindingen' || reden === 'geen-verdict') {
+          run(
+            'gh',
+            [
+              'pr',
+              'comment',
+              prUrl,
+              '--body',
+              `⚠️ \`auto-merge-ok\` aanwezig maar code-review-gate niet schoon (${reden}) — menselijke merge vereist.`,
+            ],
+            { cwd: repoDir, toleranter: true },
+          );
+        }
       }
       ok(`PR geopend zonder auto-merge: ${prUrl}`);
       process.stdout.write(
@@ -437,6 +436,21 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
  */
 function reviewGateSchoon(verdict: ReviewGateResultaat | undefined): boolean {
   return verdict?.reden === 'schoon' || verdict?.reden === 'geen-diff';
+}
+
+/**
+ * Zet de PR op auto-merge: lokaal via het `wachtrij`-label (de integreer-agent
+ * pikt 'm op), op een merge-queue-app via `gh pr merge --auto`. Eén bron voor de
+ * twee poorten (fastlane #401 en label-auto-merge #573), zodat ze in de pas
+ * blijven als er een derde bij komt.
+ */
+function zetInWachtrijOfMerge(repoDir: string, prUrl: string, lokaal: boolean): void {
+  if (lokaal) {
+    zorgVoorWachtrijLabel(repoDir);
+    run('gh', ['pr', 'edit', prUrl, '--add-label', WACHTRIJ_LABEL], { cwd: repoDir });
+  } else {
+    run('gh', ['pr', 'merge', prUrl, '--auto', '--merge'], { cwd: repoDir });
+  }
 }
 
 /**

@@ -1097,7 +1097,7 @@ describe('inleveren', () => {
           aanroep.argumenten[1]?.includes('/issues/')
         )
           return { stdout: `["type:task","${AUTO_MERGE_OK_LABEL}"]` };
-        // claude --version faalt → niet beschikbaar → maar origin/main ontbreekt → geen-diff
+        // claude is beschikbaar (versie teruggegeven); de lege diff hieronder maakt het geen-diff.
         if (aanroep.commando === 'claude' && aanroep.argumenten[0] === '--version')
           return { stdout: '2.3.0' };
         if (
@@ -1115,11 +1115,19 @@ describe('inleveren', () => {
           return { stdout: '' };
         return gelukkig(aanroep, index);
       };
-      stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+      const opnemer = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(opnemer.uitvoerder);
 
       inleveren();
 
       // geen-diff is een schone gate: auto-merge mag.
+      expect(argsVan(opnemer.aanroepen, 'gh')).toContainEqual([
+        'pr',
+        'merge',
+        PR_URL,
+        '--auto',
+        '--merge',
+      ]);
     });
 
     it('weigert auto-merge als review bevindingen heeft, met melding', () => {
