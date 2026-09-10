@@ -70,12 +70,12 @@ function verwachtDoor(result: { stdout: string; code: number }): void {
 describe('gate-inleveren.sh', () => {
   const hook = 'gate-inleveren.sh';
 
-  it('blokkeert factory inleveren zonder modus-vlag', () => {
-    verwachtBlok(draaiHook(hook, { command: 'factory inleveren' }));
+  it('laat factory inleveren zonder modus-vlag door (#573)', () => {
+    verwachtDoor(draaiHook(hook, { command: 'factory inleveren' }));
   });
 
-  it('blokkeert factory inleveren met alleen --titel', () => {
-    verwachtBlok(draaiHook(hook, { command: 'factory inleveren --titel="test"' }));
+  it('laat factory inleveren met alleen --titel door (#573)', () => {
+    verwachtDoor(draaiHook(hook, { command: 'factory inleveren --titel="test"' }));
   });
 
   it('laat factory inleveren --fastlane door', () => {
