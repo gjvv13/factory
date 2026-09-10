@@ -289,8 +289,11 @@ export function plaatsComment(issue, tekst, cwd) {
  * issuenummers. Herkent twee bronnen:
  *
  * 1. Merge-onderwerpregels: `Merge pull request #N from …/slice/<issue>-<n>`
- * 2. Trailers aan het begin van een regel: `Refs/Closes/Fixes[:]  #<issue>`
- *    (case-insensitief, met en zonder dubbele punt).
+ * 2. Trailers aan het begin van een regel: `Refs/Closes/Fixes[:]  [owner/repo]#<issue>`
+ *    (case-insensitief, met en zonder dubbele punt). De optionele `owner/repo`-prefix
+ *    hoort bij de gekwalificeerde vorm die `inleveren` sinds #619 schrijft, zodat een
+ *    squash-merge in een app-repo (waar geen `Merge pull request`-onderwerp is) hier
+ *    alsnog herkend wordt.
  *
  * Een `#N` midden in een zin (geen regelbegin) wordt bewust genegeerd — alleen
  * expliciete trailers tellen, zodat toevallige vermeldingen geen board-actie
@@ -301,7 +304,7 @@ export function plaatsComment(issue, tekst, cwd) {
  */
 export function parseIssuesUitLog(log) {
     const MERGE_RE = /^Merge pull request #\d+ from [^/]+\/slice\/(\d+)-\d+$/;
-    const TRAILER_RE = /^(?:Refs|Closes|Fixes):?\s+#(\d+)/i;
+    const TRAILER_RE = /^(?:Refs|Closes|Fixes):?\s+(?:[\w.-]+\/[\w.-]+)?#(\d+)/i;
     const gevonden = new Set();
     for (const regel of log.split('\n')) {
         const getrimd = regel.trim();

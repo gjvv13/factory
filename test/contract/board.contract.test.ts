@@ -244,6 +244,14 @@ describe('issuesUitBereik — trailer-parse tegen opgenomen %B-uitvoer', () => {
     expect(parseIssuesUitLog(log)).toEqual([10, 20, 30, 40]);
   });
 
+  it('herkent de gekwalificeerde owner/repo#N-trailer die inleveren sinds #619 schrijft', () => {
+    // Bij een squash-merge in een app-repo is er geen `Merge pull request`-onderwerp;
+    // de gekwalificeerde Closes-trailer is dan de enige bron voor `factory afronden`.
+    const log = ['Closes gjvv13/factory#58', 'Fixes gjvv13/factory#77', 'closes #20'].join('\n');
+
+    expect(parseIssuesUitLog(log)).toEqual([20, 58, 77]);
+  });
+
   it('de bestaande %s-fixture blijft groen (backward-compatibel)', () => {
     const log = leesFixture('git-log-merges.txt').trim();
     const nummers = parseIssuesUitLog(log);

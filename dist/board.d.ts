@@ -101,8 +101,11 @@ export declare function plaatsComment(issue: number, tekst: string, cwd?: string
  * issuenummers. Herkent twee bronnen:
  *
  * 1. Merge-onderwerpregels: `Merge pull request #N from …/slice/<issue>-<n>`
- * 2. Trailers aan het begin van een regel: `Refs/Closes/Fixes[:]  #<issue>`
- *    (case-insensitief, met en zonder dubbele punt).
+ * 2. Trailers aan het begin van een regel: `Refs/Closes/Fixes[:]  [owner/repo]#<issue>`
+ *    (case-insensitief, met en zonder dubbele punt). De optionele `owner/repo`-prefix
+ *    hoort bij de gekwalificeerde vorm die `inleveren` sinds #619 schrijft, zodat een
+ *    squash-merge in een app-repo (waar geen `Merge pull request`-onderwerp is) hier
+ *    alsnog herkend wordt.
  *
  * Een `#N` midden in een zin (geen regelbegin) wordt bewust genegeerd — alleen
  * expliciete trailers tellen, zodat toevallige vermeldingen geen board-actie
