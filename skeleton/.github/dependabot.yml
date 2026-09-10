@@ -13,4 +13,9 @@ updates:
         update-types:
           - minor
           - patch
+    # De factory-dep is een git-tag, geen npm-versie; Dependabot kan hem niet
+    # bumpen en produceert dagelijks een rode version-update-run (#617).
+    ignore:
+      - dependency-name: '@gjvv13/factory'
+      - dependency-name: factory
     open-pull-requests-limit: 5
