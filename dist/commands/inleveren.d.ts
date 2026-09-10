@@ -49,6 +49,12 @@ export interface InleverenOpties {
     readonly reeksInfo?: ReeksInfo;
 }
 /**
+ * Label-gebaseerde auto-merge (#573): een PR merget alleen met dit label op het
+ * issue én een schone code-review-gate. Geen label = mens-poort. Het label wordt
+ * door een mens gezet (tijdens grooming), niet door een werker.
+ */
+export declare const AUTO_MERGE_OK_LABEL = "auto-merge-ok";
+/**
  * Het resultaat van `inleveren()` (#586). Geeft de code-review-reden terug zodat
  * de orkestrator onderscheid kan maken tussen "niets gevonden" en "kon niet
  * reviewen" en de juiste kanalen kan bedienen (PR-comment, ops-room).
