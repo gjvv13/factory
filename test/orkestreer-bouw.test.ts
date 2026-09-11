@@ -26,6 +26,7 @@ import {
 } from '../src/commands/orkestreer-bouw.js';
 import * as orkestreerModule from '../src/commands/orkestreer.js';
 import * as werkplaatsModule from '../src/werkplaats.js';
+import * as werkplekModule from '../src/commands/werkplek.js';
 import { bordItems } from '../src/board.js';
 import {
   leesStaat,
@@ -1369,6 +1370,64 @@ describe('orkestreer --soort bouw --eenmalig', () => {
 
     // De setup-catch geeft een synthetisch resultaat met afloop 'escalatie' terug.
     expect(resultaat.bouw.afloop).toBe('escalatie');
+  });
+
+  it('ruimt de worktree op bij een afgebroken bouw-run (#633)', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+    };
+
+    // versWerkplaats slaagt de eerste keer (spiegel) maar faalt bij 'factory' (factoryMap),
+    // zodat de catch-pad bereikt wordt terwijl spiegel wél gezet is.
+    let aanroepTeller = 0;
+    vi.spyOn(werkplaatsModule, 'versWerkplaats').mockImplementation(() => {
+      aanroepTeller++;
+      if (aanroepTeller === 1) return '/tmp/spiegel';
+      throw new OmgevingsFout('factory-spiegel kon niet aangemaakt worden');
+    });
+
+    const ruimOp = vi.spyOn(werkplekModule, 'ruimWerkplekOp').mockReturnValue(true);
+
+    const resultaat = await bouwAf(item, wortel, wortel, 5, 3, 'medium', () => {
+      throw new Error('leverIn mag niet bereikt worden');
+    });
+
+    expect(resultaat.bouw.afloop).toBe('escalatie');
+    // De worktree is opgeruimd via ruimWerkplekOp.
+    expect(ruimOp).toHaveBeenCalledWith('/tmp/spiegel', bouwWerkplek('factory', 106, wortel));
+  });
+
+  it('slaat worktree-opruiming over als spiegel niet gezet is (#633)', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+    };
+
+    // Eerste aanroep faalt al: spiegel wordt nooit gezet.
+    vi.spyOn(werkplaatsModule, 'versWerkplaats').mockImplementation(() => {
+      throw new OmgevingsFout('Geen repo gevonden');
+    });
+
+    const ruimOp = vi.spyOn(werkplekModule, 'ruimWerkplekOp').mockReturnValue(true);
+
+    const resultaat = await bouwAf(item, wortel, wortel, 5, 3, 'medium', () => {
+      throw new Error('leverIn mag niet bereikt worden');
+    });
+
+    expect(resultaat.bouw.afloop).toBe('escalatie');
+    // ruimWerkplekOp is NIET aangeroepen: er was geen spiegel.
+    expect(ruimOp).not.toHaveBeenCalled();
   });
 
   it('gooit een gewone GebruikersFout uit leverIn wél door (#383)', async () => {

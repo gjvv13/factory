@@ -582,11 +582,7 @@ function rebaseReleaseBranch(branch: string, cwd: string): boolean {
  * daarom de bron van waarheid (#633).
  */
 export function prStaatVan(branch: string, cwd: string): string | undefined {
-  return uitvoerVan(
-    'gh',
-    ['pr', 'view', branch, '--json', 'state', '--jq', '.state'],
-    cwd,
-  );
+  return uitvoerVan('gh', ['pr', 'view', branch, '--json', 'state', '--jq', '.state'], cwd);
 }
 
 /** Of een ref volledig in origin/main zit: alle commits zijn al gemerged. */

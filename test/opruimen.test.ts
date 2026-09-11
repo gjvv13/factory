@@ -630,9 +630,9 @@ describe('opruimen', () => {
       expect(lokaleVerwijderingen(aanroepen)).toEqual([]);
       // En hij wordt niet als "niet gemerged" gemeld, maar als "kon niet checken".
       expect(uitvoer.some((s) => s.includes('kon niet checken'))).toBe(true);
-      expect(
-        uitvoer.some((s) => s.includes('slice/100-1') && s.includes('niet gemerged')),
-      ).toBe(false);
+      expect(uitvoer.some((s) => s.includes('slice/100-1') && s.includes('niet gemerged'))).toBe(
+        false,
+      );
     });
 
     it('gebruikt git-ancestry voor niet-slice-branches, ongewijzigd', () => {
