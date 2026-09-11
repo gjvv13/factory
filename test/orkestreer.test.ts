@@ -1334,6 +1334,54 @@ describe('orkestreer antwoord', () => {
     rmSync(home, { recursive: true, force: true });
   });
 
+  it('logt mislukt in plaats van klaar als de body niet weggeschreven kan worden (#593-review)', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'factory-antw-blok-'));
+    const paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-blok\nFACTORY_BUDGET_USD=3\n`, {
+      mode: 0o600,
+    });
+
+    // De werker levert een schone uitwerking, maar het wegschrijven van de body faalt.
+    const schrijfFaalt: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'gh' &&
+      aanroep.argumenten[1] === 'edit' &&
+      aanroep.argumenten.includes('--body-file')
+        ? { code: 1, stdout: 'kon niet schrijven' }
+        : antwoordBepaler()(aanroep, index);
+    zetBeideUitvoerdersOp(schrijfFaalt);
+
+    await orkestreerAntwoord('51', 'doe WASM', { paden }, '/repo');
+
+    // Vóór de review-fix stond hier 'klaar' terwijl het item geblokkeerd achterbleef: de
+    // rúwe run zei klaar, de verwerking niet. Nu logt het de verwerkte afloop (#593-review).
+    const regels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((r) => r.includes('#'));
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#51 assistant refine mislukt/);
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('zet app=<app> in de nieuwe escalatie-comment bij een refine-heropvraag (#593-review)', async () => {
+    // De werker escaleert opnieuw; de nieuwe comment moet — net als het onbemande pad —
+    // `app` dragen, zodat een volgende ronde de app niet uit het werkmap-pad hoeft te raden.
+    const reEscaleert: UitkomstBepaler = (aanroep, index) =>
+      aanroep.commando === 'claude'
+        ? { stdout: werkerEscaleert() }
+        : antwoordBepaler()(aanroep, index);
+    const { aanroepen } = zetBeideUitvoerdersOp(reEscaleert);
+
+    await orkestreerAntwoord('51', 'doe WASM', {}, '/repo');
+
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    const terug = leesEscalatie(comment);
+    expect(terug?.soort).toBe('refine');
+    expect(terug?.app).toBe('assistant');
+  });
+
   it('leidt de app af uit het werkmap-pad als de escalatie geen app-veld heeft (#593)', async () => {
     // Oude escalatie-comments bevatten geen `app`; de fallback is
     // path.basename(escalatie.werkmap), dus `/w/assistant` → `assistant`.

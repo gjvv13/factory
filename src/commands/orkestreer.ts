@@ -1350,7 +1350,11 @@ async function werkAntwoordAf(
   // De app uit de escalatie-comment, of afgeleid uit het werkmap-pad
   // (~/OrkestratorWerk/<app>). Een board-lezing is niet nodig (#593).
   const app = escalatie.app ?? path.basename(escalatie.werkmap);
-  const { uitkomst } = await metBoekhouding(
+  // De hele body — run én verwerking — loopt door `metBoekhouding`, net als het
+  // onbemande pad (`werkAf`/`draaiEen`). Zo toont het runlog de vérwerkte afloop en
+  // niet de rúwe run: schrijft `rondAf` de body niet weg, dan is 'klaar' onwaar, en
+  // een throw levert een `afgebroken (…)`-regel in plaats van stilte (#593-review).
+  await metBoekhouding(
     {
       paden,
       nu: new Date(Date.now()),
@@ -1358,16 +1362,43 @@ async function werkAntwoordAf(
       pot: 'interactief',
       item: { issue, app },
     },
-    () =>
-      draaiWerker({
+    async (): Promise<RunUitkomst> => {
+      const uitkomst = await draaiWerker({
         ...opdracht,
         budgetUsd: instellingen.budgetPerRun,
         agent: AGENT_REFINER,
         effort: instellingen.werkerEffort,
-      }),
+      });
+      // De afloop komt uit de verwerking, niet uit de rúwe werker-afloop.
+      return {
+        afloop: verwerkAntwoord(issue, tekst, escalatie, app, uitkomst, cwd),
+        ...(uitkomst.kosten === undefined ? {} : { kosten: uitkomst.kosten }),
+        ...(uitkomst.beurten === undefined ? {} : { beurten: uitkomst.beurten }),
+        ...(uitkomst.afgekaptNaMinuten === undefined
+          ? {}
+          : { afgekaptNaMinuten: uitkomst.afgekaptNaMinuten }),
+      };
+    },
     beschrijfRun,
   );
+}
 
+/**
+ * Verwerkt de uitkomst van een antwoord-run en geeft terug wat er écht met het item
+ * gebeurde — de tegenhanger van `verwerk` in het onbemande pad. Draait binnen
+ * `metBoekhouding`, zodat het runlog de verwerkte afloop toont in plaats van de rúwe
+ * run: blokkeert `rondAf` het item, dan staat er 'mislukt' en geen onterechte 'klaar'
+ * (#593-review). Bij een onherstelbare stand gooit hij een `GebruikersFout` — die
+ * hoort op jouw terminal, en `metBoekhouding` legt 'm vast als `afgebroken (…)`.
+ */
+function verwerkAntwoord(
+  issue: number,
+  tekst: string,
+  escalatie: Escalatie,
+  app: string,
+  uitkomst: WerkerUitkomst,
+  cwd: string,
+): Afloop {
   if (uitkomst.sessieWeg === true) {
     // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
     // hier letterlijk. Het werk tot de escalatie is dan wel verloren.
@@ -1383,7 +1414,7 @@ async function werkAntwoordAf(
     plaatsComment(
       issue,
       `**Antwoord verwerkt, maar de run mislukte.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
-        voetnoot(uitkomst, escalatie.werkmap),
+        voetnoot(uitkomst, escalatie.werkmap, 'refine', app),
       cwd,
     );
     throw new GebruikersFout(`De run mislukte: ${uitkomst.fout ?? 'onbekende fout'}`);
@@ -1394,18 +1425,26 @@ async function werkAntwoordAf(
     // Nog een vraag. Het label blijft staan; er is gewoon een nieuwe ronde nodig.
     plaatsComment(
       issue,
-      escalatieComment(issue, verdict.vraag, verdict.advies, uitkomst, escalatie.werkmap),
+      escalatieComment(
+        issue,
+        verdict.vraag,
+        verdict.advies,
+        uitkomst,
+        escalatie.werkmap,
+        'refine',
+        app,
+      ),
       cwd,
     );
     ok(`#${String(issue)} escaleert opnieuw`);
-    return;
+    return 'escalatie';
   }
 
   if (verdict?.uitkomst !== 'klaar') {
     throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitwerking.`);
   }
 
-  rondAf(
+  return rondAf(
     issue,
     verdict.body,
     verdict.samenvatting,
