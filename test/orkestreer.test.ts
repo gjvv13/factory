@@ -904,6 +904,18 @@ describe('escalatie in de wachtrij', () => {
       werkmap: path.join(wortel, 'assistant'),
     });
   });
+
+  it('schrijft app=<app> in de escalatie-comment, zodat het antwoordpad de app kent (#593)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(bepaler({ werker: werkerEscaleert() }));
+
+    await orkestreer({ eenmalig: true, werkplaatsWortel: wortel });
+
+    const comment = aanroepen.find((a) => a.argumenten[1] === 'comment')?.argumenten.at(-1) ?? '';
+    // Vóór #593 stond `app` er niet in bij refine-escalaties; het antwoordpad moest
+    // het board lezen om de app te achterhalen. Nu zit het in de voetnoot.
+    const terug = leesEscalatie(comment);
+    expect(terug?.app).toBe('assistant');
+  });
 });
 
 describe('orkestreer status', () => {
@@ -1295,6 +1307,130 @@ describe('orkestreer antwoord', () => {
     const terug = leesEscalatie(comment);
     expect(terug?.soort).toBe('bouw');
     expect(terug?.app).toBe('assistant');
+  });
+
+  it('schrijft een logregel bij een refine-antwoord via metBoekhouding (#593)', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'factory-antw-home-'));
+    const paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-antw\nFACTORY_BUDGET_USD=3\n`, {
+      mode: 0o600,
+    });
+
+    zetBeideUitvoerdersOp(antwoordBepaler());
+
+    await orkestreerAntwoord('51', 'doe WASM', { paden }, '/repo');
+
+    // Vóór #593 schreef een antwoord-run geen logregel: de run was onzichtbaar in het
+    // log en de ochtendupdate.
+    const regels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((r) => r.includes('#'));
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#51 assistant refine klaar/);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('leidt de app af uit het werkmap-pad als de escalatie geen app-veld heeft (#593)', async () => {
+    // Oude escalatie-comments bevatten geen `app`; de fallback is
+    // path.basename(escalatie.werkmap), dus `/w/assistant` → `assistant`.
+    const OUDE_ESCALATIE = escalatieComment(
+      51,
+      'WASM of native?',
+      'WASM.',
+      {
+        afloop: 'escalatie' as const,
+        sessie: '5ad6e642-9e2a-4b4b-8af0-ecf40f956335',
+        kosten: 1.1,
+        beurten: 7,
+        weigeringen: 0,
+      },
+      '/w/assistant',
+      // Geen soort/app — oude comment.
+    );
+    const home = mkdtempSync(path.join(os.tmpdir(), 'factory-antw-oud-'));
+    const paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-oud\nFACTORY_BUDGET_USD=3\n`, {
+      mode: 0o600,
+    });
+
+    const oudeBepaler: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werkerKlaar() };
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/comments')) {
+        return { stdout: commentsAntwoord([OUDE_ESCALATIE]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor technische refinement') };
+      }
+      return {};
+    };
+    zetBeideUitvoerdersOp(oudeBepaler);
+
+    await orkestreerAntwoord('51', 'doe WASM', { paden }, '/repo');
+
+    // De app is afgeleid uit path.basename('/w/assistant') = 'assistant'.
+    const regels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((r) => r.includes('#'));
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#51 assistant refine/);
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('schrijft een logregel bij een bouw-antwoord via metBoekhouding (#593)', async () => {
+    const BOUW_ESCALATIE = escalatieComment(
+      51,
+      'Async of sync?',
+      'Async.',
+      {
+        afloop: 'escalatie' as const,
+        sessie: 'bouw-sessie-1234',
+        kosten: 2.0,
+        beurten: 10,
+        weigeringen: 0,
+      },
+      '/w/assistant-wt/51',
+      'bouw',
+      'assistant',
+    );
+    const home = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-antw-log-'));
+    const paden = standaardPaden(home);
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-bouw\nFACTORY_BUDGET_USD=10\n`, {
+      mode: 0o600,
+    });
+    const bouwBepaler: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: werkerEscaleert() };
+      if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/comments')) {
+        return { stdout: commentsAntwoord([BOUW_ESCALATIE]) };
+      }
+      if (commando === 'gh' && argumenten[1] === 'graphql') {
+        return { stdout: doelwitAntwoord('Klaar voor Bouwen') };
+      }
+      return {};
+    };
+    zetBeideUitvoerdersOp(bouwBepaler);
+    const wortel = mkdtempSync(path.join(os.tmpdir(), 'factory-bouw-antw-wt-'));
+
+    await orkestreerAntwoord('51', 'doe async', { paden, werkplaatsWortel: wortel }, '/repo');
+    rmSync(wortel, { recursive: true, force: true });
+
+    // Vóór #593 liet een bouw-antwoord geen logregel na.
+    const regels = readFileSync(paden.logPad, 'utf8')
+      .trim()
+      .split('\n')
+      .filter((r) => r.includes('#'));
+    expect(regels).toHaveLength(1);
+    expect(regels[0]).toMatch(/#51 assistant bouw/);
+    expect(leesStaat(paden, new Date(Date.now())).interactief).toBe(1);
+
+    rmSync(home, { recursive: true, force: true });
   });
 });
 
