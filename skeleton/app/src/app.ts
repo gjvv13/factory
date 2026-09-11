@@ -1,7 +1,13 @@
 import type { Config } from './config.js';
 import { systemClock, type Clock } from './core/clock.js';
 import { createCommandRouter, type Command, type CommandRouter } from './core/command-router.js';
-import { createHelpCommand, helloCommand, pingCommand, versionCommand } from './core/commands.js';
+import {
+  createHelpCommand,
+  echoCommand,
+  helloCommand,
+  pingCommand,
+  versionCommand,
+} from './core/commands.js';
 import { createContactRepository, type ContactRepository } from './core/contacts.js';
 import { LogBuffer } from './core/log-buffer.js';
 import { createBufferedLogger, createLogger, type Logger } from './core/logger.js';
@@ -63,6 +69,7 @@ export function createApplication(config: Config, options: ApplicationOptions = 
       return routerRef.current;
     }),
     pingCommand,
+    echoCommand,
     helloCommand,
     versionCommand,
   ];

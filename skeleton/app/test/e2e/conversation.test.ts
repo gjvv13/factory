@@ -15,7 +15,7 @@ describe('gesprek via het HTTP-kanaal (end to end)', () => {
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('antwoordt op ping met pong', async () => {
+  it('antwoordt op ping met pong — altijd, zonder flag', async () => {
     await expect(sendMessage('+31600000001', 'ping')).resolves.toEqual(['pong']);
   });
 
@@ -25,27 +25,27 @@ describe('gesprek via het HTTP-kanaal (end to end)', () => {
     ]);
   });
 
-  it('kent ping niet meer nadat de flag uit wordt gezet, zonder herstart', async () => {
-    await expect(sendMessage('+31600000001', 'ping')).resolves.toEqual(['pong']);
+  it('kent echo niet meer nadat de flag uit wordt gezet, zonder herstart', async () => {
+    await expect(sendMessage('+31600000001', 'echo hoi')).resolves.toEqual(['hoi']);
 
-    await setFlag('ping', false);
-    const afterOff = await sendMessage('+31600000001', 'ping');
+    await setFlag('echo', false);
+    const afterOff = await sendMessage('+31600000001', 'echo hoi');
     expect(afterOff[0]).toContain('ken ik niet');
 
-    await setFlag('ping', true);
-    await expect(sendMessage('+31600000001', 'ping')).resolves.toEqual(['pong']);
+    await setFlag('echo', true);
+    await expect(sendMessage('+31600000001', 'echo hoi')).resolves.toEqual(['hoi']);
   });
 
   it('begint elke test met verse testdata', async () => {
     // Deze test zet de flag uit en zet hem niet terug; de volgende test moet
     // hem toch weer aan zien staan doordat de testdata opnieuw wordt ingelezen.
-    await setFlag('ping', false);
+    await setFlag('echo', false);
     const messages = await fetch(`${baseUrl()}/admin/messages?limit=5`);
     expect(messages.status).toBe(200);
   });
 
-  it('heeft door de verse testdata weer een werkende ping', async () => {
-    await expect(sendMessage('+31600000001', 'ping')).resolves.toEqual(['pong']);
+  it('heeft door de verse testdata weer een werkende echo', async () => {
+    await expect(sendMessage('+31600000001', 'echo werkt')).resolves.toEqual(['werkt']);
   });
 
   it('logt inkomend en uitgaand verkeer', async () => {
@@ -82,6 +82,6 @@ describe('gesprek via het HTTP-kanaal (end to end)', () => {
     const response = await fetch(`${baseUrl()}/admin/flags`);
     const body = (await response.json()) as { flags: { key: string }[] };
 
-    expect(body.flags.map((flag) => flag.key)).toEqual(['ping', 'whatsapp-channel']);
+    expect(body.flags.map((flag) => flag.key)).toEqual(['echo', 'whatsapp-channel']);
   });
 });

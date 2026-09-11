@@ -78,10 +78,12 @@ describe('rooktest', () => {
     await expect(rooktest('acc')).rejects.toThrow(/Rooktest acc faalde/);
   });
 
-  it('faalt als het antwoord de verwachte inhoud niet bevat', async () => {
+  it('faalt als het antwoord de verwachte inhoud niet bevat, met config-hint', async () => {
     process.chdir(maakApp({ rooktest: { pad: '/channels/http/inbound', bevat: 'boodschappen' } }));
     fetchSpy.mockResolvedValue(antwoord(200, '{"replies":[]}'));
 
     await expect(rooktest('prod')).rejects.toThrow(/bevat 'boodschappen' niet/);
+    // De foutmelding wijst naar de factory.json-configuratie (#464).
+    await expect(rooktest('prod')).rejects.toThrow(/factory\.json/);
   });
 });

@@ -293,6 +293,15 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
         // `factory verify` legt de basislijn vast en waarschuwt daarna bij een daling. Zet 'm
         // op 'blokkeer' zodra de app stabiel dekt, of 'uit' om 'm stil te leggen.
         dekkingsRatchet: 'waarschuw',
+        // Skeleton-default rooktest: stuurt `ping` via het HTTP-kanaal en verwacht `pong`
+        // terug. Zo test elke deploy het volledige inbound-berichtpad, zonder dat de check
+        // breekt wanneer een app z'n handler vervangt (#464). Pas `bevat` aan als je het
+        // antwoord van het diagnose-commando wijzigt.
+        rooktest: {
+          pad: '/channels/http/inbound',
+          body: `{"from":"rooktest","text":"ping"}`,
+          bevat: 'pong',
+        },
       },
       null,
       2,

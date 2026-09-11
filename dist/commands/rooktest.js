@@ -25,7 +25,11 @@ async function voerUit(url, methode, body, verwachteStatus, bevat) {
         if (bevat !== undefined) {
             const tekst = await antwoord.text();
             if (!tekst.includes(bevat)) {
-                return { goed: false, reden: `antwoord bevat '${bevat}' niet` };
+                return {
+                    goed: false,
+                    reden: `antwoord bevat '${bevat}' niet — controleer de rooktest-configuratie ` +
+                        `in factory.json (verwacht de \`bevat\`-waarde nog bij het huidige antwoord?)`,
+                };
             }
         }
         return { goed: true };

@@ -37,8 +37,8 @@ opvalt.
 
 ```bash
 pnpm flag prod                # alle flags met hun stand
-pnpm flag prod ping on        # aanzetten
-pnpm flag prod ping off       # uitzetten
+pnpm flag prod echo on        # aanzetten
+pnpm flag prod echo off       # uitzetten
 ```
 
 Flags staan per omgeving in de eigen database en worden met een korte cache
@@ -62,7 +62,7 @@ app/src/
   http/               Fastify-server en routes
 ```
 
-Commando's nu: `help`, `ping` (achter flag `ping`), `hallo`, `versie`.
+Commando's nu: `help`, `ping` (vast diagnose-commando, altijd aan), `echo` (achter flag `echo`), `hallo`, `versie`.
 
 ```bash
 curl -s localhost:{{PORT_DEV}}/channels/http/inbound \
