@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, leesIssueBody, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
-import { kalenderdag, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
+import { kalenderdag, BOUW_LAUNCH_LABEL, LAUNCH_LABEL, leesInstellingen, leesStaat, metBoekhouding, schrijfLog, standaardPaden, TOKEN_SLEUTEL, vereisToken, zorgVoorEnvBestand, } from '../orkestrator-instellingen.js';
 import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { leesRunLog } from '../runlog.js';
@@ -198,6 +198,10 @@ export function bouwPrompt(item, werkmap, factoryMap, apps = []) {
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export async function orkestreer(opties = {}) {
     const paden = opties.paden ?? standaardPaden();
+    if (opties.herlaadPlists === true) {
+        herlaadPlists(paden);
+        return;
+    }
     if (opties.installeer === true) {
         installeerAgent(paden);
         return;
@@ -1042,8 +1046,9 @@ export const BOUW_NACHT_MINUUT = 30;
  */
 export function bouwOrkestreerPlist(opzet) {
     // De PATH van de installerende shell meebakken: launchd start anders met een kale
-    // PATH en vindt node, gh of claude dan niet.
-    const pad = process.env.PATH ?? '/usr/bin:/bin';
+    // PATH en vindt node, gh of claude dan niet. Een herlaad geeft `opzet.pad` mee (de PATH
+    // van de bestaande plist), zodat de runner-PATH een werkende plist niet breekt (#632-review).
+    const pad = opzet.pad ?? process.env.PATH ?? '/usr/bin:/bin';
     const script = bouwNachtScript(opzet);
     return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1217,6 +1222,93 @@ function verwijderAgent(paden) {
     run('launchctl', ['unload', pad], { toleranter: true, capture: true });
     rmSync(pad, { force: true });
     ok('verwijderd; er draait niets meer vanzelf.');
+}
+// --- herlaadPlists: plist-propagatie via de release (#632) --------------------
+/**
+ * Herlaadt de LaunchAgent-plists die al bestaan (#632). Per plist:
+ * - controleer of het bestand er is; bestaat het niet, sla over (geen agent installeren
+ *   die er niet was — functioneel besluit 1);
+ * - ontdek de globale bin via `npm prefix -g`;
+ * - regenereer de plist met `bouwOrkestreerPlist` (bevat `bouwNachtScript`);
+ * - herschrijf het bestand en herlaad via `launchctl unload` + `launchctl load`.
+ *
+ * Vereist bewust geen `isBacklogRepo`: de release-workflow draait dit vanuit de
+ * `globale-bin`-job op de mini, die de checkout van de factory-repo heeft maar niet per se
+ * daarin `cd` doet. De functie heeft de repo niet nodig — alleen de globale bin en de
+ * bestaande plists.
+ */
+/** De PATH uit een bestaande plist, zodat een herlaad de werkende PATH behoudt (#632-review). */
+function padUitPlist(inhoud) {
+    return /<key>PATH<\/key>\s*<string>([^<]*)<\/string>/.exec(inhoud)?.[1];
+}
+export function herlaadPlists(paden) {
+    kop('LaunchAgent-plists herladen (#632)');
+    // De globale bin komt uit de release die deze stap net installeerde. Kunnen we de
+    // prefix niet bepalen of bestaat de bin niet, dan de plists mét rust laten: een plist
+    // naar een onbestaande bin herschrijven is erger dan niet herladen (#632-review).
+    const prefix = uitvoerVan('npm', ['prefix', '-g']);
+    if (prefix === undefined) {
+        waarschuwing('kon de globale prefix niet bepalen (npm prefix -g); plists ongemoeid gelaten.');
+        return;
+    }
+    const bin = path.join(prefix, 'bin', 'factory');
+    if (!existsSync(bin)) {
+        waarschuwing(`globale factory-bin niet gevonden op ${bin}; plists ongemoeid gelaten.`);
+        return;
+    }
+    const plists = [
+        {
+            naam: 'refine',
+            pad: paden.agentPad,
+            label: LAUNCH_LABEL,
+            uur: NACHT_UUR,
+            minuut: 0,
+            nachtCommando: `"${bin}" orkestreer --nacht`,
+        },
+        {
+            naam: 'bouw',
+            pad: paden.bouwAgentPad,
+            label: BOUW_LAUNCH_LABEL,
+            uur: BOUW_NACHT_UUR,
+            minuut: BOUW_NACHT_MINUUT,
+            nachtCommando: `"${bin}" orkestreer --soort bouw --nacht`,
+        },
+    ];
+    let herladen = 0;
+    for (const plist of plists) {
+        if (!existsSync(plist.pad)) {
+            ok(`${plist.naam}-plist niet gevonden (${plist.pad}); overgeslagen.`);
+            continue;
+        }
+        // De PATH van de bestaande plist behouden: die is gebakken uit de `--installeer`-shell
+        // en vindt node/gh/claude. De release-runner-PATH hier zou dat kunnen breken. Lukt het
+        // uitlezen niet, dan de plist met rust laten in plaats van 'm te breken (#632-review).
+        const bestaandePad = padUitPlist(readFileSync(plist.pad, 'utf8'));
+        if (bestaandePad === undefined) {
+            waarschuwing(`${plist.naam}-plist heeft geen leesbare PATH; met rust gelaten.`);
+            continue;
+        }
+        writeFileSync(plist.pad, bouwOrkestreerPlist({
+            bin,
+            werkmap: os.homedir(),
+            logPad: paden.logPad,
+            label: plist.label,
+            uur: plist.uur,
+            minuut: plist.minuut,
+            nachtCommando: plist.nachtCommando,
+            pad: bestaandePad,
+        }));
+        run('launchctl', ['unload', plist.pad], { toleranter: true, capture: true });
+        run('launchctl', ['load', plist.pad]);
+        ok(`${plist.naam}-plist herladen (${plist.pad}).`);
+        herladen += 1;
+    }
+    if (herladen === 0) {
+        ok('geen plists gevonden; niets herladen.');
+    }
+    else {
+        schrijfLog(paden, `${new Date(Date.now()).toISOString()} plists herladen (${String(herladen)} stuks, bin: ${bin})`);
+    }
 }
 // ---------------------------------------------------------------------------
 // Wrijvingsaggregaat (#544)

@@ -35,6 +35,13 @@ export interface OrkestreerOpties {
     /** Haalt die LaunchAgent weg. */
     readonly verwijder?: boolean;
     /**
+     * Herlaadt de LaunchAgent-plists als ze bestaan (#632). Regenereert elke plist
+     * met de huidige `bouwOrkestreerPlist`/`bouwNachtScript`, herschrijft en herlaadt
+     * via launchctl. Draait vanuit `release.yml` na de globale install; vereist geen
+     * `isBacklogRepo`.
+     */
+    readonly herlaadPlists?: boolean;
+    /**
      * De wortel van de werkplaatsen. Geen CLI-vlag: dit staat er zodat een test met een
      * tijdelijke map kan werken in plaats van in de home-map te schrijven.
      */
@@ -204,6 +211,13 @@ export interface OrkestreerPlistOpzet {
     readonly minuut: number;
     /** Het `exec`-commando waarmee de nacht start. */
     readonly nachtCommando: string;
+    /**
+     * De PATH die in de plist gebakken wordt. Zonder waarde die van het genererende
+     * proces (de `--installeer`-shell). Een herlaad vanuit de release geeft hier de PATH
+     * van de al draaiende plist mee, zodat de runner-PATH — die node/gh/claude kan missen —
+     * een werkende plist niet stilletjes breekt (#632-review).
+     */
+    readonly pad?: string;
 }
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
@@ -276,6 +290,7 @@ export declare function nieuwsteTag(cwd: string): string;
  * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
  */
 export declare function vereisNachtModus(bin: string): void;
+export declare function herlaadPlists(paden: OrkestratorPaden): void;
 /**
  * Aggregeert wrijving over de laatste N bouw-runs en toont per-tool frequenties
  * met totale kosten en een markering bij tools die de drempel (≥ 3) bereiken.
