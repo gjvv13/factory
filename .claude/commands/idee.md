@@ -20,9 +20,21 @@ Doe dit zo:
 type:epic`) en voeg de beslissing toe als een "Open beslissingen"-regel in de body
    van die epic (`gh issue edit <epic#> -R gjvv13/factory --body-file …`). Klaar. Zie
    WORKFLOW.md → "Beslissingen horen in de epic".
-4. Bepaal het **type**: `type:epic` (grote, meerdere-slices functionaliteit),
-   `type:task` (klus, chore, kleine verbetering) of `type:bug` (defect). Twijfel je
-   tussen epic en task, leg de keuze kort voor.
+4. **Classificeer** het idee — type én fastlane-geschiktheid. Niets stil vastzetten:
+   elk voorstel gaat langs de gebruiker (zelfde geest als de akkoord-grens elders).
+   - **Type:** `type:epic` (grote, meerdere-slices functionaliteit), `type:task`
+     (klus, chore, kleine verbetering) of `type:bug` (defect). Twijfel je tussen epic
+     en task, leg de keuze kort voor.
+   - **Heuristiek (een vóórstel, geen besluit):** signaalwoorden als "werkt niet",
+     "fout", "kapot", "breekt", "crasht", "mislukt", "verkeerd" of "ontbreekt" wijzen
+     op een defect → stel `type:bug` voor, mét de reden ("Dit klinkt als een defect
+     vanwege '…'. Voorstel: type:bug."). De keuze blijft aan de gebruiker.
+   - **Fastlane** (de baan die kleine items 's nachts vanzelf bouwt):
+     - `type:bug` → meld dat het **automatisch** voor de fastlane kwalificeert (ADR 009);
+       geen extra label nodig.
+     - `type:task` → vraag of het een kleine, nacht-geschikte klus is; zo ja, stel het
+       `fastlane`-label voor.
+     - `type:epic` → geen fastlane (epics worden opgesplitst).
 5. Lees `templates/idea.md` voor de vorm van de omschrijving.
 6. Stel de vragen die je nodig hebt om de template te vullen — maar niet meer dan
    drie, en alleen als het antwoord echt niet uit het idee volgt. Een backlog-item
@@ -31,6 +43,9 @@ type:epic`) en voeg de beslissing toe als een "Open beslissingen"-regel in de bo
    Nederlands, met de datum van vandaag. Maak dan het issue aan met alléén het
    `type:`-label — de applicatie en de fase zijn velden op het board, geen labels:
    `URL=$(gh issue create -R gjvv13/factory --title "<titel>" --body-file <tijdelijk bestand> --label "type:<soort>")`
+   Gaf de gebruiker in stap 4 akkoord op de fastlane voor een `type:task`, voeg dan
+   `--label "fastlane"` toe naast het `type:`-label. (`type:bug` heeft dat niet nodig —
+   die kwalificeert vanzelf, ADR 009.)
    Zet daarna het item op het board, met de applicatie en de kolom `Idee`:
    `gh project item-add 2 --owner gjvv13 --url "$URL"`
    `gh project item-edit 2 --owner gjvv13 --url "$URL" --field App --value <applicatie>`

@@ -187,7 +187,10 @@ Loopt er iets mis tussen "mijn code is af" en "het draait op prod" — verify/CI
 `inleveren`, de integratie-wachtrij, `release`, `promote`, `deploy.yml`, de
 migratie-gate, env/secrets, de runners of de dekkings-ratchet — dan maak je daar
 **een issue voor in deze backlog**: App-veld `factory`, label `type:bug`. Ook als
-je een workaround vond; dan is het een bug mét bekende oplossing.
+je een workaround vond; dan is het een bug mét bekende oplossing. Een `type:bug`
+kwalificeert **automatisch** voor de fastlane-baan die kleine items 's nachts vanzelf
+bouwt (ADR 009) — geen extra label nodig; een kleine, nacht-geschikte niet-defect-klus
+kan het `fastlane`-label krijgen.
 
 Dit geldt vanuit **elke** app-chat, ook al ben je daar met een andere applicatie
 bezig. Zo'n storing raakt alle apps maar valt buiten de app waar je toevallig mee
