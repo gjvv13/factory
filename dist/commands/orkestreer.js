@@ -652,14 +652,14 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         // geld en levert niets op. Terug in de wachtrij-kolom, want er wordt niet aan
         // gewerkt — het label houdt hem daar uit de rij tot jij hem beantwoordt.
         blokkeer(item, cwd);
-        plaatsComment(item.issue, `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap)}`, cwd);
+        plaatsComment(item.issue, `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap, 'refine', item.app)}`, cwd);
         waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
         return 'mislukt';
     }
     const verdict = uitkomst.verdict;
     if (verdict?.uitkomst === 'escalatie') {
         blokkeer(item, cwd);
-        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'refine', undefined, verdict.doorloop), cwd);
+        plaatsComment(item.issue, escalatieComment(item.issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'refine', item.app, verdict.doorloop), cwd);
         ok(`#${String(item.issue)} geëscaleerd — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
         return 'escalatie';
     }
@@ -679,7 +679,7 @@ function verwerk(item, uitkomst, werkmap, cwd) {
         const punten = stilOpgelost
             .map((p) => `\`${p.sleutel}\`: ${p.waarom ?? '(geen toelichting)'}`)
             .join('\n- ');
-        plaatsComment(item.issue, escalatieComment(item.issue, `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`, verdict.samenvatting, uitkomst, werkmap, 'refine', undefined, verdict.doorloop), cwd);
+        plaatsComment(item.issue, escalatieComment(item.issue, `De werker heeft ${stilOpgelost.length === 1 ? 'een punt' : `${String(stilOpgelost.length)} punten`} van de gesloten lijst stil opgelost:\n- ${punten}\n\nIs dat akkoord, of moet het anders?`, verdict.samenvatting, uitkomst, werkmap, 'refine', item.app, verdict.doorloop), cwd);
         ok(`#${String(item.issue)} geëscaleerd (stil opgelost) — beantwoorden met: factory orkestreer antwoord ${String(item.issue)} "…"`);
         return 'escalatie';
     }
@@ -913,13 +913,23 @@ async function werkAntwoordAf(issue, tekst, escalatie, opties, cwd) {
             sessie: escalatie.sessie,
             hervat: true,
         };
-    const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
-    const uitkomst = await draaiWerker({
+    const paden = opties.paden ?? standaardPaden();
+    const instellingen = leesInstellingen(paden);
+    // De app uit de escalatie-comment, of afgeleid uit het werkmap-pad
+    // (~/OrkestratorWerk/<app>). Een board-lezing is niet nodig (#593).
+    const app = escalatie.app ?? path.basename(escalatie.werkmap);
+    const { uitkomst } = await metBoekhouding({
+        paden,
+        nu: new Date(Date.now()),
+        soort: 'refine',
+        pot: 'interactief',
+        item: { issue, app },
+    }, () => draaiWerker({
         ...opdracht,
         budgetUsd: instellingen.budgetPerRun,
         agent: AGENT_REFINER,
         effort: instellingen.werkerEffort,
-    });
+    }), beschrijfRun);
     if (uitkomst.sessieWeg === true) {
         // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
         // hier letterlijk. Het werk tot de escalatie is dan wel verloren.
