@@ -84,10 +84,13 @@ const appConfigSchema = z.object({
   auditNiveau: z.enum(['low', 'moderate', 'high', 'critical']).default('high'),
   /**
    * Een rooktest die `factory rooktest` na een uitrol tegen de omgeving draait: één
-   * echte, **read-only** aanroep door de kern, zodat een groene deploy met een kapot
-   * brein niet ongemerkt live gaat (#121). `/health` zegt "ok" ook als het hart eruit
-   * ligt; deze aanroep bewijst dat de app echt antwoordt. De read-only garantie ligt bij
-   * de app-auteur: kies een leesactie (geen bestelling, geen regel in een lijst).
+   * echte aanroep door de kern, zodat een groene deploy met een kapot brein niet
+   * ongemerkt live gaat (#121). `/health` zegt "ok" ook als het hart eruit ligt; deze
+   * aanroep bewijst dat de app echt antwoordt. **Geen domein-mutatie**: kies een actie
+   * zonder gevolg in de domein-toestand (geen bestelling, geen regel in een lijst). De
+   * skeleton-default (`ping` → `pong` over het inbound-pad, #464) valt hieronder — die
+   * raakt alleen de diagnostische message-log, geen domein-toestand. De garantie ligt bij
+   * de app-auteur.
    */
   rooktest: z
     .object({

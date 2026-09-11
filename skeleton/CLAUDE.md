@@ -37,8 +37,8 @@ opvalt.
 
 ```bash
 pnpm flag prod                # alle flags met hun stand
-pnpm flag prod ping on        # aanzetten
-pnpm flag prod ping off       # uitzetten
+pnpm flag prod echo on        # aanzetten
+pnpm flag prod echo off       # uitzetten
 ```
 
 Flags staan per omgeving in de eigen database en worden met een korte cache

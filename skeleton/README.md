@@ -22,7 +22,7 @@ curl -s localhost:{{PORT_DEV}}/channels/http/inbound \
   -d '{"from":"+31600000001","text":"ping"}'
 ```
 
-Commando's nu: `help`, `ping` (achter flag `ping`), `hallo`, `versie`.
+Commando's nu: `help`, `ping` (vast diagnose-commando, altijd aan), `echo` (achter flag `echo`), `hallo`, `versie`.
 
 ## Werken aan deze applicatie
 

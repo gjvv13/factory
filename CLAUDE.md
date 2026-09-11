@@ -23,7 +23,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory release [patch\|minor\|major]`               | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen                                  |
 | `factory promote <acc\|prod> [tag]`                   | Tag uitrollen, migreren, herstarten, gezondheid controleren                                               |
 | `factory deploy <acc\|prod>`                          | Uitrol-orchestratie voor de runner: `acc` = release + promote acc                                         |
-| `factory rooktest <acc\|prod>`                        | Eén read-only aanroep door de kern na een uitrol (uit `factory.json`)                                     |
+| `factory rooktest <acc\|prod>`                        | Eén aanroep zonder domein-mutatie door de kern na een uitrol (uit `factory.json`)                         |
 | `factory terugrol <acc\|prod>`                        | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)                                  |
 | `factory env <status\|start\|stop\|reload\|logs>`     | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers                                      |
 | `factory flag <omgeving> [naam] [on\|off]`            | Feature flags omzetten zonder deploy                                                                      |
@@ -243,8 +243,9 @@ blijven versie/tag "onbekend" i.p.v. dat de meldstap zelf omvalt. Hij is een no-
 waarschuwing zolang `DEPLOY_NOTIFY_URL` niet is gezet.
 
 **Rooktest en terugweg (#121).** `/health` "ok" bewijst niet dat de kern werkt. Zet
-daarom een rooktest in `factory.json` — één **read-only** aanroep die `factory rooktest`
-na de uitrol tegen de omgeving draait (acc én prod, acc eerst), bijvoorbeeld:
+daarom een rooktest in `factory.json` — één aanroep **zonder domein-mutatie** die
+`factory rooktest` na de uitrol tegen de omgeving draait (acc én prod, acc eerst),
+bijvoorbeeld:
 
 ```json
 "rooktest": { "pad": "/channels/http/inbound", "body": "{\"from\":\"rooktest\",\"text\":\"ping\"}", "bevat": "pong" }
@@ -255,8 +256,9 @@ gefaalde-deploy-melding hierboven); er wordt **niet** automatisch teruggerold �
 verrassender zijn dan het probleem. De terugweg staat klaar als los commando:
 `factory terugrol <acc|prod>` promoot de vorige tag terug (seconden werk t.o.v. vooruit
 fixen). Zonder een `rooktest`-blok is de stap een no-op, zodat de workflow 'm altijd mag
-aanroepen. De read-only garantie ligt bij jou: kies een leesactie, geen bestelling en
-geen regel in iemands lijst.
+aanroepen. De garantie ligt bij jou: kies een actie zonder gevolg in de domein-toestand
+(geen bestelling, geen regel in iemands lijst). De skeleton-default (`ping` → `pong`)
+valt hieronder — die raakt alleen de diagnostische message-log, geen domein-toestand.
 
 ### Het bord bijwerken vanuit een uitrol
 
