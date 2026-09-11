@@ -930,7 +930,7 @@ function verwerk(
     blokkeer(item, cwd);
     plaatsComment(
       item.issue,
-      `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap)}`,
+      `**Run mislukt.** ${uitkomst.fout ?? 'onbekende fout'}\n\n${voetnoot(uitkomst, werkmap, 'refine', item.app)}`,
       cwd,
     );
     waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
@@ -949,7 +949,7 @@ function verwerk(
         uitkomst,
         werkmap,
         'refine',
-        undefined,
+        item.app,
         verdict.doorloop,
       ),
       cwd,
@@ -986,7 +986,7 @@ function verwerk(
         uitkomst,
         werkmap,
         'refine',
-        undefined,
+        item.app,
         verdict.doorloop,
       ),
       cwd,
@@ -1345,13 +1345,28 @@ async function werkAntwoordAf(
           sessie: escalatie.sessie,
           hervat: true,
         };
-  const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
-  const uitkomst = await draaiWerker({
-    ...opdracht,
-    budgetUsd: instellingen.budgetPerRun,
-    agent: AGENT_REFINER,
-    effort: instellingen.werkerEffort,
-  });
+  const paden = opties.paden ?? standaardPaden();
+  const instellingen = leesInstellingen(paden);
+  // De app uit de escalatie-comment, of afgeleid uit het werkmap-pad
+  // (~/OrkestratorWerk/<app>). Een board-lezing is niet nodig (#593).
+  const app = escalatie.app ?? path.basename(escalatie.werkmap);
+  const { uitkomst } = await metBoekhouding(
+    {
+      paden,
+      nu: new Date(Date.now()),
+      soort: 'refine',
+      pot: 'interactief',
+      item: { issue, app },
+    },
+    () =>
+      draaiWerker({
+        ...opdracht,
+        budgetUsd: instellingen.budgetPerRun,
+        agent: AGENT_REFINER,
+        effort: instellingen.werkerEffort,
+      }),
+    beschrijfRun,
+  );
 
   if (uitkomst.sessieWeg === true) {
     // Niet stil falen: de sessie is weg, maar er is nog een weg vooruit, en die staat
