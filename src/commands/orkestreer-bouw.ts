@@ -1394,100 +1394,120 @@ export async function werkBouwAntwoordAf(
           hervat: true,
         };
 
-  const instellingen = leesInstellingen(opties.paden ?? standaardPaden());
-  const uitkomst = await draaiBouwer({
-    ...opdracht,
-    budgetUsd: instellingen.bouwBudgetPerRun,
-    agent: AGENT_BOUWER,
-    effort: instellingen.werkerEffort,
-  });
+  const paden = opties.paden ?? standaardPaden();
+  const instellingen = leesInstellingen(paden);
 
-  if (uitkomst.sessieWeg === true) {
-    throw new GebruikersFout(
-      `De sessie ${escalatie.sessie} bestaat niet meer, dus hervatten kan niet.\n` +
-        `  Begin een verse run met je antwoord erbij:\n` +
-        `    factory orkestreer antwoord ${String(issue)} "${tekst}" --opnieuw\n` +
-        '  Dat kost meer (geen cache) en het werk tot de escalatie is weg, maar het loopt door.',
-    );
-  }
+  // Boekhouding: een antwoord-run kost geld en hoort in het runlog, net als elke
+  // andere run. Zonder deze wrapper was de run onzichtbaar in log en
+  // ochtendupdate (#593).
+  await metBoekhouding(
+    {
+      paden,
+      nu: new Date(Date.now()),
+      soort: 'bouw',
+      pot: 'interactief',
+      item: { issue, app },
+    },
+    async () => {
+      const uitkomst = await draaiBouwer({
+        ...opdracht,
+        budgetUsd: instellingen.bouwBudgetPerRun,
+        agent: AGENT_BOUWER,
+        effort: instellingen.werkerEffort,
+      });
 
-  if (uitkomst.afloop === 'mislukt') {
-    plaatsComment(
-      issue,
-      `**Bouw-antwoord verwerkt, maar de run mislukte.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
-        `<sub>${uitkomst.kosten === undefined ? '' : `$${uitkomst.kosten.toFixed(2)} · `}` +
-        `${uitkomst.beurten === undefined ? '' : `${String(uitkomst.beurten)} beurten`}</sub>\n` +
-        `<!-- orkestrator: soort=bouw app=${app} sessie=${uitkomst.sessie} werkmap=${werkmap} -->`,
-      cwd,
-    );
-    throw new GebruikersFout(`De run mislukte: ${uitkomst.fout ?? 'onbekende fout'}`);
-  }
+      if (uitkomst.sessieWeg === true) {
+        throw new GebruikersFout(
+          `De sessie ${escalatie.sessie} bestaat niet meer, dus hervatten kan niet.\n` +
+            `  Begin een verse run met je antwoord erbij:\n` +
+            `    factory orkestreer antwoord ${String(issue)} "${tekst}" --opnieuw\n` +
+            '  Dat kost meer (geen cache) en het werk tot de escalatie is weg, maar het loopt door.',
+        );
+      }
 
-  const verdict = uitkomst.verdict;
-  if (verdict?.uitkomst === 'escalatie') {
-    // Nog een vraag. Het escalatie-label blijft staan; er is gewoon een nieuwe ronde nodig.
-    plaatsComment(
-      issue,
-      escalatieComment(issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', app),
-      cwd,
-    );
-    ok(`#${String(issue)} escaleert opnieuw`);
-    return;
-  }
+      if (uitkomst.afloop === 'mislukt') {
+        plaatsComment(
+          issue,
+          `**Bouw-antwoord verwerkt, maar de run mislukte.** ${uitkomst.fout ?? 'onbekende fout'}\n\n` +
+            `<sub>${uitkomst.kosten === undefined ? '' : `$${uitkomst.kosten.toFixed(2)} · `}` +
+            `${uitkomst.beurten === undefined ? '' : `${String(uitkomst.beurten)} beurten`}</sub>\n` +
+            `<!-- orkestrator: soort=bouw app=${app} sessie=${uitkomst.sessie} werkmap=${werkmap} -->`,
+          cwd,
+        );
+        throw new GebruikersFout(`De run mislukte: ${uitkomst.fout ?? 'onbekende fout'}`);
+      }
 
-  if (verdict?.uitkomst !== 'klaar') {
-    throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitkomst.`);
-  }
+      const verdict = uitkomst.verdict;
+      if (verdict?.uitkomst === 'escalatie') {
+        // Nog een vraag. Het escalatie-label blijft staan; er is gewoon een nieuwe ronde nodig.
+        plaatsComment(
+          issue,
+          escalatieComment(issue, verdict.vraag, verdict.advies, uitkomst, werkmap, 'bouw', app),
+          cwd,
+        );
+        ok(`#${String(issue)} escaleert opnieuw`);
+        // De escalatie is geen bouw-resultaat met review; beschrijfBouw krijgt alleen de
+        // bouw-uitkomst, dat volstaat voor de logregel.
+        return { bouw: uitkomst };
+      }
 
-  // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
-  let reviewUitkomst: ReviewUitkomst | undefined;
-  try {
-    reviewUitkomst = await draaiReviewer({
-      prompt: reviewPrompt(
-        { issue, app, titel: '', labels: [], kolom: GECLAIMD_KOLOM, aangemaakt: '' },
-        werkmap,
-        factoryMap,
-      ),
-      werkmap,
-      sessie: randomUUID(),
-      extraMappen: [factoryMap],
-      budgetUsd: instellingen.reviewBudgetPerRun,
-      agent: AGENT_REVIEWER,
-      effort: instellingen.werkerEffort,
-    });
-  } catch (fout) {
-    const reden = fout instanceof Error ? fout.message : String(fout);
-    waarschuwing(`review kon niet draaien: ${reden}`);
-    reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
-  }
+      if (verdict?.uitkomst !== 'klaar') {
+        throw new GebruikersFout(`#${String(issue)} gaf geen bruikbare uitkomst.`);
+      }
 
-  // Sessielog lezen: supplementaire wrijvingsdata (#542).
-  const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
+      // Review: alleen als de bouw slaagde, in de worktree die er dan nog staat (#184).
+      let reviewUitkomst: ReviewUitkomst | undefined;
+      try {
+        reviewUitkomst = await draaiReviewer({
+          prompt: reviewPrompt(
+            { issue, app, titel: '', labels: [], kolom: GECLAIMD_KOLOM, aangemaakt: '' },
+            werkmap,
+            factoryMap,
+          ),
+          werkmap,
+          sessie: randomUUID(),
+          extraMappen: [factoryMap],
+          budgetUsd: instellingen.reviewBudgetPerRun,
+          agent: AGENT_REVIEWER,
+          effort: instellingen.werkerEffort,
+        });
+      } catch (fout) {
+        const reden = fout instanceof Error ? fout.message : String(fout);
+        waarschuwing(`review kon niet draaien: ${reden}`);
+        reviewUitkomst = { afloop: 'mislukt', sessie: '', weigeringen: 0, fout: reden };
+      }
 
-  // Het item ophalen voor de titel (PR-titel bij inleveren) en de volledige Bouwitem.
-  const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
-  const titel = item?.titel ?? `#${String(issue)}`;
-  const bouwitem: Bouwitem = {
-    issue,
-    app,
-    titel,
-    labels: item?.labels ?? [],
-    kolom: GECLAIMD_KOLOM,
-    aangemaakt: item?.aangemaakt ?? '',
-  };
+      // Sessielog lezen: supplementaire wrijvingsdata (#542).
+      const logWeigeringen = leesWeigeringenUitLog(uitkomst.sessie, werkmap);
 
-  // Het escalatie-label weghalen: het item is niet meer vastgelopen.
-  haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+      // Het item ophalen voor de titel (PR-titel bij inleveren) en de volledige Bouwitem.
+      const item = bordItems(cwd)?.find((kandidaat) => kandidaat.issue === issue);
+      const titel = item?.titel ?? `#${String(issue)}`;
+      const bouwitem: Bouwitem = {
+        issue,
+        app,
+        titel,
+        labels: item?.labels ?? [],
+        kolom: GECLAIMD_KOLOM,
+        aangemaakt: item?.aangemaakt ?? '',
+      };
 
-  verwerkBouw(
-    bouwitem,
-    uitkomst,
-    reviewUitkomst,
-    cwd,
-    wortel,
-    inleveren,
-    logWeigeringen,
-    opsMeldingVan(instellingen),
+      // Het escalatie-label weghalen: het item is niet meer vastgelopen.
+      haalLabelWeg(issue, ESCALATIE_LABEL, cwd);
+
+      verwerkBouw(
+        bouwitem,
+        uitkomst,
+        reviewUitkomst,
+        cwd,
+        wortel,
+        inleveren,
+        logWeigeringen,
+        opsMeldingVan(instellingen),
+      );
+      return { bouw: uitkomst, review: reviewUitkomst };
+    },
+    beschrijfBouw,
   );
 }
 
