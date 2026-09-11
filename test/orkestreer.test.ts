@@ -2275,6 +2275,23 @@ describe('herlaadPlists (#632)', () => {
   let home: string;
   let paden: OrkestratorPaden;
   let uitvoer: string[];
+  let prefix: string;
+
+  // Een distinctieve PATH van de bestaande plist — nvm-node erin, precies wat de
+  // release-runner-PATH zou missen.
+  const OUDE_PAD = '/Users/gjvv/.nvm/versions/node/v20.11.0/bin:/usr/bin:/bin';
+
+  /** Een realistische bestaande plist: distinctieve PATH + de oude `git -C`-variant. */
+  function oudePlist(padWaarde: string): string {
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<plist version="1.0"><dict>',
+      '<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string>',
+      '<string>TAG=$(git -C /Users/x/Documents/factory tag) ; exec factory orkestreer --nacht</string></array>',
+      `<key>EnvironmentVariables</key><dict><key>PATH</key><string>${padWaarde}</string></dict>`,
+      '</dict></plist>',
+    ].join('\n');
+  }
 
   beforeEach(() => {
     uitvoer = [];
@@ -2284,6 +2301,10 @@ describe('herlaadPlists (#632)', () => {
     });
     home = mkdtempSync(path.join(os.tmpdir(), 'factory-herlaad-'));
     paden = standaardPaden(home);
+    // Een échte globale bin, zodat de bestaat-check (#632-review) slaagt.
+    prefix = path.join(home, 'prefix');
+    mkdirSync(path.join(prefix, 'bin'), { recursive: true });
+    writeFileSync(path.join(prefix, 'bin', 'factory'), '#!/bin/sh\n');
   });
 
   afterEach(() => {
@@ -2296,32 +2317,29 @@ describe('herlaadPlists (#632)', () => {
   function herlaadMachine(): UitkomstBepaler {
     return ({ commando, argumenten }) => {
       if (commando === 'npm' && argumenten[0] === 'prefix') {
-        return { stdout: '/opt/homebrew\n' };
+        return { stdout: `${prefix}\n` };
       }
       return {};
     };
   }
 
   it('herlaadt beide plists als ze bestaan', () => {
-    // Maak beide plist-bestanden aan met dummy-inhoud.
     mkdirSync(path.dirname(paden.agentPad), { recursive: true });
-    writeFileSync(paden.agentPad, 'oud-refine');
-    writeFileSync(paden.bouwAgentPad, 'oud-bouw');
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
+    writeFileSync(paden.bouwAgentPad, oudePlist(OUDE_PAD));
 
     const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
 
     herlaadPlists(paden);
 
-    // Beide plists zijn herschreven met de nieuwe inhoud.
+    // Beide plists zijn herschreven met het nieuwe script en de nieuwe bin.
     const refineInhoud = readFileSync(paden.agentPad, 'utf8');
     expect(refineInhoud).toContain('orkestreer --nacht');
-    expect(refineInhoud).toContain('/opt/homebrew/bin/factory');
-    expect(refineInhoud).not.toBe('oud-refine');
+    expect(refineInhoud).toContain(path.join(prefix, 'bin', 'factory'));
 
     const bouwInhoud = readFileSync(paden.bouwAgentPad, 'utf8');
     expect(bouwInhoud).toContain('orkestreer --soort bouw --nacht');
-    expect(bouwInhoud).toContain('/opt/homebrew/bin/factory');
-    expect(bouwInhoud).not.toBe('oud-bouw');
+    expect(bouwInhoud).toContain(path.join(prefix, 'bin', 'factory'));
 
     // Vier launchctl-aanroepen: unload + load per plist.
     const launchctl = aanroepen
@@ -2334,22 +2352,82 @@ describe('herlaadPlists (#632)', () => {
     expect(readFileSync(paden.logPad, 'utf8')).toContain('plists herladen (2 stuks');
   });
 
+  it('vervangt de git -C-variant door git ls-remote (#632)', () => {
+    // De kern van de storing: de draaiende plist gebruikte `git -C ~/Documents`
+    // (door macOS TCC geblokkeerd). Na herladen staat er `git ls-remote` en géén `git -C`.
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
+
+    zetBeideUitvoerdersOp(herlaadMachine());
+    herlaadPlists(paden);
+
+    const inhoud = readFileSync(paden.agentPad, 'utf8');
+    expect(inhoud).toContain('git ls-remote');
+    expect(inhoud).not.toContain('git -C');
+  });
+
+  it('behoudt de PATH van de bestaande plist en bakt niet de runner-PATH in (#632-review)', () => {
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
+
+    zetBeideUitvoerdersOp(herlaadMachine());
+    herlaadPlists(paden);
+
+    // De distinctieve PATH van de oude plist blijft staan — niet overschreven met de
+    // PATH van het draaiende (release-runner-)proces.
+    expect(readFileSync(paden.agentPad, 'utf8')).toContain(`<string>${OUDE_PAD}</string>`);
+  });
+
+  it('laat de plists met rust als de globale bin niet bestaat (#632-review)', () => {
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    const oud = oudePlist(OUDE_PAD);
+    writeFileSync(paden.agentPad, oud);
+    // Prefix zonder bin/factory.
+    const leeg = path.join(home, 'leeg');
+    mkdirSync(leeg, { recursive: true });
+
+    const { aanroepen } = zetBeideUitvoerdersOp(({ commando, argumenten }) =>
+      commando === 'npm' && argumenten[0] === 'prefix' ? { stdout: `${leeg}\n` } : {},
+    );
+
+    herlaadPlists(paden);
+
+    // Niets herschreven, geen launchctl, een waarschuwing.
+    expect(readFileSync(paden.agentPad, 'utf8')).toBe(oud);
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
+    expect(uitvoer.join('')).toContain('niet gevonden');
+  });
+
+  it('laat de plists met rust als de prefix niet te bepalen is (#632-review)', () => {
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    const oud = oudePlist(OUDE_PAD);
+    writeFileSync(paden.agentPad, oud);
+
+    // npm prefix faalt → uitvoerVan geeft undefined.
+    const { aanroepen } = zetBeideUitvoerdersOp(({ commando, argumenten }) =>
+      commando === 'npm' && argumenten[0] === 'prefix' ? { code: 1 } : {},
+    );
+
+    herlaadPlists(paden);
+
+    expect(readFileSync(paden.agentPad, 'utf8')).toBe(oud);
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
+    expect(uitvoer.join('')).toContain('prefix niet bepalen');
+  });
+
   it('slaat over als geen enkele plist bestaat', () => {
-    // Geen plist-bestanden aangemaakt.
     const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
 
     herlaadPlists(paden);
 
-    // Geen launchctl-aanroepen.
     expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
     expect(uitvoer.join('')).toContain('geen plists gevonden');
-    // Geen logregel: er is niets veranderd.
     expect(existsSync(paden.logPad)).toBe(false);
   });
 
   it('herlaadt alleen de refine-plist als alleen die bestaat', () => {
     mkdirSync(path.dirname(paden.agentPad), { recursive: true });
-    writeFileSync(paden.agentPad, 'oud-refine');
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
     // Geen bouw-plist.
 
     const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
@@ -2357,7 +2435,6 @@ describe('herlaadPlists (#632)', () => {
     herlaadPlists(paden);
 
     expect(readFileSync(paden.agentPad, 'utf8')).toContain('orkestreer --nacht');
-    // Eén paar launchctl-aanroepen.
     const launchctl = aanroepen
       .filter((a) => a.commando === 'launchctl')
       .map((a) => a.argumenten[0]);
@@ -2368,9 +2445,8 @@ describe('herlaadPlists (#632)', () => {
   });
 
   it('vereist geen isBacklogRepo', () => {
-    // De functie raakt de repo niet — geen git-aanroep nodig.
     mkdirSync(path.dirname(paden.agentPad), { recursive: true });
-    writeFileSync(paden.agentPad, 'oud');
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
 
     const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
 
@@ -2382,7 +2458,7 @@ describe('herlaadPlists (#632)', () => {
 
   it('is bereikbaar via --herlaad-plists op de CLI', async () => {
     mkdirSync(path.dirname(paden.agentPad), { recursive: true });
-    writeFileSync(paden.agentPad, 'oud');
+    writeFileSync(paden.agentPad, oudePlist(OUDE_PAD));
 
     zetBeideUitvoerdersOp(herlaadMachine());
 

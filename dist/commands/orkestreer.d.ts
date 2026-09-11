@@ -211,6 +211,13 @@ export interface OrkestreerPlistOpzet {
     readonly minuut: number;
     /** Het `exec`-commando waarmee de nacht start. */
     readonly nachtCommando: string;
+    /**
+     * De PATH die in de plist gebakken wordt. Zonder waarde die van het genererende
+     * proces (de `--installeer`-shell). Een herlaad vanuit de release geeft hier de PATH
+     * van de al draaiende plist mee, zodat de runner-PATH — die node/gh/claude kan missen —
+     * een werkende plist niet stilletjes breekt (#632-review).
+     */
+    readonly pad?: string;
 }
 /**
  * Bouwt de plist die `factory orkestreer --nacht` één keer per nacht draait.
@@ -283,19 +290,6 @@ export declare function nieuwsteTag(cwd: string): string;
  * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
  */
 export declare function vereisNachtModus(bin: string): void;
-/**
- * Herlaadt de LaunchAgent-plists die al bestaan (#632). Per plist:
- * - controleer of het bestand er is; bestaat het niet, sla over (geen agent installeren
- *   die er niet was — functioneel besluit 1);
- * - ontdek de globale bin via `npm prefix -g`;
- * - regenereer de plist met `bouwOrkestreerPlist` (bevat `bouwNachtScript`);
- * - herschrijf het bestand en herlaad via `launchctl unload` + `launchctl load`.
- *
- * Vereist bewust geen `isBacklogRepo`: de release-workflow draait dit vanuit de
- * `globale-bin`-job op de mini, die de checkout van de factory-repo heeft maar niet per se
- * daarin `cd` doet. De functie heeft de repo niet nodig — alleen de globale bin en de
- * bestaande plists.
- */
 export declare function herlaadPlists(paden: OrkestratorPaden): void;
 /**
  * Aggregeert wrijving over de laatste N bouw-runs en toont per-tool frequenties

@@ -1538,6 +1538,13 @@ export interface OrkestreerPlistOpzet {
   readonly minuut: number;
   /** Het `exec`-commando waarmee de nacht start. */
   readonly nachtCommando: string;
+  /**
+   * De PATH die in de plist gebakken wordt. Zonder waarde die van het genererende
+   * proces (de `--installeer`-shell). Een herlaad vanuit de release geeft hier de PATH
+   * van de al draaiende plist mee, zodat de runner-PATH — die node/gh/claude kan missen —
+   * een werkende plist niet stilletjes breekt (#632-review).
+   */
+  readonly pad?: string;
 }
 
 /**
@@ -1564,8 +1571,9 @@ export interface OrkestreerPlistOpzet {
  */
 export function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string {
   // De PATH van de installerende shell meebakken: launchd start anders met een kale
-  // PATH en vindt node, gh of claude dan niet.
-  const pad = process.env.PATH ?? '/usr/bin:/bin';
+  // PATH en vindt node, gh of claude dan niet. Een herlaad geeft `opzet.pad` mee (de PATH
+  // van de bestaande plist), zodat de runner-PATH een werkende plist niet breekt (#632-review).
+  const pad = opzet.pad ?? process.env.PATH ?? '/usr/bin:/bin';
   const script = bouwNachtScript(opzet);
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -1783,11 +1791,27 @@ function verwijderAgent(paden: OrkestratorPaden): void {
  * daarin `cd` doet. De functie heeft de repo niet nodig — alleen de globale bin en de
  * bestaande plists.
  */
+/** De PATH uit een bestaande plist, zodat een herlaad de werkende PATH behoudt (#632-review). */
+function padUitPlist(inhoud: string): string | undefined {
+  return /<key>PATH<\/key>\s*<string>([^<]*)<\/string>/.exec(inhoud)?.[1];
+}
+
 export function herlaadPlists(paden: OrkestratorPaden): void {
   kop('LaunchAgent-plists herladen (#632)');
 
-  const prefix = uitvoerVan('npm', ['prefix', '-g']) ?? '/usr/local';
+  // De globale bin komt uit de release die deze stap net installeerde. Kunnen we de
+  // prefix niet bepalen of bestaat de bin niet, dan de plists mét rust laten: een plist
+  // naar een onbestaande bin herschrijven is erger dan niet herladen (#632-review).
+  const prefix = uitvoerVan('npm', ['prefix', '-g']);
+  if (prefix === undefined) {
+    waarschuwing('kon de globale prefix niet bepalen (npm prefix -g); plists ongemoeid gelaten.');
+    return;
+  }
   const bin = path.join(prefix, 'bin', 'factory');
+  if (!existsSync(bin)) {
+    waarschuwing(`globale factory-bin niet gevonden op ${bin}; plists ongemoeid gelaten.`);
+    return;
+  }
 
   const plists: {
     readonly naam: string;
@@ -1821,6 +1845,14 @@ export function herlaadPlists(paden: OrkestratorPaden): void {
       ok(`${plist.naam}-plist niet gevonden (${plist.pad}); overgeslagen.`);
       continue;
     }
+    // De PATH van de bestaande plist behouden: die is gebakken uit de `--installeer`-shell
+    // en vindt node/gh/claude. De release-runner-PATH hier zou dat kunnen breken. Lukt het
+    // uitlezen niet, dan de plist met rust laten in plaats van 'm te breken (#632-review).
+    const bestaandePad = padUitPlist(readFileSync(plist.pad, 'utf8'));
+    if (bestaandePad === undefined) {
+      waarschuwing(`${plist.naam}-plist heeft geen leesbare PATH; met rust gelaten.`);
+      continue;
+    }
     writeFileSync(
       plist.pad,
       bouwOrkestreerPlist({
@@ -1831,6 +1863,7 @@ export function herlaadPlists(paden: OrkestratorPaden): void {
         uur: plist.uur,
         minuut: plist.minuut,
         nachtCommando: plist.nachtCommando,
+        pad: bestaandePad,
       }),
     );
     run('launchctl', ['unload', plist.pad], { toleranter: true, capture: true });
