@@ -69,6 +69,12 @@ describe('nieuw', () => {
       poorten: { prod: 3000, dev: 3001, acc: 3002 },
       // Private repo → lokale wachtrij, niet de merge-queue-default (#108).
       integratie: 'lokaal',
+      // Skeleton-default rooktest: ping-probe door het HTTP-kanaal (#464).
+      rooktest: {
+        pad: '/channels/http/inbound',
+        body: '{"from":"rooktest","text":"ping"}',
+        bevat: 'pong',
+      },
     });
 
     // De tokens in het echte skeleton zijn ingevuld, niets blijft staan.

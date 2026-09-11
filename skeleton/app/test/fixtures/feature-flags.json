@@ -1,8 +1,8 @@
 [
   {
-    "key": "ping",
+    "key": "echo",
     "enabled": true,
-    "description": "Het ping-commando antwoordt met pong."
+    "description": "Het echo-commando herhaalt het argument."
   },
   {
     "key": "whatsapp-channel",

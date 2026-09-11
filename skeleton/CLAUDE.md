@@ -62,7 +62,7 @@ app/src/
   http/               Fastify-server en routes
 ```
 
-Commando's nu: `help`, `ping` (achter flag `ping`), `hallo`, `versie`.
+Commando's nu: `help`, `ping` (vast diagnose-commando, altijd aan), `echo` (achter flag `echo`), `hallo`, `versie`.
 
 ```bash
 curl -s localhost:{{PORT_DEV}}/channels/http/inbound \

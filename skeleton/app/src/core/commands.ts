@@ -1,11 +1,22 @@
 import type { Command, CommandRouter } from './command-router.js';
 
-/** Ping zit achter een flag, zodat de flag-werking in elke omgeving aantoonbaar is. */
+/**
+ * Vast diagnose-commando: altijd beschikbaar, zonder flag. De skeleton-default-rooktest
+ * leunt hierop, zodat een deploy het volledige inbound-berichtpad test ongeacht wat een
+ * app met zijn eigen handler doet (#464).
+ */
 export const pingCommand: Command = {
   name: 'ping',
   description: 'Antwoordt met pong.',
-  flagKey: 'ping',
   handle: () => 'pong',
+};
+
+/** Echo zit achter een flag, zodat de flag-werking in elke omgeving aantoonbaar is. */
+export const echoCommand: Command = {
+  name: 'echo',
+  description: 'Herhaalt het argument.',
+  flagKey: 'echo',
+  handle: (context) => (context.argument === '' ? 'Geef iets om te herhalen.' : context.argument),
 };
 
 export const versionCommand: Command = {

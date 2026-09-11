@@ -15,20 +15,25 @@ describe('commando-router', () => {
     harness.close();
   });
 
-  it('antwoordt op ping met pong als de flag aanstaat', () => {
-    expect(harness.app.flags.isEnabled('ping')).toBe(true);
+  it('antwoordt op ping met pong — altijd, zonder flag', () => {
+    // ping is een vast diagnose-commando, geen flag nodig (#464).
     expect(harness.channel.receive('tester', 'ping')).toEqual(['pong']);
   });
 
-  it('kent ping niet meer zodra de flag uitgaat', () => {
-    harness.app.flags.set('ping', false);
-    expect(harness.channel.receive('tester', 'ping')).toEqual([UNKNOWN_COMMAND_REPLY]);
+  it('antwoordt op echo met het argument als de flag aanstaat', () => {
+    expect(harness.app.flags.isEnabled('echo')).toBe(true);
+    expect(harness.channel.receive('tester', 'echo hallo wereld')).toEqual(['hallo wereld']);
+  });
+
+  it('kent echo niet meer zodra de flag uitgaat', () => {
+    harness.app.flags.set('echo', false);
+    expect(harness.channel.receive('tester', 'echo test')).toEqual([UNKNOWN_COMMAND_REPLY]);
   });
 
   it('laat een uitgezet commando ook niet in help zien', () => {
-    expect(harness.channel.receive('tester', 'help')[0]).toContain('ping');
-    harness.app.flags.set('ping', false);
-    expect(harness.channel.receive('tester', 'help')[0]).not.toContain('ping');
+    expect(harness.channel.receive('tester', 'help')[0]).toContain('echo');
+    harness.app.flags.set('echo', false);
+    expect(harness.channel.receive('tester', 'help')[0]).not.toContain('echo');
   });
 
   it('begroet een bekend contact bij naam', () => {
