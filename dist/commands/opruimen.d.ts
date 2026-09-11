@@ -32,3 +32,12 @@ export declare function vergelijkVersies(a: string, b: string): number;
  * commits boven main) en handelt achterhaalde release-PR's af.
  */
 export declare function opruimen(opties?: OpruimOpties): void;
+/**
+ * Vraagt de PR-state van een branch op via `gh pr view`. Geeft 'MERGED', 'CLOSED',
+ * 'OPEN', of `undefined` als de opvraging faalt (netwerk, rate-limit, geen PR).
+ *
+ * Bij squash-merge is de branch-tip per definitie nooit een ancestor van `main`,
+ * waardoor `isGemerged` altijd `false` geeft. De PR-state is bij slice-branches
+ * daarom de bron van waarheid (#633).
+ */
+export declare function prStaatVan(branch: string, cwd: string): string | undefined;

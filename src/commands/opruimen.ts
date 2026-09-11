@@ -312,9 +312,10 @@ interface WorktreeResultaat {
  *
  * Een worktree wordt verwijderd als:
  * - Het een slice-branch is met een issue-nummer
- * - Het issue is gesloten
- * - Git status is schoon (geen uncommitted wijzigingen)
- * - Er zijn 0 commits boven origin/main (niets niet-gepushts)
+ * - Het issue is gesloten (gemerged of verlaten — dan zijn commits boven main
+ *   squash-gemerged of bewust losgelaten, dus geen bescherming meer nodig, #633)
+ * - Git status is schoon (geen uncommitted wijzigingen — ongepusht werk in de
+ *   working tree blijft wél beschermd)
  *
  * Alles wat daar niet aan voldoet wordt overgeslagen met een melding.
  */

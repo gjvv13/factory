@@ -97,6 +97,7 @@ export function opruimen(opties = {}) {
     const lokaalVerwijderen = [];
     const lokaalBlijven = [];
     const lokaalWorktree = [];
+    const lokaalKonNietChecken = [];
     for (const branch of lokaal) {
         if (branch === 'main' || branch === huidig)
             continue;
@@ -104,7 +105,21 @@ export function opruimen(opties = {}) {
             lokaalWorktree.push(branch);
             continue;
         }
-        if (isGemerged(branch, cwd)) {
+        if (issueUitBranch(branch) !== undefined) {
+            // Slice-branch: PR-state is de bron van waarheid, niet git-ancestry (#633).
+            const staat = prStaatVan(branch, cwd);
+            if (staat === undefined) {
+                lokaalKonNietChecken.push(branch);
+            }
+            else if (staat === 'OPEN') {
+                lokaalBlijven.push(branch);
+            }
+            else {
+                // MERGED of CLOSED: in beide gevallen heeft de branch geen doel meer.
+                lokaalVerwijderen.push(branch);
+            }
+        }
+        else if (isGemerged(branch, cwd)) {
             lokaalVerwijderen.push(branch);
         }
         else {
@@ -119,8 +134,22 @@ export function opruimen(opties = {}) {
         .map((r) => r.slice('origin/'.length));
     const remoteVerwijderen = [];
     const remoteBlijven = [];
+    const remoteKonNietChecken = [];
     for (const branch of remote) {
-        if (isGemerged(`origin/${branch}`, cwd)) {
+        if (issueUitBranch(branch) !== undefined) {
+            // Slice-branch: PR-state is de bron van waarheid (#633).
+            const staat = prStaatVan(branch, cwd);
+            if (staat === undefined) {
+                remoteKonNietChecken.push(branch);
+            }
+            else if (staat === 'OPEN') {
+                remoteBlijven.push(branch);
+            }
+            else {
+                remoteVerwijderen.push(branch);
+            }
+        }
+        else if (isGemerged(`origin/${branch}`, cwd)) {
             remoteVerwijderen.push(branch);
         }
         else {
@@ -147,6 +176,13 @@ export function opruimen(opties = {}) {
     const blijven = [...lokaalBlijven, ...remoteBlijven.map((r) => `origin/${r}`)];
     if (blijven.length > 0) {
         waarschuwing(`${String(blijven.length)} blijven staan: ${blijven.join(', ')}\n  (niet gemerged)`);
+    }
+    const konNietChecken = [
+        ...lokaalKonNietChecken,
+        ...remoteKonNietChecken.map((r) => `origin/${r}`),
+    ];
+    if (konNietChecken.length > 0) {
+        waarschuwing(`${String(konNietChecken.length)} kon niet checken: ${konNietChecken.join(', ')}\n  (PR-state niet op te vragen)`);
     }
     for (const branch of lokaalWorktree) {
         waarschuwing(`${branch} overgeslagen — in gebruik in een worktree`);
@@ -204,9 +240,10 @@ export function opruimen(opties = {}) {
  *
  * Een worktree wordt verwijderd als:
  * - Het een slice-branch is met een issue-nummer
- * - Het issue is gesloten
- * - Git status is schoon (geen uncommitted wijzigingen)
- * - Er zijn 0 commits boven origin/main (niets niet-gepushts)
+ * - Het issue is gesloten (gemerged of verlaten — dan zijn commits boven main
+ *   squash-gemerged of bewust losgelaten, dus geen bescherming meer nodig, #633)
+ * - Git status is schoon (geen uncommitted wijzigingen — ongepusht werk in de
+ *   working tree blijft wél beschermd)
  *
  * Alles wat daar niet aan voldoet wordt overgeslagen met een melding.
  */
@@ -256,21 +293,14 @@ function categoriseerWorktrees(cwd, dry) {
                 pad: entry.pad,
                 branch: entry.branch,
                 actie: 'overgeslagen',
-                reden: 'ongecommitte wijzigingen of niet-gepushte commits',
+                reden: 'ongecommitte wijzigingen',
             });
             continue;
         }
-        // Heeft de worktree commits boven origin/main?
-        const aheadCount = uitvoerVan('git', ['-C', entry.pad, 'rev-list', '--count', 'origin/main..HEAD'], cwd);
-        if (aheadCount === undefined || aheadCount !== '0') {
-            resultaten.push({
-                pad: entry.pad,
-                branch: entry.branch,
-                actie: 'overgeslagen',
-                reden: 'ongecommitte wijzigingen of niet-gepushte commits',
-            });
-            continue;
-        }
+        // De aheadCount-check vervalt voor gesloten issues (#633): een gesloten issue
+        // betekent dat het werk gemerged of verlaten is. Commits boven main zijn óf
+        // squash-gemerged, óf bewust losgelaten. De uncommitted-changes-check hierboven
+        // blijft: ongepusht werk in de working tree is altijd beschermenswaardig.
         // Alles goed — verwijderen.
         if (!dry) {
             run('git', ['worktree', 'remove', entry.pad], { cwd });
@@ -422,6 +452,17 @@ function rebaseReleaseBranch(branch, cwd) {
     // Terug naar de originele branch.
     run('git', ['checkout', '-'], { cwd, capture: true, toleranter: true });
     return true;
+}
+/**
+ * Vraagt de PR-state van een branch op via `gh pr view`. Geeft 'MERGED', 'CLOSED',
+ * 'OPEN', of `undefined` als de opvraging faalt (netwerk, rate-limit, geen PR).
+ *
+ * Bij squash-merge is de branch-tip per definitie nooit een ancestor van `main`,
+ * waardoor `isGemerged` altijd `false` geeft. De PR-state is bij slice-branches
+ * daarom de bron van waarheid (#633).
+ */
+export function prStaatVan(branch, cwd) {
+    return uitvoerVan('gh', ['pr', 'view', branch, '--json', 'state', '--jq', '.state'], cwd);
 }
 /** Of een ref volledig in origin/main zit: alle commits zijn al gemerged. */
 function isGemerged(ref, cwd) {
