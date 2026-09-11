@@ -586,4 +586,112 @@ describe('splits — commando', () => {
     );
     expect(epicEdits).toHaveLength(0);
   });
+
+  it('geeft kinderen type:task als de ouder alleen type:epic heeft', () => {
+    let kindTeller = 0;
+    const opnemer = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      if (commando !== 'gh') return {};
+      if (argumenten[0] === 'issue' && argumenten[1] === 'view') {
+        return { stdout: issueViewAntwoord(TWEE_SLICES_BODY, ['type:epic']) };
+      }
+      if (
+        argumenten[0] === 'api' &&
+        argumenten[1] === 'graphql' &&
+        argumenten.some((a) => a.includes('App'))
+      ) {
+        return { stdout: appQueryAntwoord('factory') };
+      }
+      if (argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        return { stdout: doelwit('Technisch refinen') };
+      }
+      if (argumenten[0] === 'issue' && argumenten[1] === 'create') {
+        kindTeller += 1;
+        return { stdout: `https://github.com/gjvv13/factory/issues/${String(700 + kindTeller)}` };
+      }
+      return {};
+    });
+    stelUitvoerderIn(opnemer.uitvoerder);
+
+    splits('100');
+
+    const creates = ghArgs(opnemer.aanroepen).filter((a) => a[0] === 'issue' && a[1] === 'create');
+    for (const create of creates) {
+      const labels = create.filter((_, i, arr) => arr[i - 1] === '--label');
+      expect(labels).toContain('type:task');
+      expect(labels).not.toContain('type:epic');
+    }
+  });
+
+  it('geeft kinderen type:task als de ouder type:epic en type:task heeft, zonder dubbel label', () => {
+    let kindTeller = 0;
+    const opnemer = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      if (commando !== 'gh') return {};
+      if (argumenten[0] === 'issue' && argumenten[1] === 'view') {
+        return { stdout: issueViewAntwoord(TWEE_SLICES_BODY, ['type:epic', 'type:task']) };
+      }
+      if (
+        argumenten[0] === 'api' &&
+        argumenten[1] === 'graphql' &&
+        argumenten.some((a) => a.includes('App'))
+      ) {
+        return { stdout: appQueryAntwoord('factory') };
+      }
+      if (argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        return { stdout: doelwit('Technisch refinen') };
+      }
+      if (argumenten[0] === 'issue' && argumenten[1] === 'create') {
+        kindTeller += 1;
+        return { stdout: `https://github.com/gjvv13/factory/issues/${String(800 + kindTeller)}` };
+      }
+      return {};
+    });
+    stelUitvoerderIn(opnemer.uitvoerder);
+
+    splits('100');
+
+    const creates = ghArgs(opnemer.aanroepen).filter((a) => a[0] === 'issue' && a[1] === 'create');
+    for (const create of creates) {
+      const labels = create.filter((_, i, arr) => arr[i - 1] === '--label');
+      expect(labels).toContain('type:task');
+      expect(labels).not.toContain('type:epic');
+      // Geen dubbel type:task
+      expect(labels.filter((l) => l === 'type:task')).toHaveLength(1);
+    }
+  });
+
+  it('geeft kinderen type:bug als de ouder type:epic en type:bug heeft', () => {
+    let kindTeller = 0;
+    const opnemer = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      if (commando !== 'gh') return {};
+      if (argumenten[0] === 'issue' && argumenten[1] === 'view') {
+        return { stdout: issueViewAntwoord(TWEE_SLICES_BODY, ['type:epic', 'type:bug']) };
+      }
+      if (
+        argumenten[0] === 'api' &&
+        argumenten[1] === 'graphql' &&
+        argumenten.some((a) => a.includes('App'))
+      ) {
+        return { stdout: appQueryAntwoord('factory') };
+      }
+      if (argumenten[0] === 'api' && argumenten[1] === 'graphql') {
+        return { stdout: doelwit('Technisch refinen') };
+      }
+      if (argumenten[0] === 'issue' && argumenten[1] === 'create') {
+        kindTeller += 1;
+        return { stdout: `https://github.com/gjvv13/factory/issues/${String(900 + kindTeller)}` };
+      }
+      return {};
+    });
+    stelUitvoerderIn(opnemer.uitvoerder);
+
+    splits('100');
+
+    const creates = ghArgs(opnemer.aanroepen).filter((a) => a[0] === 'issue' && a[1] === 'create');
+    for (const create of creates) {
+      const labels = create.filter((_, i, arr) => arr[i - 1] === '--label');
+      expect(labels).toContain('type:bug');
+      expect(labels).not.toContain('type:epic');
+      expect(labels).not.toContain('type:task');
+    }
+  });
 });
