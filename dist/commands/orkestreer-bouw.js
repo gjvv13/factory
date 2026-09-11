@@ -15,7 +15,7 @@ import { AGENT_BOUWER, AGENT_REVIEWER, draaiBouwer, draaiReviewer, formatDoorloo
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
 import { inleveren } from './inleveren.js';
-import { werkplek } from './werkplek.js';
+import { ruimWerkplekOp, werkplek } from './werkplek.js';
 import { leesWeigeringenUitLog } from '../sessielog.js';
 /**
  * De tweede taaksoort: een werker die bouwt in plaats van refinet (#164, slice #182).
@@ -413,8 +413,13 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
     // `factoryMap` buiten de try: de review-stap na de try heeft hem nodig.
     // Geen initialisatie: de catch gooit door, dus na de try is hij altijd gezet.
     let factoryMap;
+    // `spiegel` buiten de try: het catch-blok ruimt de worktree op via
+    // `ruimWerkplekOp(spiegel, werkmap)` (#633). Zonder spiegel (de versWerkplaats-
+    // aanroep faalde) is er geen repo om de worktree aan te hangen en is de opruiming
+    // een no-op.
+    let spiegel;
     try {
-        const spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
+        spiegel = versWerkplaats(item.app, EIGENAAR, wortel);
         factoryMap = versWerkplaats('factory', EIGENAAR, wortel);
         // Bron-momentopnames vóór de claude-run: faalt de clone, dan is het een harde fout
         // en kost hij niets. De map is naast de worktree, niet erin: verify in de worktree
@@ -447,6 +452,17 @@ export async function bouwAf(item, cwd, wortel, budgetUsd, reviewBudgetUsd, effo
     }
     catch (fout) {
         ruimBronMapOp(bronWortel);
+        // Afgebroken run ruimt z'n eigen worktree op (#633). Best-effort: de oorspronkelijke
+        // fout mag niet gemaskeerd worden. Als `spiegel` niet gezet is (versWerkplaats faalde),
+        // is er geen repo en is de opruiming een no-op.
+        if (spiegel !== undefined) {
+            try {
+                ruimWerkplekOp(spiegel, werkmap);
+            }
+            catch {
+                // best-effort: maskeer de oorspronkelijke fout niet
+            }
+        }
         if (fout instanceof OmgevingsFout) {
             // De omgeving is stuk — geen repo, onleesbare package.json, worktree kon niet
             // aangemaakt worden. Escaleren in plaats van als kale mislukking boeken, zodat

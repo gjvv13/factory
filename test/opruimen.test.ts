@@ -32,6 +32,8 @@ interface GitOmgeving {
   readonly mergeTree?: ReadonlyMap<string, { code: number; stdout: string }>;
   /** Branches waarvan de rebase slaagt (default: alle). */
   readonly rebaseSlaagt?: ReadonlySet<string>;
+  /** Map van branchnamen naar hun PR-state ('MERGED' | 'CLOSED' | 'OPEN'). */
+  readonly prStaat?: ReadonlyMap<string, string>;
 }
 
 /** Bouwt een uitkomstbepaler die een complete git-omgeving nabootst. */
@@ -42,6 +44,7 @@ function maakGitOmgeving(config: GitOmgeving = {}): UitkomstBepaler {
   const worktreeAheadCount = config.worktreeAheadCount ?? new Map<string, string>();
   const mergeTree = config.mergeTree ?? new Map<string, { code: number; stdout: string }>();
   const rebaseSlaagt = config.rebaseSlaagt;
+  const prStaat = config.prStaat ?? new Map<string, string>();
   const toplevel = config.toplevel ?? '/repo';
 
   return ({ commando, argumenten }) => {
@@ -50,6 +53,13 @@ function maakGitOmgeving(config: GitOmgeving = {}): UitkomstBepaler {
       if (argumenten[0] === 'issue' && argumenten[1] === 'view') {
         const nr = argumenten[2] ?? '';
         const staat = issueStaat.get(nr);
+        if (staat !== undefined) return { stdout: staat };
+        return { code: 1, stdout: '' };
+      }
+      // gh pr view <branch> --json state --jq .state
+      if (argumenten[0] === 'pr' && argumenten[1] === 'view') {
+        const branch = argumenten[2] ?? '';
+        const staat = prStaat.get(branch);
         if (staat !== undefined) return { stdout: staat };
         return { code: 1, stdout: '' };
       }
@@ -473,7 +483,9 @@ describe('opruimen', () => {
       expect(uitvoer.some((s) => s.includes('/wt/42') && s.includes('overgeslagen'))).toBe(true);
     });
 
-    it('slaat een worktree over met niet-gepushte commits', () => {
+    it('verwijdert een worktree van een gesloten issue met commits boven main (#633)', () => {
+      // Na #633 vervalt de aheadCount-check voor gesloten issues: commits boven main zijn
+      // óf squash-gemerged, óf bewust losgelaten. De uncommitted-changes-check blijft.
       const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
         maakGitOmgeving({
           lokaal: ['main'],
@@ -497,8 +509,9 @@ describe('opruimen', () => {
 
       opruimen();
 
-      expect(worktreeVerwijderingen(aanroepen)).toEqual(['/wt/99']);
-      expect(uitvoer.some((s) => s.includes('/wt/42') && s.includes('overgeslagen'))).toBe(true);
+      // Beide worktrees worden verwijderd: 42 heeft 3 commits boven main, maar het issue
+      // is gesloten, dus die commits zijn squash-gemerged of verlaten.
+      expect(worktreeVerwijderingen(aanroepen)).toEqual(['/wt/42', '/wt/99']);
     });
 
     it('laat een worktree met een open issue met rust', () => {
@@ -551,6 +564,144 @@ describe('opruimen', () => {
       expect(uitvoer.some((s) => s.includes('/wt/42') && s.includes('wordt verwijderd'))).toBe(
         true,
       );
+    });
+  });
+
+  // --- PR-state-gedreven opruiming van slice-branches (#633) ---
+
+  describe('slice-branch opruiming via PR-state', () => {
+    it('verwijdert een lokale slice-branch met een MERGED PR', () => {
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main', 'slice/42-1'],
+          prStaat: new Map([['slice/42-1', 'MERGED']]),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      expect(lokaleVerwijderingen(aanroepen)).toEqual(['slice/42-1']);
+    });
+
+    it('verwijdert een lokale slice-branch met een CLOSED PR (zonder merge)', () => {
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main', 'slice/375-1'],
+          prStaat: new Map([['slice/375-1', 'CLOSED']]),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      expect(lokaleVerwijderingen(aanroepen)).toEqual(['slice/375-1']);
+    });
+
+    it('laat een lokale slice-branch met een OPEN PR staan', () => {
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main', 'slice/593-1'],
+          prStaat: new Map([['slice/593-1', 'OPEN']]),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      expect(lokaleVerwijderingen(aanroepen)).toEqual([]);
+      expect(uitvoer.some((s) => s.includes('slice/593-1') && s.includes('niet gemerged'))).toBe(
+        true,
+      );
+    });
+
+    it('meldt een slice-branch als "kon niet checken" bij een falende PR-opvraging', () => {
+      // Geen prStaat-entry: de mock geeft exit 1, dus prStaatVan retourneert undefined.
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main', 'slice/100-1'],
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      // De branch wordt niet verwijderd.
+      expect(lokaleVerwijderingen(aanroepen)).toEqual([]);
+      // En hij wordt niet als "niet gemerged" gemeld, maar als "kon niet checken".
+      expect(uitvoer.some((s) => s.includes('kon niet checken'))).toBe(true);
+      expect(uitvoer.some((s) => s.includes('slice/100-1') && s.includes('niet gemerged'))).toBe(
+        false,
+      );
+    });
+
+    it('gebruikt git-ancestry voor niet-slice-branches, ongewijzigd', () => {
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main', 'feature-x'],
+          gemerged: new Set(['feature-x']),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      // Geen gh pr view aanroep voor niet-slice-branches.
+      const prViewAanroepen = aanroepen.filter(
+        (a) => a.commando === 'gh' && a.argumenten[0] === 'pr' && a.argumenten[1] === 'view',
+      );
+      expect(prViewAanroepen).toHaveLength(0);
+      // Maar de branch is wél verwijderd via de git-ancestry-check.
+      expect(lokaleVerwijderingen(aanroepen)).toEqual(['feature-x']);
+    });
+
+    it('verwijdert een remote slice-branch met een MERGED PR', () => {
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main'],
+          remote: ['slice/200-1'],
+          prStaat: new Map([['slice/200-1', 'MERGED']]),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      expect(remoteVerwijderingen(aanroepen)).toEqual(['slice/200-1']);
+    });
+  });
+
+  // --- Worktree: uncommitted changes bij gesloten issue (#633) ---
+
+  describe('worktree met uncommitted changes bij gesloten issue', () => {
+    it('slaat een worktree van een gesloten issue met uncommitted changes over', () => {
+      const worktreePorcelain = [
+        'worktree /repo',
+        'HEAD aaa',
+        'branch refs/heads/main',
+        '',
+        'worktree /wt/50',
+        'HEAD bbb',
+        'branch refs/heads/slice/50-1',
+        '',
+      ].join('\n');
+
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+        maakGitOmgeving({
+          lokaal: ['main'],
+          worktrees: worktreePorcelain,
+          toplevel: '/repo',
+          issueStaat: new Map([['50', 'CLOSED']]),
+          worktreeStatus: new Map([['/wt/50', ' M src/file.ts']]),
+        }),
+      );
+      stelUitvoerderIn(uitvoerder);
+
+      opruimen();
+
+      // Niet verwijderd: uncommitted changes zijn altijd beschermenswaardig.
+      expect(worktreeVerwijderingen(aanroepen)).toEqual([]);
+      expect(uitvoer.some((s) => s.includes('/wt/50') && s.includes('overgeslagen'))).toBe(true);
     });
   });
 
