@@ -35,6 +35,13 @@ export interface OrkestreerOpties {
     /** Haalt die LaunchAgent weg. */
     readonly verwijder?: boolean;
     /**
+     * Herlaadt de LaunchAgent-plists als ze bestaan (#632). Regenereert elke plist
+     * met de huidige `bouwOrkestreerPlist`/`bouwNachtScript`, herschrijft en herlaadt
+     * via launchctl. Draait vanuit `release.yml` na de globale install; vereist geen
+     * `isBacklogRepo`.
+     */
+    readonly herlaadPlists?: boolean;
+    /**
      * De wortel van de werkplaatsen. Geen CLI-vlag: dit staat er zodat een test met een
      * tijdelijke map kan werken in plaats van in de home-map te schrijven.
      */
@@ -276,6 +283,20 @@ export declare function nieuwsteTag(cwd: string): string;
  * ontbrekende `PROJECT_TOKEN` uit #195, dus hij hoort hier hard te falen.
  */
 export declare function vereisNachtModus(bin: string): void;
+/**
+ * Herlaadt de LaunchAgent-plists die al bestaan (#632). Per plist:
+ * - controleer of het bestand er is; bestaat het niet, sla over (geen agent installeren
+ *   die er niet was — functioneel besluit 1);
+ * - ontdek de globale bin via `npm prefix -g`;
+ * - regenereer de plist met `bouwOrkestreerPlist` (bevat `bouwNachtScript`);
+ * - herschrijf het bestand en herlaad via `launchctl unload` + `launchctl load`.
+ *
+ * Vereist bewust geen `isBacklogRepo`: de release-workflow draait dit vanuit de
+ * `globale-bin`-job op de mini, die de checkout van de factory-repo heeft maar niet per se
+ * daarin `cd` doet. De functie heeft de repo niet nodig — alleen de globale bin en de
+ * bestaande plists.
+ */
+export declare function herlaadPlists(paden: OrkestratorPaden): void;
 /**
  * Aggregeert wrijving over de laatste N bouw-runs en toont per-tool frequenties
  * met totale kosten en een markering bij tools die de drempel (≥ 3) bereiken.

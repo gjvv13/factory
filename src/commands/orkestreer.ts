@@ -33,6 +33,7 @@ import {
 } from '../board.js';
 import {
   kalenderdag,
+  BOUW_LAUNCH_LABEL,
   LAUNCH_LABEL,
   leesInstellingen,
   leesStaat,
@@ -187,6 +188,13 @@ export interface OrkestreerOpties {
   /** Haalt die LaunchAgent weg. */
   readonly verwijder?: boolean;
   /**
+   * Herlaadt de LaunchAgent-plists als ze bestaan (#632). Regenereert elke plist
+   * met de huidige `bouwOrkestreerPlist`/`bouwNachtScript`, herschrijft en herlaadt
+   * via launchctl. Draait vanuit `release.yml` na de globale install; vereist geen
+   * `isBacklogRepo`.
+   */
+  readonly herlaadPlists?: boolean;
+  /**
    * De wortel van de werkplaatsen. Geen CLI-vlag: dit staat er zodat een test met een
    * tijdelijke map kan werken in plaats van in de home-map te schrijven.
    */
@@ -327,6 +335,10 @@ export function bouwPrompt(
 /** Draait de supervisor. Zie `factory help` voor de vlaggen. */
 export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
   const paden = opties.paden ?? standaardPaden();
+  if (opties.herlaadPlists === true) {
+    herlaadPlists(paden);
+    return;
+  }
   if (opties.installeer === true) {
     installeerAgent(paden);
     return;
@@ -1754,6 +1766,87 @@ function verwijderAgent(paden: OrkestratorPaden): void {
   run('launchctl', ['unload', pad], { toleranter: true, capture: true });
   rmSync(pad, { force: true });
   ok('verwijderd; er draait niets meer vanzelf.');
+}
+
+// --- herlaadPlists: plist-propagatie via de release (#632) --------------------
+
+/**
+ * Herlaadt de LaunchAgent-plists die al bestaan (#632). Per plist:
+ * - controleer of het bestand er is; bestaat het niet, sla over (geen agent installeren
+ *   die er niet was — functioneel besluit 1);
+ * - ontdek de globale bin via `npm prefix -g`;
+ * - regenereer de plist met `bouwOrkestreerPlist` (bevat `bouwNachtScript`);
+ * - herschrijf het bestand en herlaad via `launchctl unload` + `launchctl load`.
+ *
+ * Vereist bewust geen `isBacklogRepo`: de release-workflow draait dit vanuit de
+ * `globale-bin`-job op de mini, die de checkout van de factory-repo heeft maar niet per se
+ * daarin `cd` doet. De functie heeft de repo niet nodig — alleen de globale bin en de
+ * bestaande plists.
+ */
+export function herlaadPlists(paden: OrkestratorPaden): void {
+  kop('LaunchAgent-plists herladen (#632)');
+
+  const prefix = uitvoerVan('npm', ['prefix', '-g']) ?? '/usr/local';
+  const bin = path.join(prefix, 'bin', 'factory');
+
+  const plists: {
+    readonly naam: string;
+    readonly pad: string;
+    readonly label: string;
+    readonly uur: number;
+    readonly minuut: number;
+    readonly nachtCommando: string;
+  }[] = [
+    {
+      naam: 'refine',
+      pad: paden.agentPad,
+      label: LAUNCH_LABEL,
+      uur: NACHT_UUR,
+      minuut: 0,
+      nachtCommando: `"${bin}" orkestreer --nacht`,
+    },
+    {
+      naam: 'bouw',
+      pad: paden.bouwAgentPad,
+      label: BOUW_LAUNCH_LABEL,
+      uur: BOUW_NACHT_UUR,
+      minuut: BOUW_NACHT_MINUUT,
+      nachtCommando: `"${bin}" orkestreer --soort bouw --nacht`,
+    },
+  ];
+
+  let herladen = 0;
+  for (const plist of plists) {
+    if (!existsSync(plist.pad)) {
+      ok(`${plist.naam}-plist niet gevonden (${plist.pad}); overgeslagen.`);
+      continue;
+    }
+    writeFileSync(
+      plist.pad,
+      bouwOrkestreerPlist({
+        bin,
+        werkmap: os.homedir(),
+        logPad: paden.logPad,
+        label: plist.label,
+        uur: plist.uur,
+        minuut: plist.minuut,
+        nachtCommando: plist.nachtCommando,
+      }),
+    );
+    run('launchctl', ['unload', plist.pad], { toleranter: true, capture: true });
+    run('launchctl', ['load', plist.pad]);
+    ok(`${plist.naam}-plist herladen (${plist.pad}).`);
+    herladen += 1;
+  }
+
+  if (herladen === 0) {
+    ok('geen plists gevonden; niets herladen.');
+  } else {
+    schrijfLog(
+      paden,
+      `${new Date(Date.now()).toISOString()} plists herladen (${String(herladen)} stuks, bin: ${bin})`,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------

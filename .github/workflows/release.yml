@@ -226,6 +226,14 @@ jobs:
           else
             echo "::warning::kon de globale factory niet bijwerken naar $TAG; de nacht pikt het op."
           fi
+      # De LaunchAgent-plists herladen zodat een code-fix aan bouwNachtScript de
+      # daadwerkelijk draaiende nacht bereikt zonder handwerk (#632). Soft-fail:
+      # een mislukte herlaadpoging is een waarschuwing, geen rode release — de
+      # nacht pikt de nieuwe binary sowieso op via de zelf-update in het script.
+      - name: LaunchAgent-plists herladen
+        run: |
+          factory orkestreer --herlaad-plists \
+            || echo "::warning::kon de LaunchAgent-plists niet herladen; de nacht pikt de nieuwe bin op via de zelf-update."
 
   # Vangnet tegen een stílle overslag (#195): kon de release het board niet bijwerken, dan
   # hoort dat te staan waar ik toch al kijk — de ops-room — en niet alleen als een groene

@@ -47,6 +47,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory orkestreer --soort bouw <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  bouw-werker: wachtrij, één item, reeks, of nacht (tot dagmaximum)
   factory orkestreer --soort bouw --baan fastlane <--dry|--eenmalig>  de fastlane-wachtrij (bugs + gelabelde tasks, geen child-slices)
   factory orkestreer --soort bouw <--installeer|--verwijder>  de bouw-LaunchAgent die --soort bouw --nacht elke nacht om 05:30 draait
+  factory orkestreer --herlaad-plists   bestaande LaunchAgent-plists regenereren en herladen (#632)
   factory orkestreer --soort accepteer --dry  accepteer-wachtrij en acc-preconditie tonen
   factory orkestreer --issue <n>         deze run op dat item richten i.p.v. op de kop van de rij
   factory orkestreer wrijving [N]        wrijvingsaggregaat over de laatste N bouw-runs (default 25)
@@ -153,7 +154,15 @@ async function main(argumenten) {
         }
         case 'orkestreer': {
             const { schakelaars, positioneel, waarden } = leesArgumenten(rest, {
-                schakelaars: ['--dry', '--eenmalig', '--nacht', '--installeer', '--verwijder', '--opnieuw'],
+                schakelaars: [
+                    '--dry',
+                    '--eenmalig',
+                    '--nacht',
+                    '--installeer',
+                    '--verwijder',
+                    '--opnieuw',
+                    '--herlaad-plists',
+                ],
                 waarden: ['--soort', '--issue', '--reeks', '--baan'],
             });
             const issue = leesIssue(waarden.get('--issue'));
@@ -205,6 +214,7 @@ async function main(argumenten) {
                 nacht: schakelaars.has('--nacht'),
                 installeer: schakelaars.has('--installeer'),
                 verwijder: schakelaars.has('--verwijder'),
+                herlaadPlists: schakelaars.has('--herlaad-plists'),
                 ...(issue === undefined ? {} : { issue }),
                 ...(reeks === undefined ? {} : { reeks }),
             });

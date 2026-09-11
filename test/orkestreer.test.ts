@@ -24,6 +24,7 @@ import {
   leesEscalatie,
   opruimenNaReeks,
   orkestreer,
+  herlaadPlists,
   orkestreerAntwoord,
   orkestreerStatus,
   veiligOpruimen,
@@ -2267,6 +2268,127 @@ describe('de bouw-LaunchAgent (#343)', () => {
     const script = bouwNachtScript(bouwOpzet);
     expect(script).not.toContain('Documents');
     expect(script).not.toContain('git -C');
+  });
+});
+
+describe('herlaadPlists (#632)', () => {
+  let home: string;
+  let paden: OrkestratorPaden;
+  let uitvoer: string[];
+
+  beforeEach(() => {
+    uitvoer = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((tekst) => {
+      uitvoer.push(String(tekst));
+      return true;
+    });
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-herlaad-'));
+    paden = standaardPaden(home);
+  });
+
+  afterEach(() => {
+    rmSync(home, { recursive: true, force: true });
+    herstelUitvoerder();
+    vi.restoreAllMocks();
+  });
+
+  /** Een machine met een globale npm-prefix en launchctl. */
+  function herlaadMachine(): UitkomstBepaler {
+    return ({ commando, argumenten }) => {
+      if (commando === 'npm' && argumenten[0] === 'prefix') {
+        return { stdout: '/opt/homebrew\n' };
+      }
+      return {};
+    };
+  }
+
+  it('herlaadt beide plists als ze bestaan', () => {
+    // Maak beide plist-bestanden aan met dummy-inhoud.
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, 'oud-refine');
+    writeFileSync(paden.bouwAgentPad, 'oud-bouw');
+
+    const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
+
+    herlaadPlists(paden);
+
+    // Beide plists zijn herschreven met de nieuwe inhoud.
+    const refineInhoud = readFileSync(paden.agentPad, 'utf8');
+    expect(refineInhoud).toContain('orkestreer --nacht');
+    expect(refineInhoud).toContain('/opt/homebrew/bin/factory');
+    expect(refineInhoud).not.toBe('oud-refine');
+
+    const bouwInhoud = readFileSync(paden.bouwAgentPad, 'utf8');
+    expect(bouwInhoud).toContain('orkestreer --soort bouw --nacht');
+    expect(bouwInhoud).toContain('/opt/homebrew/bin/factory');
+    expect(bouwInhoud).not.toBe('oud-bouw');
+
+    // Vier launchctl-aanroepen: unload + load per plist.
+    const launchctl = aanroepen
+      .filter((a) => a.commando === 'launchctl')
+      .map((a) => a.argumenten[0]);
+    expect(launchctl).toEqual(['unload', 'load', 'unload', 'load']);
+
+    // Er staat een logregel.
+    expect(existsSync(paden.logPad)).toBe(true);
+    expect(readFileSync(paden.logPad, 'utf8')).toContain('plists herladen (2 stuks');
+  });
+
+  it('slaat over als geen enkele plist bestaat', () => {
+    // Geen plist-bestanden aangemaakt.
+    const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
+
+    herlaadPlists(paden);
+
+    // Geen launchctl-aanroepen.
+    expect(aanroepen.some((a) => a.commando === 'launchctl')).toBe(false);
+    expect(uitvoer.join('')).toContain('geen plists gevonden');
+    // Geen logregel: er is niets veranderd.
+    expect(existsSync(paden.logPad)).toBe(false);
+  });
+
+  it('herlaadt alleen de refine-plist als alleen die bestaat', () => {
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, 'oud-refine');
+    // Geen bouw-plist.
+
+    const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
+
+    herlaadPlists(paden);
+
+    expect(readFileSync(paden.agentPad, 'utf8')).toContain('orkestreer --nacht');
+    // Eén paar launchctl-aanroepen.
+    const launchctl = aanroepen
+      .filter((a) => a.commando === 'launchctl')
+      .map((a) => a.argumenten[0]);
+    expect(launchctl).toEqual(['unload', 'load']);
+    expect(uitvoer.join('')).toContain('refine-plist herladen');
+    expect(uitvoer.join('')).toContain('bouw-plist niet gevonden');
+    expect(readFileSync(paden.logPad, 'utf8')).toContain('1 stuks');
+  });
+
+  it('vereist geen isBacklogRepo', () => {
+    // De functie raakt de repo niet — geen git-aanroep nodig.
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, 'oud');
+
+    const { aanroepen } = zetBeideUitvoerdersOp(herlaadMachine());
+
+    herlaadPlists(paden);
+
+    // Geen git remote-aanroep (dat is wat isBacklogRepo doet).
+    expect(aanroepen.some((a) => a.commando === 'git' && a.argumenten[0] === 'remote')).toBe(false);
+  });
+
+  it('is bereikbaar via --herlaad-plists op de CLI', async () => {
+    mkdirSync(path.dirname(paden.agentPad), { recursive: true });
+    writeFileSync(paden.agentPad, 'oud');
+
+    zetBeideUitvoerdersOp(herlaadMachine());
+
+    await orkestreer({ herlaadPlists: true, paden });
+
+    expect(readFileSync(paden.agentPad, 'utf8')).toContain('orkestreer --nacht');
   });
 });
 
