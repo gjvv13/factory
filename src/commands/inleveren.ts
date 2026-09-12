@@ -12,11 +12,13 @@ import {
 import {
   draaiCodeReview,
   maakGateComment,
+  reviewGateUitReviewerVerdict,
   type CodeReviewInstelling,
   type OpsMeldingConfig,
   type ReviewGateResultaat,
   type ReviewReden,
 } from '../code-review.js';
+import type { ReviewUitkomst } from '../werker.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
 import {
   GebruikersFout,
@@ -72,6 +74,15 @@ export interface InleverenOpties {
    * `factory.json`. Escape hatch voor situaties waar de review niet gewenst is.
    */
   readonly geenReview?: boolean;
+  /**
+   * Een extern reviewer-verdict, bijv. van de onbemande reviewer (#644).
+   * Als dit gezet is slaat `inleveren` zijn eigen `draaiCodeReview` over en
+   * vertaalt het dit verdict via `reviewGateUitReviewerVerdict` naar een
+   * gate-resultaat — zo draait de review maar één keer in het nachtwerker-pad.
+   * De vertaling gebeurt hier (waar de `codeReview`-instelling al gelezen
+   * wordt) en niet in `verwerkBouw`, zodat de instelling-logica op één plek zit.
+   */
+  readonly externReview?: ReviewUitkomst;
   /**
    * Ops-room-meldingsconfiguratie (#586). Wordt doorgegeven aan de code-review-gate,
    * die bij gate-falen een melding stuurt. Zonder config (attended gebruik) stuurt de
@@ -217,11 +228,26 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
 
   // Code-review gate (#368): draait na verify, vóór de push. De instelling komt uit
   // factory.json; zonder factory.json (de factory zelf) geldt `waarschuw`.
+  // Een extern reviewer-verdict (#644) slaat de eigen `draaiCodeReview` over: de
+  // reviewer heeft al gedraaid, en de vertaalfunctie mapt zijn uitkomst op het
+  // gate-formaat met dezelfde `codeReview`-instelling — zo draait de review maar één
+  // keer in het nachtwerker-pad.
+  const reviewAppDir = zoekAppDir(repoDir);
+  const reviewConfig = reviewAppDir === undefined ? undefined : leesAppConfig(reviewAppDir);
+  const instelling: CodeReviewInstelling = reviewConfig?.codeReview ?? 'waarschuw';
+
   let reviewVerdict: ReviewGateResultaat | undefined;
-  if (opties.geenReview !== true) {
-    const appDir = zoekAppDir(repoDir);
-    const reviewConfig = appDir === undefined ? undefined : leesAppConfig(appDir);
-    const instelling: CodeReviewInstelling = reviewConfig?.codeReview ?? 'waarschuw';
+  if (opties.externReview !== undefined) {
+    kop('Code-review');
+    reviewVerdict = reviewGateUitReviewerVerdict(opties.externReview, instelling);
+    ok(`extern review-verdict overgenomen van de onbemande reviewer (${reviewVerdict.reden}).`);
+    if (!reviewVerdict.doorgaan) {
+      throw new GebruikersFout(
+        `Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
+          '  Los de bevindingen op of lever in met --geen-review.',
+      );
+    }
+  } else if (opties.geenReview !== true) {
     reviewVerdict = draaiCodeReview(instelling, repoDir, opties.opsMelding);
     if (!reviewVerdict.doorgaan) {
       throw new GebruikersFout(
