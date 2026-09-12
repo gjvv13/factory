@@ -273,23 +273,27 @@ export function draaiCodeReview(
 export function reviewGateUitReviewerVerdict(
   reviewUitkomst: ReviewUitkomst | undefined,
   instelling: CodeReviewInstelling,
+  opsMelding?: OpsMeldingConfig,
 ): ReviewGateResultaat {
   if (instelling === 'uit') {
     return { doorgaan: true, reden: 'uit' };
   }
 
-  // Geen reviewer-uitkomst: de review draaide niet (bijv. bouw escaleerde).
-  if (reviewUitkomst === undefined) {
-    return { doorgaan: true, reden: 'uit' };
-  }
-
-  // De reviewer-run mislukte (startfout, timeout, onbruikbare uitvoer).
-  if (reviewUitkomst.afloop === 'mislukt' || reviewUitkomst.verdict === undefined) {
-    return {
-      doorgaan: true,
-      reden: 'geen-verdict',
-      melding: reviewUitkomst.fout ?? 'geen bruikbaar verdict van de reviewer',
-    };
+  // Geen bruikbaar verdict: de reviewer draaide niet (bouw escaleerde), mislukte
+  // (startfout, timeout), of gaf geen verdict terug. "Kon niet reviewen" ≠ "niets
+  // gevonden" (#586, #644): meld het naar de ops-room en laat de poort niet stil
+  // groen worden. Zelfde patroon als `draaiCodeReview` bij `geen-verdict`.
+  if (
+    reviewUitkomst === undefined ||
+    reviewUitkomst.afloop === 'mislukt' ||
+    reviewUitkomst.verdict === undefined
+  ) {
+    const melding = reviewUitkomst?.fout ?? 'geen bruikbaar verdict van de reviewer';
+    if (opsMelding !== undefined) {
+      const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
+      stuurOpsMelding(opsMelding, `⚠ Review-gate kon niet draaien${app}: ${melding}.`);
+    }
+    return { doorgaan: true, reden: 'geen-verdict', melding };
   }
 
   const verdict = reviewUitkomst.verdict;

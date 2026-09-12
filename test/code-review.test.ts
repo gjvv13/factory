@@ -378,10 +378,29 @@ describe('reviewGateUitReviewerVerdict', () => {
     expect(resultaat.reden).toBe('uit');
   });
 
-  it('geeft reden "uit" als reviewUitkomst undefined is', () => {
+  it('geeft reden "geen-verdict" als reviewUitkomst undefined is (kon niet reviewen ≠ niets gevonden)', () => {
+    // undefined betekent "geen verdict van de reviewer", niet "review staat uit":
+    // de poort mag niet stil groen worden (#586, #644).
     const resultaat = reviewGateUitReviewerVerdict(undefined, 'waarschuw');
     expect(resultaat.doorgaan).toBe(true);
-    expect(resultaat.reden).toBe('uit');
+    expect(resultaat.reden).toBe('geen-verdict');
+  });
+
+  it('stuurt een ops-melding als de reviewer-run geen bruikbaar verdict gaf (#586, #644)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    const resultaat = reviewGateUitReviewerVerdict(mislukt, 'waarschuw', {
+      url: 'https://ops.example.com/notify',
+      token: 'geheim',
+      app: 'factory',
+    });
+
+    expect(resultaat.reden).toBe('geen-verdict');
+    const curl = aanroepen.find((a) => a.commando === 'curl');
+    expect(curl).toBeDefined();
+    expect(curl?.argumenten).toContain('https://ops.example.com/notify');
+    expect(curl?.argumenten.join(' ')).toContain('Review-gate kon niet draaien');
   });
 
   it('geeft reden "geen-verdict" bij een mislukte reviewer-run', () => {

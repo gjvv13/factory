@@ -232,22 +232,31 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
   // reviewer heeft al gedraaid, en de vertaalfunctie mapt zijn uitkomst op het
   // gate-formaat met dezelfde `codeReview`-instelling — zo draait de review maar één
   // keer in het nachtwerker-pad.
-  const reviewAppDir = zoekAppDir(repoDir);
-  const reviewConfig = reviewAppDir === undefined ? undefined : leesAppConfig(reviewAppDir);
-  const instelling: CodeReviewInstelling = reviewConfig?.codeReview ?? 'waarschuw';
+  // Eén lezing van de app-config voor zowel de code-review-instelling als
+  // `integratie` verderop (#644): `zoekAppDir` + `leesAppConfig` hoeft niet twee keer.
+  const appDir = zoekAppDir(repoDir);
+  const config = appDir === undefined ? undefined : leesAppConfig(appDir);
+  const instelling: CodeReviewInstelling = config?.codeReview ?? 'waarschuw';
 
   let reviewVerdict: ReviewGateResultaat | undefined;
-  if (opties.externReview !== undefined) {
+  if (opties.geenReview === true) {
+    // Escape hatch: de review helemaal overslaan, ongeacht de instelling of een
+    // extern verdict. Voorrang op `externReview` zodat `--geen-review` echt niets draait.
+  } else if (opties.externReview !== undefined) {
     kop('Code-review');
-    reviewVerdict = reviewGateUitReviewerVerdict(opties.externReview, instelling);
+    reviewVerdict = reviewGateUitReviewerVerdict(
+      opties.externReview,
+      instelling,
+      opties.opsMelding,
+    );
     ok(`extern review-verdict overgenomen van de onbemande reviewer (${reviewVerdict.reden}).`);
     if (!reviewVerdict.doorgaan) {
       throw new GebruikersFout(
         `Code-review geblokkeerd: ${reviewVerdict.melding ?? 'bevindingen gevonden'}.\n` +
-          '  Los de bevindingen op of lever in met --geen-review.',
+          '  Los de bevindingen op de branch op en lever opnieuw in.',
       );
     }
-  } else if (opties.geenReview !== true) {
+  } else {
     reviewVerdict = draaiCodeReview(instelling, repoDir, opties.opsMelding);
     if (!reviewVerdict.doorgaan) {
       throw new GebruikersFout(
@@ -261,8 +270,6 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
   git(['push', '-q', '-u', 'origin', branch], repoDir);
   ok(`${branch} gepusht`);
 
-  const appDir = zoekAppDir(repoDir);
-  const config = appDir === undefined ? undefined : leesAppConfig(appDir);
   const lokaal = config?.integratie === 'lokaal';
   kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
   const reeksVermelding =
@@ -327,7 +334,10 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
 
   // Review-bevindingen als PR-comment posten, zodat ze ook bij `waarschuw` zichtbaar
   // blijven voor de ochtend-review (#368). Moet na de PR-creatie, want we hebben de URL nodig.
-  if (reviewVerdict?.verdict !== undefined && reviewVerdict.verdict.bevindingen.length >= 0) {
+  // In het extern-review-pad (#644) NIET: daar heeft de reviewer al gedraaid en post
+  // `verwerkBouw` het verdict zelf als PR-comment — een gate-comment hier zou de dubbele
+  // comment opleveren die #644 juist wegneemt.
+  if (opties.externReview === undefined && reviewVerdict?.verdict !== undefined) {
     const comment = maakGateComment(reviewVerdict.verdict);
     run('gh', ['pr', 'comment', prUrl, '--body', comment], { cwd: repoDir, toleranter: true });
   }
