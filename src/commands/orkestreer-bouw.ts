@@ -906,6 +906,8 @@ function verwerkBouw(
       titel: `#${String(item.issue)} — ${item.titel}`,
       // Ops-melding-config doorgeven zodat de review-gate bij falen de ops-room bedient (#586).
       ...(opsMelding !== undefined ? { opsMelding } : {}),
+      // Het reviewer-verdict doorsturen zodat `inleveren` geen eigen review draait (#644).
+      ...(reviewUitkomst !== undefined ? { externReview: reviewUitkomst } : {}),
       // In een reeks de stacking-informatie doorgeven (#327): de positie en de
       // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
       ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
