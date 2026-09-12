@@ -1551,5 +1551,29 @@ describe('inleveren', () => {
       // De PR staat er: inleveren is niet afgebroken.
       expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
     });
+
+    it('gh-storing bij het peilen — geen her-trigger, vangnet overgeslagen (#392)', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // `gh run list` faalt (non-nul exit → uitvoerVan geeft undefined): "kon niet
+      // meten", niet "geen run". Het vangnet mag dan geen gezonde PR close/reopen'en.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          return { code: 1 };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Geen close/reopen: bij een onmeetbare status blijft de PR ongemoeid.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'close')).toBe(false);
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'reopen')).toBe(false);
+      expect(regels.join('')).toContain('kon de CI-status niet bepalen');
+      // Inleveren gaat gewoon door.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
+    });
   });
 });
