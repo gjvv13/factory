@@ -151,6 +151,68 @@ ESLint geweigerd; anders is gedrag rond tijd niet te testen.
 - Gebruikersgerichte uitvoer (de CLI die het antwoord toont) is geen log — daar
   gelden de regels van het kanaal, niet van logging.
 
+## Logging
+
+Elke app heeft pino, LOG_LEVEL per omgeving en pm2-log-sinks uit het skeleton.
+`LOG_LEVEL=warn` op prod is correct — de conventie hieronder garandeert dat
+faalpaden zichtbaar zijn zonder het logniveau te verlagen.
+
+### Logniveau-conventie
+
+| Niveau  | Wanneer                                                                                                             |
+| ------- | ------------------------------------------------------------------------------------------------------------------- |
+| `error` | Onverwachte fout die een gebruikerspad raakt: een request dat niet beantwoord wordt, een bericht dat verloren gaat. |
+| `warn`  | Degraded maar functionerend: een terugval, een retry, een stille fout waar de gebruiker niets van merkt.            |
+| `info`  | Levenscyclus (opstart, afsluiting) en inkomend/uitgaand verkeer (request ontvangen, antwoord verstuurd).            |
+| `debug` | Detail voor diagnose: tussenresultaten, gekozen branch, cache-hit/miss.                                             |
+
+Met `LOG_LEVEL=warn` op prod zijn `info` en `debug` stil — en dat is de bedoeling.
+De conventie legt de verantwoordelijkheid bij de schrijver: elk faalpad dat een
+gebruiker zou raken logt op `warn` of `error`, zodat de prod-log niet leeg is
+wanneer er iets misgaat.
+
+### Context-schema
+
+Elke logaanroep krijgt een **object** als eerste argument met ten minste het
+identificerend veld — een kanaal, een bericht-id, een pad, een doel — en niet
+een geïnterpoleerde string als bericht:
+
+```ts
+// goed: gestructureerd, doorzoekbaar, geen persoonlijke data in het bericht
+logger.warn({ channel: 'whatsapp', messageId, error: err.message }, 'doorsturen mislukt');
+
+// fout: string-interpolatie, niet doorzoekbaar, risico op PII-lek
+logger.warn(`Doorsturen van ${messageId} naar ${channel} mislukt: ${err.message}`);
+```
+
+Dit sluit aan op de bestaande privacyregel (zie _Fouten_): log een id, een lengte,
+een kanaal of een categorie — nooit berichtinhoud, namen of sleutels.
+
+### Catch-regel
+
+Een catch zonder logregel is alleen toegestaan als **alle drie** deze voorwaarden
+kloppen:
+
+1. De fout is een **bekende, onschadelijke terugval** — bestand-niet-gevonden,
+   optionele feature, lock-opruiming.
+2. De fallback-waarde is het **gedocumenteerde gedrag** (return `undefined`, lege
+   lijst, geen actie).
+3. Er staat een **commentaar** bij dat zegt waarom de catch stil mag zijn.
+
+Elke andere catch logt minimaal op `warn` met de foutcontext (`error.message`, en
+eventueel de stack op `debug`). De ESLint-regel `no-empty` met
+`allowEmptyCatch: false` vangt het basisgeval af; de inhoudelijke toets (punt 1–3)
+is handwerk bij de review.
+
+### Prod-verwachting
+
+`LOG_LEVEL=warn` op prod blijft. De conventie garandeert dat faalpaden op `warn`
+of `error` staan, zodat de log leeg is bij foutloos draaien en gevuld bij
+problemen — precies de informatie die je nodig hebt zonder ruis.
+
+Zie ook de privacyregel in _Fouten_ en de faalbaar-gedrag-check in de _Klaar_-
+checklist.
+
 ## Commentaar
 
 Schrijf op waaróm iets zo is, niet wat de regel doet. Geen commentaar dat een
