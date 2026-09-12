@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { REVIEW_JSON_SCHEMA, type ReviewVerdict } from './werker.js';
+import { REVIEW_JSON_SCHEMA, type ReviewUitkomst, type ReviewVerdict } from './werker.js';
 import { meldOps, type OpsMeldingConfig } from './ops-melding.js';
 import { kop, ok, run, uitvoerVan, waarschuwing } from './shell.js';
 
@@ -257,5 +257,56 @@ export function draaiCodeReview(
       `  ${b.bestand}${b.regel === undefined ? '' : `:${String(b.regel)}`} [${b.ernst}] ${b.bevinding}\n`,
     );
   }
+  return { doorgaan: true, reden: 'bevindingen', verdict };
+}
+
+/**
+ * Vertaalt een `ReviewUitkomst` (van de onbemande reviewer) naar een
+ * `ReviewGateResultaat` (het formaat dat `inleveren` verwacht), zodat de
+ * reviewer-pass en de inlever-gate niet dubbel hoeven te draaien (#644).
+ *
+ * De doorgaan-beslissing is deterministisch beleid (de `instelling`), niet
+ * LLM-oordeel: bij `blokkeer` stopt het inleveren als er bevindingen zijn,
+ * bij `waarschuw` gaat het door. Het reviewer-schema (`ReviewVerdict`) blijft
+ * ongewijzigd — de vertaalfunctie mapt het verdict op de gate-discriminant.
+ */
+export function reviewGateUitReviewerVerdict(
+  reviewUitkomst: ReviewUitkomst | undefined,
+  instelling: CodeReviewInstelling,
+): ReviewGateResultaat {
+  if (instelling === 'uit') {
+    return { doorgaan: true, reden: 'uit' };
+  }
+
+  // Geen reviewer-uitkomst: de review draaide niet (bijv. bouw escaleerde).
+  if (reviewUitkomst === undefined) {
+    return { doorgaan: true, reden: 'uit' };
+  }
+
+  // De reviewer-run mislukte (startfout, timeout, onbruikbare uitvoer).
+  if (reviewUitkomst.afloop === 'mislukt' || reviewUitkomst.verdict === undefined) {
+    return {
+      doorgaan: true,
+      reden: 'geen-verdict',
+      melding: reviewUitkomst.fout ?? 'geen bruikbaar verdict van de reviewer',
+    };
+  }
+
+  const verdict = reviewUitkomst.verdict;
+
+  if (verdict.bevindingen.length === 0) {
+    return { doorgaan: true, reden: 'schoon', verdict };
+  }
+
+  // Er zijn bevindingen. Bij `blokkeer` stopt het inleveren.
+  const aantalBevindingen = verdict.bevindingen.length;
+  const ernstLabels = verdict.bevindingen.map((b) => b.ernst).join(', ');
+  const samenvatting = `reviewer: ${String(aantalBevindingen)} bevinding${aantalBevindingen === 1 ? '' : 'en'} (ernst: ${ernstLabels})`;
+
+  if (instelling === 'blokkeer') {
+    return { doorgaan: false, reden: 'bevindingen', verdict, melding: samenvatting };
+  }
+
+  // `waarschuw`: doorgaan met de bevindingen.
   return { doorgaan: true, reden: 'bevindingen', verdict };
 }
