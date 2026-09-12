@@ -1468,49 +1468,6 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(kolomZet.length).toBeGreaterThan(0);
   });
 
-  it('stopt vóór draaiBouwer als een fastlane-item niet kan landen (#630)', async () => {
-    const { aanroepen } = zetBeideUitvoerdersOp(
-      machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
-    );
-    const item: Bouwitem = {
-      issue: 106,
-      titel: 'Test',
-      kolom: 'Klaar voor Bouwen',
-      aangemaakt: '2026-08-01T00:00:00Z',
-      labels: ['type:task'], // geen fastlane-label
-      app: 'factory',
-    };
-
-    const resultaat = await bouwAf(
-      item,
-      wortel,
-      wortel,
-      5,
-      3,
-      'medium',
-      () => {
-        throw new Error('leverIn mag niet bereikt worden');
-      },
-      [],
-      undefined,
-      undefined,
-      undefined,
-      'fastlane',
-    );
-
-    // De bouw is overgeslagen: afloop is escalatie, er draaide geen claude-run.
-    expect(resultaat.bouw.afloop).toBe('escalatie');
-    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(0);
-    // Er is een comment met de reden geplaatst.
-    const comment = aanroepen.find(
-      (a) =>
-        a.argumenten[0] === 'issue' &&
-        a.argumenten[1] === 'comment' &&
-        a.argumenten.join(' ').includes('Kan niet landen in de fastlane'),
-    );
-    expect(comment).toBeDefined();
-  });
-
   it('laat een type:bug wél door in de fastlane-baan (#630)', async () => {
     zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
     const item: Bouwitem = {

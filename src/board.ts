@@ -481,11 +481,17 @@ export const JQ_LABELS = '[.labels[].name]';
  * board-lezing en voldoende voor een puntcheck.
  */
 export function heeftLabel(issue: number, label: string, cwd?: string): boolean {
+  return labelsVan(issue, cwd).includes(label);
+}
+
+/**
+ * Alle labels van een issue in één lezing. Voor het geval meerdere labels op
+ * hetzelfde issue getoetst worden (bijv. de fastlane-gate): één `gh`-roundtrip
+ * i.p.v. één per label.
+ */
+export function labelsVan(issue: number, cwd?: string): string[] {
   const ruw = issueVeld(issue, JQ_LABELS, cwd);
-  if (ruw === undefined) {
-    return false;
-  }
-  return parseLabelsAntwoord(ruw).includes(label);
+  return ruw === undefined ? [] : parseLabelsAntwoord(ruw);
 }
 
 /** Parset de jq-uitvoer van `JQ_LABELS` tot een string[]. Geëxporteerd voor tests. */

@@ -6,6 +6,7 @@ import {
   EIGENAAR,
   heeftLabel,
   issueUitBranch,
+  labelsVan,
   plaatsComment,
   zetKolom,
 } from '../board.js';
@@ -369,12 +370,12 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
     // Tweedelijns-beveiliging (#364): het issue moet het `fastlane`-label of
     // `type:bug` dragen. `type:bug` kwalificeert automatisch voor de fastlane
     // (conform `redenBuitenFastlane`); `type:task` vereist het expliciete label
-    // dat alleen een mens zet (ADR 009). Twee `heeftLabel`-aanroepen; de tweede
-    // wordt door short-circuit alleen bereikt als het `fastlane`-label ontbreekt.
+    // dat alleen een mens zet (ADR 009). Eén labellezing, twee checks.
+    const fastlaneLabels = sliceIssue === undefined ? [] : labelsVan(sliceIssue, repoDir);
     if (
       sliceIssue !== undefined &&
-      !heeftLabel(sliceIssue, FASTLANE_LABEL, repoDir) &&
-      !heeftLabel(sliceIssue, 'type:bug', repoDir)
+      !fastlaneLabels.includes(FASTLANE_LABEL) &&
+      !fastlaneLabels.includes('type:bug')
     ) {
       throw new GebruikersFout(
         `--fastlane vereist het label '${FASTLANE_LABEL}' of 'type:bug' op #${String(sliceIssue)}.\n` +
