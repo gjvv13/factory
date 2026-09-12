@@ -14,6 +14,7 @@ import { GebruikersFout, OmgevingsFout, kop, ok, run, uitvoerVan, waarschuwing }
 import { AGENT_BOUWER, AGENT_REVIEWER, draaiBouwer, draaiReviewer, formatDoorloop, stilOpgelostPunten, } from '../werker.js';
 import { BOUW_NACHT_MINUUT, BOUW_NACHT_UUR, bouwOrkestreerPlist, eigenVersie, escalatieComment, geefLockVrij, lockInfo, neemLock, nieuwsteTag, vervolgPrompt, vereisNachtModus, } from './orkestreer.js';
 import { bronMappenVan, bronMomentopname, buitenDocumenten, ruimBronMapOp, versWerkplaats, werkplaatsWortel, } from '../werkplaats.js';
+import { meldOps } from '../ops-melding.js';
 import { inleveren } from './inleveren.js';
 import { ruimWerkplekOp, werkplek } from './werkplek.js';
 import { leesWeigeringenUitLog } from '../sessielog.js';
@@ -871,38 +872,14 @@ function opsMeldingVan(instellingen) {
 /**
  * Meldt de auto-groei via de ops-room-notificatie (#543, criterium 5).
  *
- * Zonder URL: overslaan met waarschuwing, zelfde patroon als de deploy-faalmelding.
+ * Delegeert naar de gedeelde `meldOps` (#606).
  */
 function meldAutoGroei(groei, notifyUrl, notifyToken) {
-    if (notifyUrl === undefined) {
-        waarschuwing('auto-groei melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
-        return;
-    }
     const tekst = `🔧 Auto-groei bouw-allowlist:\n` +
         groei
             .map((g) => `  ${g.label} → ${g.patroon} (${String(g.nieuweTelling)}× geweigerd)`)
             .join('\n');
-    const headers = { 'Content-Type': 'application/json' };
-    if (notifyToken !== undefined) {
-        headers['Authorization'] = `Bearer ${notifyToken}`;
-    }
-    // Synchroon via curl, zoals de deploy-melding in de workflow. Een fetch zou async
-    // zijn en het controlflow-pad compliceren zonder meerwaarde: de melding is best-effort.
-    const args = [
-        '-s',
-        '-X',
-        'POST',
-        '-H',
-        'Content-Type: application/json',
-        ...(notifyToken !== undefined ? ['-H', `Authorization: Bearer ${notifyToken}`] : []),
-        '-d',
-        JSON.stringify({ text: tekst }),
-        notifyUrl,
-    ];
-    const result = run('curl', args, { capture: true, toleranter: true });
-    if (result.code !== 0) {
-        waarschuwing(`auto-groei melding mislukt (curl exit ${String(result.code)}).`);
-    }
+    meldOps(tekst, notifyUrl, notifyToken);
 }
 /**
  * Het review-comment als markdown, of `undefined` als er geen review gedraaid heeft.

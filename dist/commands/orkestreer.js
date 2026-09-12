@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { appOpties, bordItems, escalaties, ESCALATIE_LABEL, kolomVan, isBacklogRepo, haalLabelWeg, leesIssueBody, orkestratorComments, plaatsComment, schrijfBody, wachtrijVan, zetKolom, zetLabel, zorgVoorEscalatieLabel, } from '../board.js';
@@ -8,6 +8,7 @@ import { templatesDir } from '../paths.js';
 import { draaiReeks, meldReeks } from '../reeks.js';
 import { leesRunLog } from '../runlog.js';
 import { werkBouwAntwoordAf } from './orkestreer-bouw.js';
+import { meldOps } from '../ops-melding.js';
 import { opruimen } from './opruimen.js';
 import { globaleFactoryVersie, minstensVersie } from './integreer.js';
 import { GebruikersFout, kop, ok, run, uitvoerVan, waarschuwing } from '../shell.js';
@@ -342,8 +343,8 @@ function beschrijfRun(uitkomst) {
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
  *
- * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
- * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
+ * `context` is verplicht (#606): de context-loze tak bestond maar werd in
+ * productie nooit bereikt. Door hem verplicht te maken verdwijnt de dode tak.
  */
 export function veiligOpruimen(fn = opruimen, context) {
     try {
@@ -351,64 +352,67 @@ export function veiligOpruimen(fn = opruimen, context) {
     }
     catch (fout) {
         const bericht = fout instanceof Error ? fout.message : String(fout);
-        const padInfo = context?.repoPad !== undefined ? ` (repo: ${context.repoPad})` : '';
+        const padInfo = context.repoPad !== undefined ? ` (repo: ${context.repoPad})` : '';
         waarschuwing(`opruimen mislukt${padInfo}: ${bericht}`);
-        if (context !== undefined) {
-            // Runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
-            schrijfLog(context.paden, `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt${padInfo}: ${bericht}`);
-            // Ops-room-melding (best-effort, zelfde patroon als meldAutoGroei).
-            if (context.notifyUrl !== undefined) {
-                const args = [
-                    '-s',
-                    '-X',
-                    'POST',
-                    '-H',
-                    'Content-Type: application/json',
-                    ...(context.notifyToken !== undefined
-                        ? ['-H', `Authorization: Bearer ${context.notifyToken}`]
-                        : []),
-                    '-d',
-                    JSON.stringify({ text: `⚠️ opruimen mislukt${padInfo}: ${bericht}` }),
-                    context.notifyUrl,
-                ];
-                const result = run('curl', args, { capture: true, toleranter: true });
-                if (result.code !== 0) {
-                    waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
-                }
-            }
-            else {
-                waarschuwing('ops-melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
-            }
-        }
+        // Runlog — zichtbaar in `factory orkestreer status` en de ochtendbrief.
+        schrijfLog(context.paden, `${new Date(Date.now()).toISOString()} WARNING opruimen mislukt${padInfo}: ${bericht}`);
+        // Ops-room-melding (best-effort, via de gedeelde meldOps — #606).
+        meldOps(`⚠️ opruimen mislukt${padInfo}: ${bericht}`, context.notifyUrl, context.notifyToken);
     }
 }
 /**
- * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ * Detecteert app-spiegels onder `wortel`: directories met `.git` die niet
+ * `factory` heten en geen `-wt`- of `-bron`-suffix dragen (#606).
+ */
+export function appSpiegels(wortel) {
+    if (!existsSync(wortel))
+        return [];
+    return readdirSync(wortel, { withFileTypes: true })
+        .filter((entry) => {
+        if (!entry.isDirectory())
+            return false;
+        if (entry.name === 'factory')
+            return false;
+        if (entry.name.endsWith('-wt') || entry.name.endsWith('-bron'))
+            return false;
+        return existsSync(path.join(wortel, entry.name, '.git'));
+    })
+        .map((entry) => entry.name);
+}
+/**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588),
+ * en ruim daarna ook elke bestaande app-spiegel op (#606).
  *
- * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
- * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
- * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ * Een mislukt opruimen van één spiegel blokkeert het opruimen van de overige niet:
+ * elke spiegel gaat door `veiligOpruimen` met zijn eigen vangnet.
  */
 export function opruimenNaReeks(wortel, paden, opruimFn) {
     const repoPad = werkplaatsVan('factory', wortel);
-    // De factory-spiegel wordt pas door de eerste werker aangemaakt (versWerkplaats
-    // in werkAf). Bestaat hij nog niet — eerste nacht op een machine, of een lege
-    // wachtrij vóór de eerste werker — dan valt er niets op te ruimen; vroeg
-    // terugkeren i.p.v. `git fetch` op een niet-bestaand pad te laten falen en een
-    // valse ops-melding te sturen over een probleem dat er niet is (#588).
-    if (opruimFn === undefined && !existsSync(repoPad)) {
-        return;
-    }
     const instellingen = leesInstellingen(paden);
-    veiligOpruimen(opruimFn ??
-        (() => {
-            opruimen({ repoPad });
-        }), {
+    const ctx = (pad) => ({
         paden,
-        repoPad,
+        repoPad: pad,
         notifyUrl: instellingen.notifyUrl,
         notifyToken: instellingen.notifyToken,
     });
+    // Factory-spiegel — de oorspronkelijke opruimstap.
+    // De factory-spiegel wordt pas door de eerste werker aangemaakt (versWerkplaats
+    // in werkAf). Bestaat hij nog niet — eerste nacht op een machine, of een lege
+    // wachtrij vóór de eerste werker — dan valt er niets op te ruimen (#588).
+    if (opruimFn !== undefined || existsSync(repoPad)) {
+        veiligOpruimen(opruimFn ??
+            (() => {
+                opruimen({ repoPad });
+            }), ctx(repoPad));
+    }
+    // App-spiegels — directories direct onder wortel die een .git bevatten,
+    // niet factory heten, en geen -wt/-bron-suffix dragen (#606).
+    for (const app of appSpiegels(wortel)) {
+        const appPad = path.join(wortel, app);
+        veiligOpruimen(() => {
+            opruimen({ repoPad: appPad });
+        }, ctx(appPad));
+    }
 }
 /**
  * De onbemande modus: werkers starten tot het dagmaximum of tot de wachtrij leeg is.
