@@ -44,6 +44,9 @@ export function factoryEslint({ tsconfigRootDir, extraIgnores = [], extraConfigs
         '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
         // Domeincode logt via de logger, niet naar stdout.
         'no-console': ['error', { allow: ['error'] }],
+        // Geen lege catch-blokken: een catch zonder body slokt fouten stil op.
+        // allowEmptyCatch: false bevestigt de default en maakt de intentie expliciet.
+        'no-empty': ['error', { allowEmptyCatch: false }],
         eqeqeq: ['error', 'always'],
         'no-restricted-syntax': [
           'error',
