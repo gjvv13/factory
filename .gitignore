@@ -12,6 +12,8 @@ test/fixtures/contract/*-live.*
 # gelden die regels binnen déze repo niet meer, dus staan ze hier met een skeleton/-prefix.
 skeleton/**/node_modules/
 skeleton/**/dist/
+# De factory bouwt haar eigen dist/ bij install via het prepare-script (#558); niet in git.
+/dist/
 skeleton/**/data/*.sqlite
 skeleton/**/data/*.sqlite-journal
 skeleton/**/data/*.sqlite-wal
