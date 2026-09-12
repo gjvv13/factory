@@ -221,7 +221,12 @@ jobs:
               exit 0
             fi
           fi
-          if npm install -g "https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/$TAG"; then
+          # Git-install i.p.v. een codeload-tarball (#558): dist/ staat niet meer in
+          # git, dus de gebouwde CLI moet bij install ontstaan. npm draait het
+          # `prepare`-script bij een git-install (en bij git-deps), maar NIET bij een
+          # tarball-install — een tarball wordt als een kant-en-klaar pakket behandeld.
+          # De git-install kloont de tag, installeert de devDeps, en bouwt dist/ via prepare.
+          if npm install -g "git+https://github.com/gjvv13/factory.git#$TAG"; then
             echo "factory bijgewerkt naar $TAG"
           else
             echo "::warning::kon de globale factory niet bijwerken naar $TAG; de nacht pikt het op."

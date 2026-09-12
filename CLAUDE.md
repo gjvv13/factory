@@ -461,12 +461,14 @@ factory nieuw proefapp --link  # test de generator met een lokale koppeling
 Met `--link` krijgt de nieuwe applicatie `link:../factory` in plaats van de
 git-tag, zodat je wijzigingen direct doorwerken zonder te releasen.
 
-`dist/` staat bewust in versiebeheer. Applicaties halen de factory als
-git-dependency binnen, en pnpm weigert daar een buildstap te draaien zonder
-toestemming die je per commit-hash zou moeten vastleggen — dat breekt bij elke
-release. Door de gebouwde CLI mee te leveren is het pakket direct bruikbaar.
-De pre-commit hook bouwt en stageert `dist/`, zodat de build nooit uit de pas
-loopt met de bron.
+`dist/` staat **niet** in versiebeheer (#558): het `prepare`-script
+(`tsc -p tsconfig.build.json`) bouwt de CLI bij elke `pnpm install`. Dat geldt
+lokaal, in CI en in de release, én bij de applicaties die de factory als
+git-dependency binnenhalen — npm/pnpm draaien `prepare` bij een git-install, dus
+het pakket is na install direct bruikbaar zonder gecommitte build-output. Let op:
+een _tarball_-install draait `prepare` niet; daarom installeert de globale
+factory in `release.yml` via een git-install (`npm install -g "git+https://…#<tag>"`),
+niet via een codeload-tarball.
 
 ### Bewuste versie-pins
 
