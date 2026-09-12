@@ -8,7 +8,9 @@ import {
   leesDiff,
   maakGateComment,
   parseReviewUitvoer,
+  reviewGateUitReviewerVerdict,
 } from '../src/code-review.js';
+import type { ReviewUitkomst } from '../src/werker.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type UitkomstBepaler } from './helpers.js';
 
@@ -340,5 +342,87 @@ describe('draaiCodeReview', () => {
     draaiCodeReview('waarschuw', '/tmp/test');
 
     expect(aanroepen.find((a) => a.commando === 'curl')).toBeUndefined();
+  });
+});
+
+describe('reviewGateUitReviewerVerdict', () => {
+  const schoonVerdict: ReviewUitkomst = {
+    afloop: 'klaar',
+    sessie: 's1',
+    weigeringen: 0,
+    verdict: { bevindingen: [], oordeel: 'ziet er goed uit' },
+  };
+
+  const metBevindingen: ReviewUitkomst = {
+    afloop: 'klaar',
+    sessie: 's2',
+    weigeringen: 0,
+    verdict: {
+      bevindingen: [
+        { bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'mogelijke null-pointer' },
+      ],
+      oordeel: 'bevinding gevonden',
+    },
+  };
+
+  const mislukt: ReviewUitkomst = {
+    afloop: 'mislukt',
+    sessie: 's3',
+    weigeringen: 0,
+    fout: 'timeout',
+  };
+
+  it('geeft reden "uit" bij instelling "uit"', () => {
+    const resultaat = reviewGateUitReviewerVerdict(metBevindingen, 'uit');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('uit');
+  });
+
+  it('geeft reden "uit" als reviewUitkomst undefined is', () => {
+    const resultaat = reviewGateUitReviewerVerdict(undefined, 'waarschuw');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('uit');
+  });
+
+  it('geeft reden "geen-verdict" bij een mislukte reviewer-run', () => {
+    const resultaat = reviewGateUitReviewerVerdict(mislukt, 'waarschuw');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('geen-verdict');
+    expect(resultaat.melding).toContain('timeout');
+  });
+
+  it('geeft reden "geen-verdict" als het verdict undefined is ondanks afloop "klaar"', () => {
+    const zonderVerdict: ReviewUitkomst = {
+      afloop: 'klaar',
+      sessie: 's4',
+      weigeringen: 0,
+    };
+    const resultaat = reviewGateUitReviewerVerdict(zonderVerdict, 'blokkeer');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('geen-verdict');
+  });
+
+  it('geeft reden "schoon" bij nul bevindingen', () => {
+    const resultaat = reviewGateUitReviewerVerdict(schoonVerdict, 'blokkeer');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('schoon');
+    expect(resultaat.verdict).toBeDefined();
+    expect(resultaat.verdict!.bevindingen).toHaveLength(0);
+  });
+
+  it('laat doorgaan bij bevindingen en instelling "waarschuw"', () => {
+    const resultaat = reviewGateUitReviewerVerdict(metBevindingen, 'waarschuw');
+    expect(resultaat.doorgaan).toBe(true);
+    expect(resultaat.reden).toBe('bevindingen');
+    expect(resultaat.verdict).toBeDefined();
+    expect(resultaat.verdict!.bevindingen).toHaveLength(1);
+  });
+
+  it('blokkeert bij bevindingen en instelling "blokkeer"', () => {
+    const resultaat = reviewGateUitReviewerVerdict(metBevindingen, 'blokkeer');
+    expect(resultaat.doorgaan).toBe(false);
+    expect(resultaat.reden).toBe('bevindingen');
+    expect(resultaat.melding).toContain('1 bevinding');
+    expect(resultaat.verdict).toBeDefined();
   });
 });

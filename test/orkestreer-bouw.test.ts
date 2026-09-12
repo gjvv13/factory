@@ -918,13 +918,17 @@ describe('orkestreer --soort bouw --eenmalig', () => {
 
     // Inleveren zonder fastlane: geen geenAutomerge-vlag (#573). De label-check in
     // `inleveren` bepaalt of auto-merge aangaat; de orkestrator stuurt niet meer mee.
-    expect(geleverd).toEqual([
-      {
-        cwd: path.join(wortel, 'factory-wt', '177'),
-        // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/177 1".
-        titel: '#177 — Slice onder een epic dat geen Status heeft',
-      },
-    ]);
+    // `externReview` zit erbij (#644): het reviewer-verdict gaat mee naar inleveren
+    // zodat de gate niet dubbel draait. `toMatchObject` omdat de exacte review-inhoud
+    // al in code-review.test.ts getest wordt.
+    expect(geleverd).toHaveLength(1);
+    expect(geleverd[0]).toMatchObject({
+      cwd: path.join(wortel, 'factory-wt', '177'),
+      // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/177 1".
+      titel: '#177 — Slice onder een epic dat geen Status heeft',
+    });
+    // Het reviewer-verdict wordt meegegeven zodat inleveren geen eigen review draait (#644).
+    expect(geleverd[0]).toHaveProperty('externReview');
   });
 
   it('geeft het bouwbudget mee, niet het refinement-budget', async () => {
