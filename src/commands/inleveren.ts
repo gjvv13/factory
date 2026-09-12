@@ -21,6 +21,7 @@ import {
 } from '../code-review.js';
 import type { ReviewUitkomst } from '../werker.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
+import { meldOps } from '../ops-melding.js';
 import {
   GebruikersFout,
   git,
@@ -30,6 +31,7 @@ import {
   run,
   runMetHerhaling,
   uitvoerVan,
+  wacht,
   waarschuwing,
 } from '../shell.js';
 import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
@@ -163,6 +165,125 @@ function bestaandePr(repoDir: string, branch: string): PrStatus | undefined {
   const result = parsePrView(json);
   if (result === undefined) return undefined;
   return { url: result.url, state: result.state as PrStatus['state'] };
+}
+
+// ---------------------------------------------------------------------------
+// CI-run vangnet (#392): detecteert een ontbrekende workflow-run na het openen
+// van de PR en her-triggert die met één close/reopen. Zonder dit vangnet blijft
+// een PR eeuwig BLOCKED in de merge-queue als de pull_request-webhook niet vuurde.
+// ---------------------------------------------------------------------------
+
+/** Grace-venster: 5 polls × 3 s = ≈15 s. */
+const CI_POLL_INTERVAL_MS = 3000;
+const CI_POLL_POGINGEN = 5;
+
+/**
+ * Controleert of er een CI-workflow-run bestaat voor de gegeven branch + commit.
+ * Retourneert true zodra `gh run list` een niet-lege array teruggeeft.
+ */
+function heeftCiRun(repoDir: string, branch: string, sha: string): boolean {
+  const json = uitvoerVan(
+    'gh',
+    [
+      'run',
+      'list',
+      '--branch',
+      branch,
+      '--commit',
+      sha,
+      '--workflow',
+      'ci.yml',
+      '--json',
+      'databaseId',
+    ],
+    repoDir,
+  );
+  if (json === undefined || json === '') return false;
+  try {
+    const parsed = JSON.parse(json) as unknown[];
+    return parsed.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Peilt herhaaldelijk of er een CI-run verschijnt. De `Wacht`-abstractie
+ * uit `shell.ts` levert de pauze, zodat tests niet echt wachten.
+ */
+function peilCiRun(repoDir: string, branch: string, sha: string): boolean {
+  for (let poging = 0; poging < CI_POLL_POGINGEN; poging += 1) {
+    if (heeftCiRun(repoDir, branch, sha)) return true;
+    if (poging < CI_POLL_POGINGEN - 1) wacht(CI_POLL_INTERVAL_MS);
+  }
+  return false;
+}
+
+/**
+ * Her-trigger de PR via close/reopen. Retourneert true als beide stappen slaagden.
+ * Bij een mislukte close wordt geen reopen geprobeerd — geen halve staat achterlaten.
+ */
+function herTriggerPr(repoDir: string, prUrl: string): boolean {
+  const closeResultaat = run('gh', ['pr', 'close', prUrl], { cwd: repoDir, toleranter: true });
+  if (closeResultaat.code !== 0) {
+    waarschuwing(`her-trigger mislukt: gh pr close faalde (code ${String(closeResultaat.code)}).`);
+    return false;
+  }
+  const reopenResultaat = run('gh', ['pr', 'reopen', prUrl], { cwd: repoDir, toleranter: true });
+  if (reopenResultaat.code !== 0) {
+    waarschuwing(
+      `her-trigger mislukt: gh pr reopen faalde (code ${String(reopenResultaat.code)}).`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Het CI-run-vangnet: peilt of er een run is, her-triggert bij afwezigheid, en
+ * meldt het resultaat. Faalt `inleveren` nooit — een ontbrekende run is een
+ * waarschuwing, geen blokkade.
+ */
+function wachtOpCiRun(
+  repoDir: string,
+  branch: string,
+  sha: string,
+  prUrl: string,
+  opsMelding?: OpsMeldingConfig,
+): void {
+  kop('CI-run controleren');
+
+  // Eerste grace: run verschijnt normaal.
+  if (peilCiRun(repoDir, branch, sha)) {
+    ok('CI-run gevonden voor de PR.');
+    return;
+  }
+
+  // Geen run: één her-trigger via close/reopen.
+  waarschuwing(`geen CI-run gevonden voor ${sha} — her-trigger via close/reopen.`);
+  const hergetriggerd = herTriggerPr(repoDir, prUrl);
+
+  if (hergetriggerd) {
+    // Tweede grace na her-trigger.
+    if (peilCiRun(repoDir, branch, sha)) {
+      ok('CI-run gevonden na her-trigger.');
+      return;
+    }
+  }
+
+  // Geen run ondanks her-trigger (of mislukte her-trigger): waarschuw luid.
+  waarschuwing(
+    `geen CI-run na her-trigger voor PR ${prUrl} (SHA ${sha}). De PR kan BLOCKED blijven.`,
+  );
+
+  // Ops-room-melding (best-effort, #392 besluit 2).
+  if (opsMelding !== undefined) {
+    meldOps(
+      `⚠️ Geen CI-run na her-trigger: ${prUrl} (SHA ${sha}). De PR kan BLOCKED blijven in de merge-queue.`,
+      opsMelding.url,
+      opsMelding.token,
+    );
+  }
 }
 
 /**
@@ -331,6 +452,14 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
           : 'Kon geen PR aanmaken of vinden met gh.';
       throw new GebruikersFout(reden);
     }
+  }
+
+  // CI-run vangnet (#392): controleer of er een workflow-run is gestart voor de head-SHA.
+  // Draait vóór board-update en auto-merge, zodat close/reopen geen bijwerking heeft op
+  // de auto-merge-instelling die er nog niet is.
+  const headSha = uitvoerVan('git', ['rev-parse', 'HEAD'], repoDir);
+  if (headSha !== undefined) {
+    wachtOpCiRun(repoDir, branch, headSha, prUrl, opties.opsMelding);
   }
 
   // Review-bevindingen als PR-comment posten, zodat ze ook bij `waarschuw` zichtbaar
