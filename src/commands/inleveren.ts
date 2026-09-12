@@ -330,12 +330,18 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
     // merge-queue-app is. De fastlane is de bewuste afwijking van akkoord-voor-
     // inleveren: de poort is de enige gate, en de PR merget zichzelf op groen.
     //
-    // Tweedelijns-beveiliging (#364): het issue moet het `fastlane`-label dragen.
-    // Dat label kan alleen een mens zetten (ADR 009); zonder label is de fastlane
-    // niet toegestaan, ook al liet de hook het commando door.
-    if (sliceIssue !== undefined && !heeftLabel(sliceIssue, FASTLANE_LABEL, repoDir)) {
+    // Tweedelijns-beveiliging (#364): het issue moet het `fastlane`-label of
+    // `type:bug` dragen. `type:bug` kwalificeert automatisch voor de fastlane
+    // (conform `redenBuitenFastlane`); `type:task` vereist het expliciete label
+    // dat alleen een mens zet (ADR 009). Twee `heeftLabel`-aanroepen; de tweede
+    // wordt door short-circuit alleen bereikt als het `fastlane`-label ontbreekt.
+    if (
+      sliceIssue !== undefined &&
+      !heeftLabel(sliceIssue, FASTLANE_LABEL, repoDir) &&
+      !heeftLabel(sliceIssue, 'type:bug', repoDir)
+    ) {
       throw new GebruikersFout(
-        `--fastlane vereist het label '${FASTLANE_LABEL}' op #${String(sliceIssue)}.\n` +
+        `--fastlane vereist het label '${FASTLANE_LABEL}' of 'type:bug' op #${String(sliceIssue)}.\n` +
           `  Zet het label eerst: gh issue edit ${String(sliceIssue)} --repo gjvv13/factory --add-label ${FASTLANE_LABEL}`,
       );
     }

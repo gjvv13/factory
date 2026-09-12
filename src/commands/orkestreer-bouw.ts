@@ -651,6 +651,35 @@ export async function bouwAf(
     zetKolom(item.issue, BOUW_KOLOM, cwd);
   };
 
+  // Vroeg falen (#630): als de fastlane-baan actief is maar het item niet kan landen
+  // (geen type:bug en geen fastlane-label), dan geen dure bouw-run starten. De
+  // tweedelijns-gate in inleveren zou het alsnog weigeren, maar dan zijn de bouw- en
+  // review-kosten al gemaakt.
+  if (
+    baan === 'fastlane' &&
+    !item.labels.includes('type:bug') &&
+    !item.labels.includes(FASTLANE_LABEL)
+  ) {
+    const reden = item.labels.includes('type:task')
+      ? `het is een type:task zonder het label ${FASTLANE_LABEL}`
+      : `het draagt geen van de labels type:bug of type:task`;
+    blokkeer(item, cwd);
+    plaatsComment(
+      item.issue,
+      `**Kan niet landen in de fastlane.** ${reden}.\n\n` +
+        `De inleveren-gate zou dit item weigeren; de bouw is overgeslagen.`,
+      cwd,
+    );
+    waarschuwing(`#${String(item.issue)} kan niet landen in de fastlane: ${reden}`);
+    return {
+      bouw: {
+        afloop: 'escalatie',
+        sessie: '',
+        weigeringen: 0,
+      },
+    };
+  }
+
   const bronApps = bronAppsVan(item);
   const werkmap = bouwWerkplek(item.app, item.issue, wortel);
   const bronWortel = bronMappenVan(werkmap);
@@ -774,18 +803,34 @@ export async function bouwAf(
     }
   }
 
-  const inleverOmgevingsfout = verwerkBouw(
-    item,
-    uitkomst,
-    reviewUitkomst,
-    cwd,
-    wortel,
-    leverIn,
-    logWeigeringen,
-    opsMelding,
-    reeks,
-    baan,
-  );
+  let inleverOmgevingsfout: boolean;
+  try {
+    inleverOmgevingsfout = verwerkBouw(
+      item,
+      uitkomst,
+      reviewUitkomst,
+      cwd,
+      wortel,
+      leverIn,
+      logWeigeringen,
+      opsMelding,
+      reeks,
+      baan,
+    );
+  } catch (fout) {
+    // leverIn mislukte na een voltooide bouw (#630): de bouw-kosten moeten meekomen in
+    // het resultaat in plaats van verloren te gaan door de throw. Het item gaat terug in
+    // de rij met het escalatie-label, zodat het niet stil geclaimd blijft staan.
+    blokkeer(item, cwd);
+    return {
+      bouw: {
+        ...uitkomst,
+        afloop: 'mislukt',
+        fout: fout instanceof Error ? fout.message : String(fout),
+      },
+      ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
+    };
+  }
   return {
     // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
     // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de

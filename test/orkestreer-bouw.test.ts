@@ -1233,17 +1233,17 @@ describe('orkestreer --soort bouw --eenmalig', () => {
       machine(envelop('claude-bouw-klaar'), envelop('claude-review-klaar')),
     );
 
-    // Een `leverIn` die gooit, zoals bij een rode poort of een conflict.
-    await expect(
-      orkestreerBouw({
-        eenmalig: true,
-        werkplaatsWortel: wortel,
-        paden,
-        leverIn: () => {
-          throw new Error('poort rood');
-        },
-      }),
-    ).rejects.toThrow(/poort rood/);
+    // Een `leverIn` die gooit, zoals bij een rode poort of een conflict. Sinds #630
+    // vangt bouwAf de throw op en retourneert een resultaat met kosten, in plaats van
+    // de fout door te gooien.
+    await orkestreerBouw({
+      eenmalig: true,
+      werkplaatsWortel: wortel,
+      paden,
+      leverIn: () => {
+        throw new Error('poort rood');
+      },
+    });
 
     // De review-bevindingen staan op het issue, niet op een PR die niet bestaat.
     const issueComments = aanroepen.filter(
@@ -1430,20 +1430,116 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(ruimOp).not.toHaveBeenCalled();
   });
 
-  it('gooit een gewone GebruikersFout uit leverIn wél door (#383)', async () => {
-    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+  it('vangt een GebruikersFout uit leverIn en behoudt de bouw-kosten (#630)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
+      machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
+    );
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'],
+      app: 'factory',
+    };
 
-    // Een inhoudelijke poortfout (tests falen) gooit door — dat is een echte mislukking.
-    await expect(
-      orkestreerBouw({
-        eenmalig: true,
-        werkplaatsWortel: wortel,
-        paden,
-        leverIn: () => {
-          throw new GebruikersFout('lint faalt');
-        },
-      }),
-    ).rejects.toThrow(/lint faalt/);
+    // leverIn gooit een GebruikersFout (bijv. tests falen). De bouw zélf slaagde.
+    const resultaat = await bouwAf(item, wortel, wortel, 5, 3, 'medium', () => {
+      throw new GebruikersFout('lint faalt');
+    });
+
+    // Cruciaal (#630): de kosten en beurten uit de bouw-uitkomst zijn bewaard, niet undefined.
+    expect(resultaat.bouw.afloop).toBe('mislukt');
+    expect(resultaat.bouw.fout).toContain('lint faalt');
+    expect(resultaat.bouw.kosten).toBeDefined();
+    expect(resultaat.bouw.beurten).toBeDefined();
+
+    // Het item is terug in de rij met het escalatie-label — niet stil geclaimd gebleven.
+    const kolomZet = aanroepen.filter(
+      (a) =>
+        a.commando === 'gh' &&
+        a.argumenten[0] === 'project' &&
+        a.argumenten.join(' ').includes('optie-klaar'),
+    );
+    expect(kolomZet.length).toBeGreaterThan(0);
+  });
+
+  it('stopt vóór draaiBouwer als een fastlane-item niet kan landen (#630)', async () => {
+    const { aanroepen } = zetBeideUitvoerdersOp(
+      machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')),
+    );
+    const item: Bouwitem = {
+      issue: 106,
+      titel: 'Test',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-01T00:00:00Z',
+      labels: ['type:task'], // geen fastlane-label
+      app: 'factory',
+    };
+
+    const resultaat = await bouwAf(
+      item,
+      wortel,
+      wortel,
+      5,
+      3,
+      'medium',
+      () => {
+        throw new Error('leverIn mag niet bereikt worden');
+      },
+      [],
+      undefined,
+      undefined,
+      undefined,
+      'fastlane',
+    );
+
+    // De bouw is overgeslagen: afloop is escalatie, er draaide geen claude-run.
+    expect(resultaat.bouw.afloop).toBe('escalatie');
+    expect(aanroepen.filter((a) => a.commando === 'claude')).toHaveLength(0);
+    // Er is een comment met de reden geplaatst.
+    const comment = aanroepen.find(
+      (a) =>
+        a.argumenten[0] === 'issue' &&
+        a.argumenten[1] === 'comment' &&
+        a.argumenten.join(' ').includes('Kan niet landen in de fastlane'),
+    );
+    expect(comment).toBeDefined();
+  });
+
+  it('laat een type:bug wél door in de fastlane-baan (#630)', async () => {
+    zetBeideUitvoerdersOp(machine(envelop('claude-bouw-klaar'), envelop('claude-review-leeg')));
+    const item: Bouwitem = {
+      issue: 91,
+      titel: 'Bugfix',
+      kolom: 'Klaar voor Bouwen',
+      aangemaakt: '2026-08-05T00:00:00Z',
+      labels: ['type:bug'], // geen fastlane-label nodig
+      app: 'factory',
+    };
+
+    const geleverd: unknown[] = [];
+    const resultaat = await bouwAf(
+      item,
+      wortel,
+      wortel,
+      5,
+      3,
+      'medium',
+      (opties) => {
+        geleverd.push(opties);
+        return {};
+      },
+      [],
+      undefined,
+      undefined,
+      undefined,
+      'fastlane',
+    );
+
+    // De bouw draaide door — de vroeg-falen-check slaat niet toe.
+    expect(resultaat.bouw.afloop).toBe('klaar');
+    expect(geleverd.length).toBeGreaterThan(0);
   });
 });
 
