@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { REVIEW_JSON_SCHEMA, type ReviewVerdict } from './werker.js';
+import { meldOps, type OpsMeldingConfig } from './ops-melding.js';
 import { kop, ok, run, uitvoerVan, waarschuwing } from './shell.js';
 
 /** Het Zod-schema waarmee het review-verdict gevalideerd wordt. */
@@ -56,13 +57,8 @@ const REVIEW_TIMEOUT_MS = 5 * 60 * 1_000;
 export type ReviewReden =
   'uit' | 'geen-diff' | 'niet-beschikbaar' | 'geen-verdict' | 'schoon' | 'bevindingen';
 
-/** Configuratie voor de ops-room-melding bij gate-falen (#586). */
-export interface OpsMeldingConfig {
-  readonly url: string;
-  readonly token?: string;
-  /** App-naam voor de meldingtekst. */
-  readonly app?: string;
-}
+// Re-export zodat bestaande imports via code-review.ts blijven werken.
+export type { OpsMeldingConfig } from './ops-melding.js';
 
 export interface ReviewGateResultaat {
   /** Of de gate de inlevering laat doorgaan. */
@@ -154,25 +150,10 @@ export type CodeReviewInstelling = 'uit' | 'waarschuw' | 'blokkeer';
  * kan een blokkade opleveren, en dat uitsluitend bij `blokkeer`.
  */
 /**
- * Stuurt een ops-room-melding via curl POST (#586). Best-effort: een
- * netwerkfout waarschuwt maar blokkeert niets.
+ * Stuurt een ops-room-melding (#586). Delegeert naar de gedeelde `meldOps` (#606).
  */
 function stuurOpsMelding(config: OpsMeldingConfig, tekst: string): void {
-  const args = [
-    '-s',
-    '-X',
-    'POST',
-    '-H',
-    'Content-Type: application/json',
-    ...(config.token !== undefined ? ['-H', `Authorization: Bearer ${config.token}`] : []),
-    '-d',
-    JSON.stringify({ text: tekst }),
-    config.url,
-  ];
-  const result = run('curl', args, { capture: true, toleranter: true });
-  if (result.code !== 0) {
-    waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
-  }
+  meldOps(tekst, config.url, config.token);
 }
 
 export function draaiCodeReview(

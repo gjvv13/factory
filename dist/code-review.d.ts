@@ -1,4 +1,5 @@
 import { type ReviewVerdict } from './werker.js';
+import { type OpsMeldingConfig } from './ops-melding.js';
 /**
  * Of `claude` op het pad beschikbaar is. Draait via de testbare `run`, zodat
  * tests dit kunnen stubben zonder de echte CLI nodig te hebben. Vangt zowel
@@ -18,13 +19,7 @@ export declare function leesDiff(repoDir: string): string | undefined;
  * gevonden" nooit dezelfde tak zijn — de storing die dit type voorkomt.
  */
 export type ReviewReden = 'uit' | 'geen-diff' | 'niet-beschikbaar' | 'geen-verdict' | 'schoon' | 'bevindingen';
-/** Configuratie voor de ops-room-melding bij gate-falen (#586). */
-export interface OpsMeldingConfig {
-    readonly url: string;
-    readonly token?: string;
-    /** App-naam voor de meldingtekst. */
-    readonly app?: string;
-}
+export type { OpsMeldingConfig } from './ops-melding.js';
 export interface ReviewGateResultaat {
     /** Of de gate de inlevering laat doorgaan. */
     readonly doorgaan: boolean;

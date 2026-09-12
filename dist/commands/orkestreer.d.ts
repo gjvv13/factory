@@ -88,16 +88,21 @@ export interface OpruimContext {
  * de reeks-uitkomst niet (#422). Alleen na een reeks of nacht — bij `--eenmalig`
  * is de overhead niet de moeite.
  *
- * Met context (#588): een fout schrijft een WARNING naar het runlog én stuurt een
- * ops-room-melding — dezelfde twee kanalen als de deploy-faalmelding.
+ * `context` is verplicht (#606): de context-loze tak bestond maar werd in
+ * productie nooit bereikt. Door hem verplicht te maken verdwijnt de dode tak.
  */
-export declare function veiligOpruimen(fn?: () => void, context?: OpruimContext): void;
+export declare function veiligOpruimen(fn: (() => void) | undefined, context: OpruimContext): void;
 /**
- * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588).
+ * Detecteert app-spiegels onder `wortel`: directories met `.git` die niet
+ * `factory` heten en geen `-wt`- of `-bron`-suffix dragen (#606).
+ */
+export declare function appSpiegels(wortel: string): string[];
+/**
+ * Draai `opruimen` als veilige afsluiter met de factory-spiegel als repo-pad (#588),
+ * en ruim daarna ook elke bestaande app-spiegel op (#606).
  *
- * Extraheert het gedupliceerde aanroepblok uit de reeks- en nacht-modus: bouwt het
- * context-object uit `werkplaatsVan('factory', wortel)` + `leesInstellingen(paden)`,
- * construeert de opruimfunctie, en roept `veiligOpruimen` aan.
+ * Een mislukt opruimen van één spiegel blokkeert het opruimen van de overige niet:
+ * elke spiegel gaat door `veiligOpruimen` met zijn eigen vangnet.
  */
 export declare function opruimenNaReeks(wortel: string, paden: OrkestratorPaden, opruimFn?: () => void): void;
 /**

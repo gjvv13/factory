@@ -70,6 +70,7 @@ import {
   versWerkplaats,
   werkplaatsWortel,
 } from '../werkplaats.js';
+import { meldOps } from '../ops-melding.js';
 import type { OpsMeldingConfig } from '../code-review.js';
 import { inleveren, type InleverenOpties, type InleverenResultaat } from './inleveren.js';
 import { ruimWerkplekOp, werkplek } from './werkplek.js';
@@ -1264,46 +1265,20 @@ function opsMeldingVan(instellingen: {
 /**
  * Meldt de auto-groei via de ops-room-notificatie (#543, criterium 5).
  *
- * Zonder URL: overslaan met waarschuwing, zelfde patroon als de deploy-faalmelding.
+ * Delegeert naar de gedeelde `meldOps` (#606).
  */
 function meldAutoGroei(
   groei: readonly VerwerkteGroei[],
   notifyUrl: string | undefined,
   notifyToken: string | undefined,
 ): void {
-  if (notifyUrl === undefined) {
-    waarschuwing('auto-groei melding overgeslagen: geen DEPLOY_NOTIFY_URL geconfigureerd.');
-    return;
-  }
-
   const tekst =
     `🔧 Auto-groei bouw-allowlist:\n` +
     groei
       .map((g) => `  ${g.label} → ${g.patroon} (${String(g.nieuweTelling)}× geweigerd)`)
       .join('\n');
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (notifyToken !== undefined) {
-    headers['Authorization'] = `Bearer ${notifyToken}`;
-  }
-
-  // Synchroon via curl, zoals de deploy-melding in de workflow. Een fetch zou async
-  // zijn en het controlflow-pad compliceren zonder meerwaarde: de melding is best-effort.
-  const args = [
-    '-s',
-    '-X',
-    'POST',
-    '-H',
-    'Content-Type: application/json',
-    ...(notifyToken !== undefined ? ['-H', `Authorization: Bearer ${notifyToken}`] : []),
-    '-d',
-    JSON.stringify({ text: tekst }),
-    notifyUrl,
-  ];
-  const result = run('curl', args, { capture: true, toleranter: true });
-  if (result.code !== 0) {
-    waarschuwing(`auto-groei melding mislukt (curl exit ${String(result.code)}).`);
-  }
+  meldOps(tekst, notifyUrl, notifyToken);
 }
 
 /**

@@ -2697,7 +2697,7 @@ describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {
   });
 });
 
-describe('veiligOpruimen (#422, #588)', () => {
+describe('veiligOpruimen (#422, #588, #606)', () => {
   let uitvoer: string[];
 
   beforeEach(() => {
@@ -2713,37 +2713,34 @@ describe('veiligOpruimen (#422, #588)', () => {
     vi.restoreAllMocks();
   });
 
+  /** Minimale context voor tests die alleen de vangnet-werking testen. */
+  function minimaleContext(): { paden: OrkestratorPaden } {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'veilig-opruim-ctx-'));
+    return { paden: standaardPaden(home) };
+  }
+
   it('roept de meegegeven functie aan', () => {
     const fn = vi.fn();
+    const ctx = minimaleContext();
 
-    veiligOpruimen(fn);
+    veiligOpruimen(fn, ctx);
 
     expect(fn).toHaveBeenCalledOnce();
+    rmSync(path.dirname(ctx.paden.envPad), { recursive: true, force: true });
   });
 
   it('vangt een fout op en logt een waarschuwing', () => {
     const fn = vi.fn(() => {
       throw new Error('git fetch mislukt');
     });
+    const ctx = minimaleContext();
 
     // Gooit niet — de fout wordt gevangen.
-    veiligOpruimen(fn);
+    veiligOpruimen(fn, ctx);
 
     expect(fn).toHaveBeenCalledOnce();
     expect(uitvoer.join('')).toContain('opruimen mislukt: git fetch mislukt');
-  });
-
-  it('zonder context alleen waarschuwing — geen schrijfLog of melding (#588)', () => {
-    const fn = vi.fn(() => {
-      throw new Error('onleesbare map');
-    });
-
-    veiligOpruimen(fn);
-
-    // Alleen de waarschuwing; geen curl-aanroep of log-schrijfactie.
-    expect(uitvoer.join('')).toContain('opruimen mislukt: onleesbare map');
-    // Geen ops-melding-waarschuwing (dat komt alleen bij context zonder URL).
-    expect(uitvoer.join('')).not.toContain('ops-melding');
+    rmSync(path.dirname(ctx.paden.envPad), { recursive: true, force: true });
   });
 
   it('met context en fout: schrijft naar runlog en stuurt ops-melding (#588)', () => {
@@ -2813,7 +2810,7 @@ describe('veiligOpruimen (#422, #588)', () => {
   });
 });
 
-describe('opruimenNaReeks (#588)', () => {
+describe('opruimenNaReeks (#588, #606)', () => {
   let uitvoer: string[];
 
   beforeEach(() => {
@@ -2911,6 +2908,80 @@ describe('opruimenNaReeks (#588)', () => {
     expect(aanroepen.some((a) => a.commando === 'curl')).toBe(false);
     // Geen WARNING naar het runlog geschreven.
     expect(existsSync(paden.logPad)).toBe(false);
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('ruimt na de factory-spiegel ook elke bestaande app-spiegel op (#606)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-app-spiegels-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    // Factory-spiegel + twee app-spiegels (met .git) + een -wt dir (geen spiegel).
+    mkdirSync(path.join(wortel, 'factory', '.git'), { recursive: true });
+    mkdirSync(path.join(wortel, 'assistant', '.git'), { recursive: true });
+    mkdirSync(path.join(wortel, 'beheer', '.git'), { recursive: true });
+    mkdirSync(path.join(wortel, 'assistant-wt', '.git'), { recursive: true }); // geen spiegel
+    mkdirSync(path.join(wortel, 'beheer-bron'), { recursive: true }); // geen spiegel
+
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    opruimenNaReeks(wortel, paden);
+
+    // De git-aanroepen moeten de factory-spiegel EN de twee app-spiegels bevatten.
+    const gitCwds = new Set(
+      aanroepen.filter((a) => a.commando === 'git' && a.cwd !== undefined).map((a) => a.cwd),
+    );
+    expect(gitCwds).toContain(path.join(wortel, 'factory'));
+    expect(gitCwds).toContain(path.join(wortel, 'assistant'));
+    expect(gitCwds).toContain(path.join(wortel, 'beheer'));
+    // -wt en -bron worden overgeslagen.
+    expect(gitCwds).not.toContain(path.join(wortel, 'assistant-wt'));
+    expect(gitCwds).not.toContain(path.join(wortel, 'beheer-bron'));
+
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  it('een mislukt opruimen van één app-spiegel blokkeert de rest niet (#606)', () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'opruimen-app-faal-'));
+    const wortel = path.join(home, 'OrkestratorWerk');
+    const paden = standaardPaden(home);
+
+    mkdirSync(path.dirname(paden.envPad), { recursive: true });
+    writeFileSync(paden.envPad, '');
+
+    // Twee app-spiegels: assistant faalt, beheer moet alsnog opgeruimd worden.
+    mkdirSync(path.join(wortel, 'assistant', '.git'), { recursive: true });
+    mkdirSync(path.join(wortel, 'beheer', '.git'), { recursive: true });
+    // Geen factory-spiegel — die wordt overgeslagen.
+
+    let assistantGezien = false;
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(({ commando, cwd }) => {
+      // De eerste git-aanroep op de assistant-spiegel gooit.
+      if (commando === 'git' && cwd === path.join(wortel, 'assistant') && !assistantGezien) {
+        assistantGezien = true;
+        return { code: 1, stdout: '', startfout: 'git fetch mislukt' };
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+
+    // Gooit niet — veiligOpruimen vangt de fout.
+    opruimenNaReeks(wortel, paden);
+
+    // Beheer is wél opgeruimd (er zijn git-aanroepen met beheer als cwd).
+    const beheerGit = aanroepen.filter(
+      (a) => a.commando === 'git' && a.cwd === path.join(wortel, 'beheer'),
+    );
+    expect(beheerGit.length).toBeGreaterThan(0);
+
+    // De fout van assistant staat in de uitvoer.
+    expect(uitvoer.join('')).toContain('opruimen mislukt');
+    expect(uitvoer.join('')).toContain('assistant');
 
     rmSync(home, { recursive: true, force: true });
   });

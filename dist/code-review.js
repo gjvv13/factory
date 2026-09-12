@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { REVIEW_JSON_SCHEMA } from './werker.js';
+import { meldOps } from './ops-melding.js';
 import { kop, ok, run, uitvoerVan, waarschuwing } from './shell.js';
 /** Het Zod-schema waarmee het review-verdict gevalideerd wordt. */
 const reviewBevindingSchema = z.object({
@@ -110,25 +111,10 @@ export function maakGateComment(verdict) {
  * kan een blokkade opleveren, en dat uitsluitend bij `blokkeer`.
  */
 /**
- * Stuurt een ops-room-melding via curl POST (#586). Best-effort: een
- * netwerkfout waarschuwt maar blokkeert niets.
+ * Stuurt een ops-room-melding (#586). Delegeert naar de gedeelde `meldOps` (#606).
  */
 function stuurOpsMelding(config, tekst) {
-    const args = [
-        '-s',
-        '-X',
-        'POST',
-        '-H',
-        'Content-Type: application/json',
-        ...(config.token !== undefined ? ['-H', `Authorization: Bearer ${config.token}`] : []),
-        '-d',
-        JSON.stringify({ text: tekst }),
-        config.url,
-    ];
-    const result = run('curl', args, { capture: true, toleranter: true });
-    if (result.code !== 0) {
-        waarschuwing(`ops-melding mislukt (curl exit ${String(result.code)}).`);
-    }
+    meldOps(tekst, config.url, config.token);
 }
 export function draaiCodeReview(instelling, repoDir, opsMelding) {
     kop('Code-review');
