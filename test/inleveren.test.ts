@@ -1301,5 +1301,76 @@ describe('inleveren', () => {
       // Auto-merge is ook aangezet.
       expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
     });
+
+    it('slaat de eigen review over bij een externReview-verdict (#644)', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      const resultaat = inleveren({
+        externReview: {
+          afloop: 'klaar',
+          sessie: 'ext-1',
+          weigeringen: 0,
+          verdict: { bevindingen: [], oordeel: 'Ziet er goed uit.' },
+        },
+      });
+
+      // Geen claude-aanroep: de review-gate draaide niet zelf.
+      expect(aanroepen.some((a) => a.commando === 'claude')).toBe(false);
+      // Maar het resultaat heeft wel een reviewReden.
+      expect(resultaat.reviewReden).toBe('schoon');
+    });
+
+    it('blokkeert bij externReview met bevindingen en codeReview=blokkeer (#644)', () => {
+      const repo = maakRepo();
+      writeFileSync(
+        path.join(repo, 'factory.json'),
+        JSON.stringify({
+          naam: 'proefapp',
+          poorten: { dev: 3001, acc: 3002, prod: 3000 },
+          envRoot: path.join(repo, 'envs'),
+          codeReview: 'blokkeer',
+        }),
+      );
+      process.chdir(repo);
+      stelUitvoerderIn(maakUitvoerderOpnemer(gelukkig).uitvoerder);
+
+      expect(() => {
+        inleveren({
+          externReview: {
+            afloop: 'klaar',
+            sessie: 'ext-2',
+            weigeringen: 0,
+            verdict: {
+              bevindingen: [{ bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'bug' }],
+              oordeel: 'Eén bug gevonden.',
+            },
+          },
+        });
+      }).toThrow(/geblokkeerd/);
+    });
+
+    it('laat doorgaan bij externReview met bevindingen en codeReview=waarschuw (#644)', () => {
+      process.chdir(maakRepo());
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      const resultaat = inleveren({
+        externReview: {
+          afloop: 'klaar',
+          sessie: 'ext-3',
+          weigeringen: 0,
+          verdict: {
+            bevindingen: [{ bestand: 'src/foo.ts', regel: 10, ernst: 'hoog', bevinding: 'bug' }],
+            oordeel: 'Eén bug gevonden.',
+          },
+        },
+      });
+
+      // De push ging door (waarschuw-modus).
+      expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(true);
+      expect(resultaat.reviewReden).toBe('bevindingen');
+    });
   });
 });
