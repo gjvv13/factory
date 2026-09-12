@@ -350,6 +350,11 @@ export function herstelWacht(): void {
   huidigeWacht = echteWacht;
 }
 
+/** Pauzeert de huidige thread voor `ms` milliseconden (via de injecteerbare Wacht). */
+export function wacht(ms: number): void {
+  huidigeWacht(ms);
+}
+
 export interface HerhaalOpties {
   /** Maximaal aantal pogingen (inclusief de eerste). Default 3. */
   readonly pogingen?: number;
