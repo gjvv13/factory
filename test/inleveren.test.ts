@@ -267,12 +267,7 @@ describe('inleveren', () => {
 
     inleveren({
       titel: '#260 — een wijziging',
-      reeksInfo: {
-        positie: 3,
-        totaal: 5,
-        basisBranch: 'slice/250-1',
-        basisIssue: 250,
-      },
+      reeksInfo: { positie: 3, totaal: 5 },
     });
 
     const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');
@@ -281,8 +276,8 @@ describe('inleveren', () => {
     expect(bodyIndex).toBeGreaterThan(-1);
     const body = prCreate!.argumenten[bodyIndex + 1];
     expect(body).toContain('🔗 Reeks 3/5');
-    expect(body).toContain('vertakt van #250');
-    expect(body).toContain('slice/250-1');
+    // Geen stacking meer (#558): geen "vertakt van"-vermelding in de body.
+    expect(body).not.toContain('vertakt van');
   });
 
   it('laat de reeksvermelding weg als er geen reeksInfo is', () => {
@@ -360,7 +355,7 @@ describe('inleveren', () => {
 
       inleveren({
         titel: '#58 — een wijziging',
-        reeksInfo: { positie: 2, totaal: 3, basisBranch: 'slice/50-1', basisIssue: 50 },
+        reeksInfo: { positie: 2, totaal: 3 },
       });
 
       const prCreate = aanroepen.find((a) => a.commando === 'gh' && a.argumenten[1] === 'create');

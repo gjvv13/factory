@@ -21,7 +21,7 @@
 - De versie komt uit de nieuwste git-tag, niet uit `package.json` — de tag is de bron van waarheid (ADR 001).
 - Elke testsoort meet alleen zijn eigen laag; geen bestand wordt dubbel gemeten in de dekkings-merge (ADR 003).
 - Multi-slice-werk wordt opgesplitst in child-issues onder een epic; elke slice is zelfstandig afleverbaar (ADR 006).
-- Binnen één nachtrun stapelt de bouw-werker op de vorige branch, niet op `origin/main`, om merge-conflicten te voorkomen (ADR 005).
+- Binnen één nachtrun takt elke slice van `origin/main` af — niet meer van de vorige branch (#558). Stapelen botste met squash-merge (de onderste squashen maakt de bovenste rebase-werk); van `main` aftakken houdt de nacht conflictvrij. Reverst ADR 005.
 - Externe plugins voldoen aan het vier-punten-adoptiebeleid: binnen werker-rechten, vooraf gereviewd, gepin op versie, onbemand werkbaar (ADR 010).
 - De werker schrijft nooit naar GitHub — de factory doet dat (`CLAUDE.md` §De onbemande werker).
 - De PR is de grens tussen voorstellen en landen; pushen en PR openen staan op de verbodslijst van de bouw-werker (`CLAUDE.md` §De onbemande werker).

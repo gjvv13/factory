@@ -40,18 +40,15 @@ import { verify } from './verify.js';
 import { repoWortelVan, ruimWerkplekOp, werkplekVanSessie } from './werkplek.js';
 
 /**
- * Positie in een bouw-reeks (#327): voegt een vermelding toe aan de PR-body die de
- * stacking-relatie zichtbaar maakt, zodat een mens 's ochtends de stapel begrijpt.
+ * Positie in een bouw-reeks (#327): voegt een "Reeks x/y"-vermelding toe aan de
+ * PR-body zodat de nacht-serie 's ochtends leesbaar is. Sinds #558 stapelen slices
+ * niet meer (elke slice takt van `main` af), dus geen basis-branch meer.
  */
 export interface ReeksInfo {
   /** Positie in de reeks (1-based, over alle apps heen). */
   readonly positie: number;
   /** Het maximumaantal items in deze reeks. */
   readonly totaal: number;
-  /** De branch waarvan dit item vertakt. */
-  readonly basisBranch: string;
-  /** Het issue waarvan de basis-branch afkomstig is. */
-  readonly basisIssue: number;
 }
 
 export interface InleverenOpties {
@@ -423,8 +420,7 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
   kop(lokaal ? 'PR openen en in de wachtrij zetten' : 'PR openen en in de merge-queue zetten');
   const reeksVermelding =
     opties.reeksInfo !== undefined
-      ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}` +
-        ` — vertakt van #${String(opties.reeksInfo.basisIssue)} (${opties.reeksInfo.basisBranch})`
+      ? `\n\n🔗 Reeks ${String(opties.reeksInfo.positie)}/${String(opties.reeksInfo.totaal)}`
       : '';
   // Issue uit de branchnaam: voegt `Closes owner/repo#<N>` toe aan de PR-body zodat
   // GitHub het issue sluit bij merge — ook cross-repo (#598, #619). Bij een branch

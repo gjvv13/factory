@@ -449,7 +449,6 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
           isFastlane ? fastlaneWachtrij(bordItems(cwd) ?? []) : bouwWachtrij(bordItems(cwd) ?? []),
         // Stapelen per app (#327): het volgende item in dezelfde app vertrekt van de
         // branch van het vorige, zodat de PR's conflictvrij mergen in volgorde.
-        branchVan: (item) => bouwBranch(item.issue),
         werkAf: (item, reeks) =>
           bouwAf(
             item,
@@ -690,12 +689,9 @@ export async function bouwAf(
     // Via `factory werkplek` en niet met een eigen `git worktree add`: dan geldt hier
     // dezelfde padconventie en dezelfde branchnaam als voor een menselijke sessie, en
     // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
-    // In een reeks vertrekt de worktree van de basis-branch (#327): dat is de branch
-    // van het vorige item in dezelfde app, of undefined bij het eerste item.
-    werkplek(String(item.issue), {
-      cwd: spiegel,
-      ...(reeks?.basis !== undefined ? { basis: reeks.basis } : {}),
-    });
+    // Elke slice vertrekt van `main` (#558): geen stacking meer op de vorige slice,
+    // dus geen basis-branch. Dat houdt de bouw-nacht conflictvrij en squash-merge-vriendelijk.
+    werkplek(String(item.issue), { cwd: spiegel });
 
     uitkomst = await draaiBouwer({
       prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
@@ -938,17 +934,10 @@ function verwerkBouw(
       ...(opsMelding !== undefined ? { opsMelding } : {}),
       // Het reviewer-verdict doorsturen zodat `inleveren` geen eigen review draait (#644).
       ...(reviewUitkomst !== undefined ? { externReview: reviewUitkomst } : {}),
-      // In een reeks de stacking-informatie doorgeven (#327): de positie en de
-      // basis-branch komen in de PR-body, zodat de stapel 's ochtends leesbaar is.
-      ...(reeks?.basis !== undefined && reeks.basisIssue !== undefined
-        ? {
-            reeksInfo: {
-              positie: reeks.positie,
-              totaal: reeks.totaal,
-              basisBranch: reeks.basis,
-              basisIssue: reeks.basisIssue,
-            },
-          }
+      // In een reeks de positie doorgeven (#558): "Reeks x/y" in de PR-body, zodat de
+      // nacht-serie 's ochtends leesbaar is. Geen basis-branch meer — slices stapelen niet.
+      ...(reeks !== undefined
+        ? { reeksInfo: { positie: reeks.positie, totaal: reeks.totaal } }
         : {}),
     });
   } catch (fout) {
@@ -1708,7 +1697,6 @@ async function draaiNachtBouw(
         noemer: 'de bouw-nacht',
         aantal: instellingen.bouwDagmaximum - bouwAlGestart,
         leesRij: () => bouwWachtrij(bordItems(cwd) ?? []),
-        branchVan: (item) => bouwBranch(item.issue),
         werkAf: (item, reeks) =>
           bouwAf(
             item,
@@ -1751,7 +1739,6 @@ async function draaiNachtBouw(
         noemer: 'de fastlane-nacht',
         aantal: instellingen.fastlaneCap - fastlaneAlGestart,
         leesRij: () => fastlaneWachtrij(bordItems(cwd) ?? []),
-        branchVan: (item) => bouwBranch(item.issue),
         werkAf: async (item, reeks) => {
           const resultaat = await bouwAf(
             item,
