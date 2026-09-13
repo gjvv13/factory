@@ -39,12 +39,23 @@ export interface EscalatieContext {
 }
 
 /** Alles wat de brief nodig heeft om zichzelf op te bouwen. */
+/** Een open bouw-PR, voor de leeftijdssignaal-sectie (#558). */
+export interface OpenPr {
+  readonly nummer: number;
+  readonly branch: string;
+  readonly app: string;
+  /** Aanmaakmoment als ISO-string. */
+  readonly aangemaakt: string;
+}
+
 export interface BriefBronnen {
   readonly items: readonly BacklogItem[];
   readonly escalatieNummers: ReadonlySet<number>;
   readonly escalatieContext: readonly EscalatieContext[];
   readonly runlog: readonly RunlogEntry[];
   readonly deployRuns: readonly DeployRunStatus[];
+  /** Open bouw-PR's, voor het leeftijdssignaal (#558). */
+  readonly openPrs: readonly OpenPr[];
   /** Het moment waarop de brief wordt gebouwd; bepaalt de "stil"-grens. */
   readonly nu: Date;
 }
@@ -56,7 +67,11 @@ export interface BriefBronnen {
 /** Items op een werkkolom zonder wijziging in deze periode tellen als "stil". */
 export const STIL_DREMPEL_MS = 72 * 3_600_000;
 
+/** Een open bouw-PR ouder dan dit valt op in de ochtendupdate (#558): 2 dagen. */
+export const BOUW_PR_LEEFTIJD_DREMPEL_MS = 2 * 24 * 3_600_000;
+
 const ISSUE_URL = 'https://github.com/gjvv13/factory/issues';
+const PR_URL = 'https://github.com/gjvv13/factory/pull';
 
 /** Kolommen waar actief aan gewerkt wordt; stilstand hier is een signaal. */
 const WERK_KOLOMMEN: ReadonlySet<string> = new Set(['Bouwen', 'Wacht op merge', 'Uitrollen']);
@@ -83,6 +98,30 @@ interface BriefSectie {
 function issueLink(issue: number, titel?: string): string {
   const label = titel !== undefined ? `#${String(issue)} ${titel}` : `#${String(issue)}`;
   return `[${label}](${ISSUE_URL}/${String(issue)})`;
+}
+
+function prLink(nummer: number): string {
+  return `[PR #${String(nummer)}](${PR_URL}/${String(nummer)})`;
+}
+
+/**
+ * Sectie "oude bouw-PR's" (#558): open PR's die langer dan de leeftijdsdrempel
+ * blijven liggen. Een bouw-PR die dagen wacht loopt met main uit de pas en wordt
+ * onmergebaar; dit zet 'm luid in de ochtendupdate zodat ik 'm tijdig merge.
+ */
+function oudeBouwPrsSectie(bronnen: BriefBronnen): BriefSectie | undefined {
+  const oud = bronnen.openPrs.filter(
+    (pr) => bronnen.nu.getTime() - new Date(pr.aangemaakt).getTime() >= BOUW_PR_LEEFTIJD_DREMPEL_MS,
+  );
+  if (oud.length === 0) return undefined;
+
+  const regels = oud.map((pr) => {
+    const dagen = Math.floor(
+      (bronnen.nu.getTime() - new Date(pr.aangemaakt).getTime()) / (24 * 3_600_000),
+    );
+    return `- ${prLink(pr.nummer)} · ${pr.branch} · ${pr.app} · ${String(dagen)} ${dagen === 1 ? 'dag' : 'dagen'} oud`;
+  });
+  return { kop: "⏰ Oude bouw-PR's", regels };
 }
 
 /** Sectie "gebouwd/gemergd": runlog-entries van de afgelopen 24 uur. */
@@ -182,6 +221,7 @@ export function bouwBrief(bronnen: BriefBronnen): string {
   const secties: BriefSectie[] = [
     gebouwdSectie(bronnen),
     wachtOpAkkoordSectie(bronnen),
+    oudeBouwPrsSectie(bronnen),
     geescaleerdSectie(bronnen),
     vastgelopenSectie(bronnen),
     deployStatusSectie(bronnen),
