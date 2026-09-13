@@ -4,6 +4,7 @@ import { leesAppConfig, zoekAppDir } from '../app-config.js';
 import {
   BACKLOG_REPO,
   EIGENAAR,
+  FASTLANE_LABEL,
   heeftLabel,
   issueUitBranch,
   labelsVan,
@@ -97,13 +98,6 @@ export interface InleverenOpties {
   /** Info over de positie in een bouw-reeks; voegt een reeks-vermelding toe aan de PR-body (#327). */
   readonly reeksInfo?: ReeksInfo;
 }
-
-/**
- * Het label dat de fastlane-baan aandrijft (ADR 009, #401). Hergebruikt uit
- * `orkestreer-bouw.ts` maar gedupliceerd om een circulaire import te voorkomen:
- * `orkestreer-bouw` importeert `inleveren`, dus de omgekeerde richting mag niet.
- */
-const FASTLANE_LABEL = 'fastlane';
 
 /**
  * Label-gebaseerde auto-merge (#573): een PR merget alleen met dit label op het
