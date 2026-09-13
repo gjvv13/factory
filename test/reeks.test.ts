@@ -98,12 +98,12 @@ describe('draaiReeks — een gestrande inlevering (#282)', () => {
 // Serieel stapelen per app (#327)
 // ---------------------------------------------------------------------------
 
-describe('draaiReeks — serieel stapelen per app (#327)', () => {
+describe('draaiReeks — reeks-context (positie, #558)', () => {
   let home: string;
   let paden: OrkestratorPaden;
 
   beforeEach(() => {
-    home = mkdtempSync(path.join(os.tmpdir(), 'factory-reeks-stack-'));
+    home = mkdtempSync(path.join(os.tmpdir(), 'factory-reeks-positie-'));
     paden = standaardPaden(home);
     stelUitvoerderIn(maakUitvoerderOpnemer().uitvoerder);
   });
@@ -112,110 +112,7 @@ describe('draaiReeks — serieel stapelen per app (#327)', () => {
     herstelUitvoerder();
   });
 
-  /** Branchnaam van een item, zoals `bouwBranch` in orkestreer-bouw.ts. */
-  const branchVan = (item: ReeksItem): string => `slice/${String(item.issue)}-1`;
-
-  it('geeft het tweede item in dezelfde app de branch van het eerste als basis', async () => {
-    const rij: ReeksItem[] = [
-      { issue: 10, app: 'factory', titel: 'eerste' },
-      { issue: 20, app: 'factory', titel: 'tweede' },
-      { issue: 30, app: 'factory', titel: 'derde' },
-    ];
-    const ontvangen: (ReeksContext | undefined)[] = [];
-
-    await draaiReeks({
-      paden,
-      nu: new Date('2026-08-24T04:00:00'),
-      soort: 'bouw',
-      pot: 'interactief',
-      noemer: 'deze reeks',
-      aantal: 3,
-      leesRij: () => rij,
-      branchVan,
-      werkAf: (_item, reeks) => {
-        ontvangen.push(reeks);
-        return Promise.resolve({ afloop: 'klaar' });
-      },
-      beschrijf: () => ({ uitkomst: 'klaar', kosten: 0 }),
-      beoordeel: () => 'gelukt',
-    });
-
-    // Eerste item: geen basis (start van origin/main).
-    expect(ontvangen[0]).toMatchObject({ basis: undefined, basisIssue: undefined, positie: 1 });
-    // Tweede item: basis is de branch van #10.
-    expect(ontvangen[1]).toMatchObject({ basis: 'slice/10-1', basisIssue: 10, positie: 2 });
-    // Derde item: basis is de branch van #20.
-    expect(ontvangen[2]).toMatchObject({ basis: 'slice/20-1', basisIssue: 20, positie: 3 });
-  });
-
-  it('stapelt items in verschillende apps onafhankelijk van elkaar', async () => {
-    const rij: ReeksItem[] = [
-      { issue: 10, app: 'factory', titel: 'factory-een' },
-      { issue: 42, app: 'assistant', titel: 'assistant-een' },
-      { issue: 20, app: 'factory', titel: 'factory-twee' },
-    ];
-    const ontvangen: { issue: number; reeks: ReeksContext | undefined }[] = [];
-
-    await draaiReeks({
-      paden,
-      nu: new Date('2026-08-24T04:00:00'),
-      soort: 'bouw',
-      pot: 'interactief',
-      noemer: 'deze reeks',
-      aantal: 3,
-      leesRij: () => rij,
-      branchVan,
-      werkAf: (item, reeks) => {
-        ontvangen.push({ issue: item.issue, reeks });
-        return Promise.resolve({ afloop: 'klaar' });
-      },
-      beschrijf: () => ({ uitkomst: 'klaar', kosten: 0 }),
-      beoordeel: () => 'gelukt',
-    });
-
-    // factory #10: eerste in factory, geen basis.
-    expect(ontvangen[0]?.reeks?.basis).toBeUndefined();
-    // assistant #42: eerste in assistant, geen basis.
-    expect(ontvangen[1]?.reeks?.basis).toBeUndefined();
-    // factory #20: tweede in factory, basis is de branch van #10.
-    expect(ontvangen[2]?.reeks).toMatchObject({ basis: 'slice/10-1', basisIssue: 10 });
-  });
-
-  it('slaat een mislukt item over in de keten — het volgende vertrekt van het laatst geslaagde', async () => {
-    const rij: ReeksItem[] = [
-      { issue: 10, app: 'factory', titel: 'slaagt' },
-      { issue: 20, app: 'factory', titel: 'faalt' },
-      { issue: 30, app: 'factory', titel: 'slaagt ook' },
-    ];
-    const ontvangen: { issue: number; basis: string | undefined }[] = [];
-
-    await draaiReeks({
-      paden,
-      nu: new Date('2026-08-24T04:00:00'),
-      soort: 'bouw',
-      pot: 'interactief',
-      noemer: 'deze reeks',
-      aantal: 3,
-      leesRij: () => rij,
-      branchVan,
-      werkAf: (item, reeks) => {
-        ontvangen.push({ issue: item.issue, basis: reeks?.basis });
-        return Promise.resolve({ afloop: item.issue === 20 ? 'mislukt' : 'klaar' });
-      },
-      beschrijf: () => ({ uitkomst: 'klaar', kosten: 0 }),
-      beoordeel: (u) =>
-        (u.afloop === 'klaar' ? 'gelukt' : u.afloop) as 'gelukt' | 'escalatie' | 'mislukt',
-    });
-
-    // #10 slaagt, basis is undefined (eerste).
-    expect(ontvangen[0]?.basis).toBeUndefined();
-    // #20 krijgt basis van #10, maar faalt.
-    expect(ontvangen[1]?.basis).toBe('slice/10-1');
-    // #30 krijgt basis van #10 (niet #20, want die mislukte).
-    expect(ontvangen[2]?.basis).toBe('slice/10-1');
-  });
-
-  it('geeft geen ReeksContext als branchVan niet gezet is', async () => {
+  it('geeft elke run een context met positie en totaal, zonder basis-branch (#558)', async () => {
     const rij: ReeksItem[] = [
       { issue: 10, app: 'factory', titel: 'een' },
       { issue: 20, app: 'factory', titel: 'twee' },
@@ -230,7 +127,6 @@ describe('draaiReeks — serieel stapelen per app (#327)', () => {
       noemer: 'deze reeks',
       aantal: 2,
       leesRij: () => rij,
-      // Bewust geen branchVan: het bestaande gedrag.
       werkAf: (_item, reeks) => {
         ontvangen.push(reeks);
         return Promise.resolve({ afloop: 'klaar' });
@@ -239,8 +135,10 @@ describe('draaiReeks — serieel stapelen per app (#327)', () => {
       beoordeel: () => 'gelukt',
     });
 
-    expect(ontvangen[0]).toBeUndefined();
-    expect(ontvangen[1]).toBeUndefined();
+    // Sinds #558 stapelen slices niet meer: elke run krijgt positie/totaal, geen basis.
+    expect(ontvangen[0]).toEqual({ positie: 1, totaal: 2 });
+    expect(ontvangen[1]).toEqual({ positie: 2, totaal: 2 });
+    expect(ontvangen[0]).not.toHaveProperty('basis');
   });
 
   it('neemt de positie over alle apps heen en het totaal uit opzet.aantal', async () => {
@@ -259,7 +157,6 @@ describe('draaiReeks — serieel stapelen per app (#327)', () => {
       noemer: 'deze reeks',
       aantal: 5,
       leesRij: () => rij,
-      branchVan,
       werkAf: (_item, reeks) => {
         if (reeks !== undefined) {
           posities.push({ positie: reeks.positie, totaal: reeks.totaal });

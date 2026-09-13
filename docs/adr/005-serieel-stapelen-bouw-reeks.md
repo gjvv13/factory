@@ -1,5 +1,12 @@
 # Slices serieel stapelen in een bouw-reeks
 
+> **Achterhaald door #558 (2026-09-13).** Het stapelen bleek niet samen te gaan met
+> squash-merge: zodra de onderste slice gesquasht naar `main` gaat, ziet GitHub de
+> commits van de bovenste dubbel en blokkeert die als conflict. Sinds #558 takt elke
+> slice weer van `origin/main` af (geen `basis`-branch meer); de wachttijd wordt in
+> plaats daarvan begrensd met een leeftijdssignaal in de ochtendupdate (#558 slice 2).
+> Onderstaande beslissing is niet meer van kracht.
+
 ## Context
 
 Een bouw-reeks (`--nacht`) bouwt meerdere items in eigen worktrees, elk vertakt
