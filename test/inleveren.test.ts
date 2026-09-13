@@ -542,6 +542,45 @@ describe('inleveren', () => {
     expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
   });
 
+  it('laat een type:bug door de fastlane-gate zonder het fastlane-label (#630)', () => {
+    process.chdir(maakRepo());
+    // Labels bevatten alleen type:bug — geen fastlane-label.
+    const bugBepaaler: UitkomstBepaler = (aanroep, index) => {
+      if (
+        aanroep.commando === 'gh' &&
+        aanroep.argumenten[0] === 'api' &&
+        aanroep.argumenten[1]?.includes('/issues/')
+      )
+        return { stdout: '["type:bug"]' };
+      return gelukkig(aanroep, index);
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bugBepaaler);
+    stelUitvoerderIn(uitvoerder);
+
+    inleveren({ fastlane: true });
+
+    // De gate is gepasseerd: auto-merge is aangezet.
+    expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'merge', PR_URL, '--auto', '--merge']);
+  });
+
+  it('weigert een type:task zonder fastlane-label in de fastlane-gate (#630)', () => {
+    process.chdir(maakRepo());
+    // Labels bevatten alleen type:task — geen fastlane-label.
+    const taskBepaaler: UitkomstBepaler = (aanroep, index) => {
+      if (
+        aanroep.commando === 'gh' &&
+        aanroep.argumenten[0] === 'api' &&
+        aanroep.argumenten[1]?.includes('/issues/')
+      )
+        return { stdout: '["type:task"]' };
+      return gelukkig(aanroep, index);
+    };
+    const { uitvoerder } = maakUitvoerderOpnemer(taskBepaaler);
+    stelUitvoerderIn(uitvoerder);
+
+    expect(() => inleveren({ fastlane: true })).toThrow(/fastlane.*vereist/);
+  });
+
   it('zet auto-merge aan met --fastlane op een lokale-wachtrij-app', () => {
     process.chdir(maakLokaleRepo());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);

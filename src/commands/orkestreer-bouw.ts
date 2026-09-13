@@ -651,6 +651,13 @@ export async function bouwAf(
     zetKolom(item.issue, BOUW_KOLOM, cwd);
   };
 
+  // Vroeg falen tegen de fastlane-tegenspraak (#630) is niet nodig: de fastlane-baan
+  // krijgt via `fastlaneWachtrij` → `redenBuitenFastlane` alleen `type:bug` of
+  // `type:task` + `fastlane`-label binnen, en de landings-gate in `inleveren` accepteert
+  // sinds dit item precies diezelfde combinatie. Selectie en landing zijn het dus eens;
+  // een onlandbare combinatie bereikt `bouwAf` niet meer. Een aparte pre-check hier zou
+  // onbereikbaar zijn en bij een misvuring een item dat prima kan landen ten onrechte
+  // met een escalatie-label opzadelen.
   const bronApps = bronAppsVan(item);
   const werkmap = bouwWerkplek(item.app, item.issue, wortel);
   const bronWortel = bronMappenVan(werkmap);
@@ -774,7 +781,7 @@ export async function bouwAf(
     }
   }
 
-  const inleverOmgevingsfout = verwerkBouw(
+  const signaal = verwerkBouw(
     item,
     uitkomst,
     reviewUitkomst,
@@ -786,11 +793,21 @@ export async function bouwAf(
     reeks,
     baan,
   );
+
+  // leverIn mislukte na een voltooide bouw (#630): de bouw-kosten komen mee in het
+  // resultaat i.p.v. verloren te gaan; `verwerkBouw` heeft het item al geblokkeerd.
+  if (signaal.soort === 'inleverfout') {
+    return {
+      bouw: { ...uitkomst, afloop: 'mislukt', fout: signaal.fout },
+      ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
+    };
+  }
+
   return {
     // Een OmgevingsFout bij het inleveren is op het board al als escalatie afgehandeld,
     // maar de bouw zélf slaagde (afloop 'klaar'). Zonder deze override zou `beoordeel` de
     // run als 'gelukt' tellen en de noodstop-teller in de nachtreeks resetten (#383).
-    bouw: inleverOmgevingsfout ? { ...uitkomst, afloop: 'escalatie' } : uitkomst,
+    bouw: signaal.soort === 'omgevingsfout' ? { ...uitkomst, afloop: 'escalatie' } : uitkomst,
     ...(reviewUitkomst === undefined ? {} : { review: reviewUitkomst }),
   };
 }
@@ -802,6 +819,16 @@ export async function bouwAf(
  * op het board al geëscaleerd, maar moet de aanroeper de uitkomst als escalatie boeken
  * (niet als de 'klaar' waarmee de bouw zelf eindigde) zodat de noodstop klopt (#383).
  */
+/**
+ * Wat `verwerkBouw` aan `bouwAf` teruggeeft (#630). Vervangt een eerdere
+ * `boolean` + een brede try/catch in de aanroeper: de leverIn-fout wordt nu op
+ * de plek van `leverIn` zelf afgevangen en via dit signaal doorgegeven, zodat een
+ * fout in het (best-effort) werk ná een geslaagd inleveren niet per ongeluk als
+ * mislukte bouw wordt geboekt.
+ */
+type VerwerkSignaal =
+  { soort: 'normaal' } | { soort: 'omgevingsfout' } | { soort: 'inleverfout'; fout: string };
+
 function verwerkBouw(
   item: Bouwitem,
   uitkomst: BouwUitkomst,
@@ -813,7 +840,7 @@ function verwerkBouw(
   opsMelding?: OpsMeldingConfig,
   reeks?: ReeksContext,
   baan?: BouwBaan,
-): boolean {
+): VerwerkSignaal {
   const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
   if (uitkomst.afloop === 'mislukt') {
@@ -826,7 +853,7 @@ function verwerkBouw(
       cwd,
     );
     waarschuwing(`#${String(item.issue)} mislukt: ${uitkomst.fout ?? 'onbekende fout'}`);
-    return false;
+    return { soort: 'normaal' };
   }
 
   const verdict = uitkomst.verdict;
@@ -848,13 +875,13 @@ function verwerkBouw(
       cwd,
     );
     ok(`#${String(item.issue)} geëscaleerd — niets ingeleverd.`);
-    return false;
+    return { soort: 'normaal' };
   }
 
   if (verdict?.uitkomst !== 'klaar') {
     blokkeer(item, cwd);
     waarschuwing(`#${String(item.issue)} gaf geen bruikbare uitkomst.`);
-    return false;
+    return { soort: 'normaal' };
   }
 
   // Een werker die `klaar` zegt maar een punt van de gesloten lijst stilzwijgend
@@ -881,7 +908,7 @@ function verwerkBouw(
       cwd,
     );
     ok(`#${String(item.issue)} geëscaleerd (stil opgelost) — niets ingeleverd.`);
-    return false;
+    return { soort: 'normaal' };
   }
 
   // Inleveren doet de rest: poort draaien, pushen, PR openen, het item naar Uitrollen
@@ -926,14 +953,21 @@ function verwerkBouw(
       // De poort kon niet draaien door een omgevingsprobleem — geen inhoudelijke fout.
       // Escaleren zodat de noodstop niet afgaat (#383).
       escaleerOmgevingsfout(item, cwd, werkmap, fout, 'de kwaliteitspoort kon niet draaien');
-      return true;
+      return { soort: 'omgevingsfout' };
     }
-    // Inleveren mislukt: de review-bevindingen gaan naar het issue, want een PR bestaat
-    // niet. Gooi daarna alsnog door — de bouw-run hoort rood te worden.
+    // Inleveren mislukte na een voltooide bouw (bijv. poort rood of code-review
+    // geblokkeerd): geen PR, dus de review-bevindingen gaan naar het issue. Terug in de
+    // rij met het escalatie-label plus een mislukt-signaal, zodat de bouw-kosten meekomen
+    // in het resultaat i.p.v. verloren te gaan door een throw, en het item niet stil
+    // geclaimd blijft staan (#630). Alleen `leverIn` kan hier gooien; werk ná een geslaagd
+    // inleveren is best-effort en gooit niet, dus dit pad is echt "inleveren mislukt".
     if (reviewComment !== undefined) {
       plaatsComment(item.issue, reviewComment, cwd);
     }
-    throw fout;
+    blokkeer(item, cwd);
+    const reden = fout instanceof Error ? fout.message : String(fout);
+    plaatsComment(item.issue, `**Bouw-run mislukt bij inleveren.** ${reden}`, cwd);
+    return { soort: 'inleverfout', fout: reden };
   }
 
   // Inleveren geslaagd: nu pas melden dat er gebouwd is en dat de PR openstaat.
@@ -981,7 +1015,7 @@ function verwerkBouw(
       ? `#${String(item.issue)} gebouwd en ingeleverd met auto-merge (fastlane).`
       : `#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`,
   );
-  return false;
+  return { soort: 'normaal' };
 }
 
 /** Zet een item stil: terug in de bouw-wachtrij, met het label dat het overslaat. */
