@@ -437,6 +437,9 @@ export function splits(issueNummer: string | undefined): void {
   const prefix = titelPrefix(issue.title);
   // Kinderen krijgen de labels van de ouder, maar niet type:epic (dat is voor de ouder).
   const kindLabels = issue.labels.filter((l) => l !== EPIC_LABEL);
+  if (!kindLabels.some((l) => l.startsWith('type:'))) {
+    kindLabels.push('type:task');
+  }
 
   // 5. Maak per slice een child-issue aan
   const kinderen: { issue: number; naam: string }[] = [];
