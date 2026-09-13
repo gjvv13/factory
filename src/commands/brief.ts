@@ -22,6 +22,7 @@ import {
   type BriefBronnen,
   type DeployRunStatus,
   type EscalatieContext,
+  type OpenPr,
 } from '../regie-brief.js';
 import { uitvoerVan, waarschuwing } from '../shell.js';
 
@@ -84,6 +85,63 @@ function ghRunList(app: string): string | undefined {
     '--limit=1',
     '--json',
     'conclusion,createdAt,status,url',
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Open bouw-PR's ophalen (#558)
+// ---------------------------------------------------------------------------
+
+/**
+ * Haalt de open bouw-PR's (slice-branches) per app op via `gh pr list`.
+ *
+ * REST (aparte pot), 1 aanroep per app — zelfde patroon als `haalDeployRuns`. Bij
+ * een fout: waarschuwen en overslaan, de brief mag niet omvallen op één app. Alleen
+ * `slice/*`-branches tellen: release-PR's en losse PR's horen niet in het
+ * leeftijdssignaal. `proefapp` valt af (geen echte app); factory hoort er wél in —
+ * dat is juist de repo waar bouw-PR's stapelen (#558).
+ */
+export function haalOpenBouwPrs(
+  apps: readonly string[],
+  leesPrs: (app: string) => string | undefined = ghPrList,
+): OpenPr[] {
+  const resultaten: OpenPr[] = [];
+  for (const app of apps) {
+    if (GEEN_ECHTE_APPS.has(app)) continue;
+    const ruw = leesPrs(app);
+    if (ruw === undefined || ruw === '' || ruw === '[]') continue;
+    let prs: unknown;
+    try {
+      prs = JSON.parse(ruw) as unknown;
+    } catch {
+      waarschuwing(`open PR's van ${app} konden niet worden geparsed.`);
+      continue;
+    }
+    if (!Array.isArray(prs)) continue;
+    for (const p of prs) {
+      if (p === null || typeof p !== 'object') continue;
+      const obj = p as Record<string, unknown>;
+      const branch = typeof obj['headRefName'] === 'string' ? obj['headRefName'] : '';
+      const aangemaakt = typeof obj['createdAt'] === 'string' ? obj['createdAt'] : '';
+      const nummer = typeof obj['number'] === 'number' ? obj['number'] : undefined;
+      // Alleen bouw-PR's (slice-branches); een release-PR of losse PR telt niet.
+      if (nummer === undefined || aangemaakt === '' || !branch.startsWith('slice/')) continue;
+      resultaten.push({ nummer, branch, app, aangemaakt });
+    }
+  }
+  return resultaten;
+}
+
+function ghPrList(app: string): string | undefined {
+  return uitvoerVan('gh', [
+    'pr',
+    'list',
+    '--repo',
+    `gjvv13/${app}`,
+    '--state',
+    'open',
+    '--json',
+    'number,headRefName,createdAt',
   ]);
 }
 
@@ -153,9 +211,10 @@ export function brief(nu: Date = new Date(Date.now())): void {
   const runlogInhoud = leesRunlog(paden.logPad);
   const runlogEntries = parseRunlog(runlogInhoud, nu);
 
-  // 4. Deploy-runs per app
+  // 4. Deploy-runs + open bouw-PR's per app
   const apps = appOpties() ?? [];
   const deployRuns = haalDeployRuns(apps);
+  const openPrs = haalOpenBouwPrs(apps);
 
   // 5. Brief bouwen en tonen
   const bronnen: BriefBronnen = {
@@ -164,6 +223,7 @@ export function brief(nu: Date = new Date(Date.now())): void {
     escalatieContext: escalatieCtx,
     runlog: runlogEntries,
     deployRuns,
+    openPrs,
     nu,
   };
   const tekst = bouwBrief(bronnen);

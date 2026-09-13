@@ -38,10 +38,55 @@ function maakBronnen(overrides: Partial<BriefBronnen> = {}): BriefBronnen {
     escalatieContext: [],
     runlog: [],
     deployRuns: [],
+    openPrs: [],
     nu: NU,
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Oude bouw-PR's (#558)
+// ---------------------------------------------------------------------------
+
+describe("oude bouw-PR's sectie (#558)", () => {
+  it('toont een PR die ouder is dan de drempel, met nummer, branch, app en leeftijd', () => {
+    // NU = 2026-09-05T07:30; een PR van 09-01 is 4 dagen oud (≥ 2 dagen).
+    const tekst = bouwBrief(
+      maakBronnen({
+        openPrs: [
+          {
+            nummer: 484,
+            branch: 'slice/421-1',
+            app: 'factory',
+            aangemaakt: '2026-09-01T07:30:00.000Z',
+          },
+        ],
+      }),
+    );
+    expect(tekst).toContain("⏰ Oude bouw-PR's");
+    expect(tekst).toContain('PR #484');
+    expect(tekst).toContain('slice/421-1');
+    expect(tekst).toContain('factory');
+    expect(tekst).toContain('4 dagen oud');
+  });
+
+  it('laat de sectie weg als elke PR jonger is dan de drempel', () => {
+    // Een PR van 09-04 is 1 dag oud (< 2 dagen): geen sectie.
+    const tekst = bouwBrief(
+      maakBronnen({
+        openPrs: [
+          {
+            nummer: 500,
+            branch: 'slice/500-1',
+            app: 'assistant',
+            aangemaakt: '2026-09-04T07:30:00.000Z',
+          },
+        ],
+      }),
+    );
+    expect(tekst).not.toContain("Oude bouw-PR's");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // bouwBrief

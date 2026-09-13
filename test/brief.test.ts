@@ -4,7 +4,56 @@
  * een fixture, en het fire-and-forget-patroon.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { haalDeployRuns } from '../src/commands/brief.js';
+import { haalDeployRuns, haalOpenBouwPrs } from '../src/commands/brief.js';
+
+describe('haalOpenBouwPrs (#558)', () => {
+  beforeEach(() => {
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('neemt alleen slice-branches mee, met nummer, branch, app en aanmaakdatum', () => {
+    const leesPrs = vi.fn().mockImplementation((app: string) =>
+      app === 'factory'
+        ? JSON.stringify([
+            { number: 484, headRefName: 'slice/421-1', createdAt: '2026-09-01T07:30:00.000Z' },
+            // Een release-PR is geen bouw-PR: hoort er niet in.
+            {
+              number: 640,
+              headRefName: 'release/v1.15.136',
+              createdAt: '2026-09-01T07:30:00.000Z',
+            },
+          ])
+        : '[]',
+    );
+
+    const prs = haalOpenBouwPrs(['factory', 'assistant'], leesPrs);
+
+    expect(prs).toEqual([
+      {
+        nummer: 484,
+        branch: 'slice/421-1',
+        app: 'factory',
+        aangemaakt: '2026-09-01T07:30:00.000Z',
+      },
+    ]);
+  });
+
+  it('slaat proefapp over en tolereert een onparsebare respons', () => {
+    const leesPrs = vi
+      .fn()
+      .mockImplementation((app: string) => (app === 'assistant' ? 'geen json' : '[]'));
+
+    const prs = haalOpenBouwPrs(['proefapp', 'assistant'], leesPrs);
+
+    // proefapp overgeslagen (nooit gelezen), assistant onparsebaar → lege lijst, geen throw.
+    expect(leesPrs).not.toHaveBeenCalledWith('proefapp');
+    expect(prs).toEqual([]);
+  });
+});
 
 describe('haalDeployRuns', () => {
   beforeEach(() => {
