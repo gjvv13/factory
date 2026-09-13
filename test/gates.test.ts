@@ -13,7 +13,7 @@ vi.mock('../src/commands/integreer.js', async (importOriginal) => {
 import { parseLabelsAntwoord } from '../src/board.js';
 import { inleveren } from '../src/commands/inleveren.js';
 import { heeftFunctioneleSecties } from '../src/commands/orkestreer.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { herstelUitvoerder, herstelWacht, stelUitvoerderIn, stelWachtIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, zetBoardOmgeving, type UitkomstBepaler } from './helpers.js';
 
 // ---------------------------------------------------------------------------
@@ -116,11 +116,14 @@ describe('inleveren --fastlane label-check', () => {
   beforeEach(() => {
     herstel = zetBoardOmgeving({ pat: 'test-pat' });
     repo = maakRepo();
+    // Geen echte pauze in de CI-run-vangnet-peiling (#392).
+    stelWachtIn(() => {});
   });
 
   afterEach(() => {
     herstel();
     herstelUitvoerder();
+    herstelWacht();
   });
 
   it('weigert --fastlane als het issue geen fastlane-label heeft', () => {

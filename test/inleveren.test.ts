@@ -15,7 +15,7 @@ vi.mock('../src/commands/integreer.js', async (importOriginal) => {
 import { AUTO_MERGE_OK_LABEL, inleveren } from '../src/commands/inleveren.js';
 import { heeftIntegreerAgent } from '../src/commands/integreer.js';
 import { verify } from '../src/commands/verify.js';
-import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
+import { herstelUitvoerder, herstelWacht, stelUitvoerderIn, stelWachtIn } from '../src/shell.js';
 import {
   maakUitvoerderOpnemer,
   zetBoardOmgeving,
@@ -24,6 +24,7 @@ import {
 } from './helpers.js';
 
 const BRANCH = 'slice/58-1';
+const HEAD_SHA = 'abc123deadbeef';
 const PR_URL = 'https://github.com/gjvv13/factory/pull/1';
 
 /** Temp-repo met een lockfile (bestaat), zonder dekking-basislijn (skip). */
@@ -51,10 +52,17 @@ function maakLokaleRepo(): string {
 
 /** Standaard-bepaler voor de gelukkige weg: slice-branch, schone tree, geen bestaande PR. */
 const gelukkig: UitkomstBepaler = ({ commando, argumenten }) => {
-  if (commando === 'git' && argumenten[0] === 'rev-parse') return { stdout: BRANCH };
+  // Twee rev-parse-varianten: --abbrev-ref (branchnaam) en kale HEAD (SHA voor CI-vangnet).
+  if (commando === 'git' && argumenten[0] === 'rev-parse' && argumenten.includes('--abbrev-ref'))
+    return { stdout: BRANCH };
+  if (commando === 'git' && argumenten[0] === 'rev-parse' && !argumenten.includes('--verify'))
+    return { stdout: HEAD_SHA };
   if (commando === 'git' && argumenten[0] === 'status') return { stdout: '' };
   if (commando === 'gh' && argumenten[1] === 'view') return { code: 1 }; // nog geen PR
   if (commando === 'gh' && argumenten[1] === 'create') return { stdout: PR_URL };
+  // CI-run vangnet (#392): standaard vindt de eerste poll een run.
+  if (commando === 'gh' && argumenten[0] === 'run' && argumenten[1] === 'list')
+    return { stdout: '[{"databaseId":1}]' };
   // heeftLabel (#364): de label-check voor --fastlane. Geeft het fastlane-label mee
   // zodat de bestaande fastlane-tests de gate passeren.
   if (commando === 'gh' && argumenten[0] === 'api' && argumenten[1]?.includes('/issues/'))
@@ -171,6 +179,8 @@ describe('inleveren', () => {
     // In CI draaien deze tests zélf in een workflow; dan zou de bord-poort alles
     // overslaan. Meet het lokale gedrag, ongeacht waar de test draait.
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: false });
+    // Geen echte pauze in de CI-run-vangnet-peiling (#392).
+    stelWachtIn(() => {});
   });
 
   /** Vangt alles op wat inleveren naar stdout schrijft, voor de waarschuwings-tests. */
@@ -187,6 +197,7 @@ describe('inleveren', () => {
     herstelOmgeving();
     process.chdir(oorspronkelijkeCwd);
     herstelUitvoerder();
+    herstelWacht();
   });
 
   it('draait de poort, pusht de branch, opent een PR zonder auto-merge (#573 default)', () => {
@@ -1410,6 +1421,159 @@ describe('inleveren', () => {
       // De push ging door (waarschuw-modus).
       expect(argsVan(aanroepen, 'git').some((a) => a[0] === 'push')).toBe(true);
       expect(resultaat.reviewReden).toBe('bevindingen');
+    });
+  });
+
+  describe('CI-run vangnet (#392)', () => {
+    /** Bepaler waarbij de CI-run pas na 2 polls verschijnt (binnen de eerste grace). */
+    function ciRunNaPollen(aantalLegePollen: number): UitkomstBepaler {
+      let pollTeller = 0;
+      return (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          pollTeller += 1;
+          return pollTeller <= aantalLegePollen
+            ? { stdout: '[]' }
+            : { stdout: '[{"databaseId":1}]' };
+        }
+        return gelukkig(aanroep, index);
+      };
+    }
+
+    it('run verschijnt bij eerste poll — geen close/reopen, ok gemeld', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(gelukkig);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Geen close/reopen: de run was er meteen.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'close')).toBe(false);
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'reopen')).toBe(false);
+      expect(regels.join('')).toContain('CI-run gevonden');
+    });
+
+    it('run verschijnt binnen eerste grace na 2 polls — geen close/reopen', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(ciRunNaPollen(2));
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'close')).toBe(false);
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'reopen')).toBe(false);
+      expect(regels.join('')).toContain('CI-run gevonden');
+    });
+
+    it('run verschijnt na her-trigger — close/reopen aangeroepen, ok gemeld', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // Eerste grace (5 polls) leeg, dan close/reopen, dan tweede grace vindt run.
+      let pollTeller = 0;
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          pollTeller += 1;
+          // Eerste 5 polls: leeg. Daarna (na her-trigger): run gevonden.
+          return pollTeller <= 5 ? { stdout: '[]' } : { stdout: '[{"databaseId":1}]' };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Close en reopen zijn aangeroepen.
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'close', PR_URL]);
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'reopen', PR_URL]);
+      // Waarschuwing over de her-trigger + ok na de tweede grace.
+      expect(regels.join('')).toContain('her-trigger');
+      expect(regels.join('')).toContain('CI-run gevonden na her-trigger');
+    });
+
+    it('run verschijnt niet — waarschuwing met PR-URL en SHA, meldOps aangeroepen', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // Alle polls leeg: beide graces vinden niets.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          return { stdout: '[]' };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      // Geeft opsMelding mee zodat de melding gedaan wordt.
+      inleveren({ opsMelding: { url: 'https://ops.example.com', token: 'tok' } });
+
+      // Close/reopen is geprobeerd.
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'close', PR_URL]);
+      expect(argsVan(aanroepen, 'gh')).toContainEqual(['pr', 'reopen', PR_URL]);
+      // Harde waarschuwing met PR-URL en SHA.
+      const uitvoer = regels.join('');
+      expect(uitvoer).toContain('geen CI-run na her-trigger');
+      expect(uitvoer).toContain(PR_URL);
+      expect(uitvoer).toContain(HEAD_SHA);
+      // meldOps is aangeroepen via curl.
+      const curlAanroep = aanroepen.find((a) => a.commando === 'curl');
+      expect(curlAanroep).toBeDefined();
+      expect(curlAanroep!.argumenten.join(' ')).toContain('https://ops.example.com');
+      // inleveren is niet gefaald: de PR staat er.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
+    });
+
+    it('her-trigger mislukt — waarschuwing, geen reopen, inleveren gaat door', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // Alle polls leeg, close faalt.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          return { stdout: '[]' };
+        }
+        if (aanroep.commando === 'gh' && aanroep.argumenten[1] === 'close') {
+          return { code: 1 };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      // Faalt niet: inleveren gaat door ondanks mislukte her-trigger.
+      inleveren();
+
+      // Close is geprobeerd, maar reopen niet (close faalde).
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'close')).toBe(true);
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'reopen')).toBe(false);
+      // Waarschuwing over de mislukte close.
+      expect(regels.join('')).toContain('her-trigger mislukt');
+      // De PR staat er: inleveren is niet afgebroken.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
+    });
+
+    it('gh-storing bij het peilen — geen her-trigger, vangnet overgeslagen (#392)', () => {
+      process.chdir(maakRepo());
+      const regels = vangStdout();
+      // `gh run list` faalt (non-nul exit → uitvoerVan geeft undefined): "kon niet
+      // meten", niet "geen run". Het vangnet mag dan geen gezonde PR close/reopen'en.
+      const bepaal: UitkomstBepaler = (aanroep, index) => {
+        if (aanroep.commando === 'gh' && aanroep.argumenten[0] === 'run') {
+          return { code: 1 };
+        }
+        return gelukkig(aanroep, index);
+      };
+      const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(bepaal);
+      stelUitvoerderIn(uitvoerder);
+
+      inleveren();
+
+      // Geen close/reopen: bij een onmeetbare status blijft de PR ongemoeid.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'close')).toBe(false);
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'reopen')).toBe(false);
+      expect(regels.join('')).toContain('kon de CI-status niet bepalen');
+      // Inleveren gaat gewoon door.
+      expect(argsVan(aanroepen, 'gh').some((a) => a[1] === 'create')).toBe(true);
     });
   });
 });

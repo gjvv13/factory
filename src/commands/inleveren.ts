@@ -21,6 +21,7 @@ import {
 } from '../code-review.js';
 import type { ReviewUitkomst } from '../werker.js';
 import { BASISLIJN_BESTAND } from '../dekking-basislijn.js';
+import { meldOps } from '../ops-melding.js';
 import {
   GebruikersFout,
   git,
@@ -30,6 +31,7 @@ import {
   run,
   runMetHerhaling,
   uitvoerVan,
+  wacht,
   waarschuwing,
 } from '../shell.js';
 import { heeftIntegreerAgent, WACHTRIJ_LABEL, zorgVoorWachtrijLabel } from './integreer.js';
@@ -163,6 +165,158 @@ function bestaandePr(repoDir: string, branch: string): PrStatus | undefined {
   const result = parsePrView(json);
   if (result === undefined) return undefined;
   return { url: result.url, state: result.state as PrStatus['state'] };
+}
+
+// ---------------------------------------------------------------------------
+// CI-run vangnet (#392): detecteert een ontbrekende workflow-run na het openen
+// van de PR en her-triggert die met één close/reopen. Zonder dit vangnet blijft
+// een PR eeuwig BLOCKED in de merge-queue als de pull_request-webhook niet vuurde.
+// ---------------------------------------------------------------------------
+
+/** Grace-venster: 5 polls × 3 s = ≈15 s. */
+const CI_POLL_INTERVAL_MS = 3000;
+const CI_POLL_POGINGEN = 5;
+
+/**
+ * Of er een CI-workflow-run bestaat voor de gegeven branch + commit.
+ *
+ * Drie toestanden, want "kon niet meten" ≠ "geen run" (CLAUDE.md, #99): `true` =
+ * run gevonden, `false` = meting gelukt en geen run, `undefined` = kon het niet
+ * meten (gh-storing, rate-limit, DNS-blip, onparsebare uitvoer). Zonder dat
+ * onderscheid zou een gh-storing als "geen run" tellen en een gezonde PR onnodig
+ * close/reopen uitlokken.
+ */
+function heeftCiRun(repoDir: string, branch: string, sha: string): boolean | undefined {
+  const json = uitvoerVan(
+    'gh',
+    [
+      'run',
+      'list',
+      '--branch',
+      branch,
+      '--commit',
+      sha,
+      '--workflow',
+      'ci.yml',
+      '--json',
+      'databaseId',
+    ],
+    repoDir,
+  );
+  // undefined = non-nul exit (gh-storing); '' = lege uitvoer i.p.v. de verwachte
+  // `[]`. Beide zijn "kon niet meten", niet "geen run" (een geslaagde lege meting
+  // is `[]`, dat hieronder als length 0 → false parseert).
+  if (json === undefined || json === '') return undefined;
+  try {
+    const parsed = JSON.parse(json) as unknown[];
+    return parsed.length > 0;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Peilt herhaaldelijk of er een CI-run verschijnt. De `Wacht`-abstractie
+ * uit `shell.ts` levert de pauze, zodat tests niet echt wachten.
+ *
+ * `true` = run gezien; `false` = grace verstreken zonder run, mét geslaagde
+ * metingen; `undefined` = kon het niet meten (elke meting faalde) — dan hoort de
+ * aanroeper het vangnet over te slaan i.p.v. een gezonde PR te her-triggeren.
+ */
+function peilCiRun(repoDir: string, branch: string, sha: string): boolean | undefined {
+  let konNietMeten = false;
+  for (let poging = 0; poging < CI_POLL_POGINGEN; poging += 1) {
+    const status = heeftCiRun(repoDir, branch, sha);
+    if (status === true) return true;
+    if (status === undefined) konNietMeten = true;
+    if (poging < CI_POLL_POGINGEN - 1) wacht(CI_POLL_INTERVAL_MS);
+  }
+  // Nooit een run gezien. Faalde minstens één meting, dan weten we niet zeker of er
+  // écht geen run is — 'onmeetbaar' i.p.v. een valse 'geen run'.
+  return konNietMeten ? undefined : false;
+}
+
+/**
+ * Her-trigger de PR via close/reopen. Retourneert true als beide stappen slaagden.
+ * Bij een mislukte close wordt geen reopen geprobeerd — geen halve staat achterlaten.
+ */
+function herTriggerPr(repoDir: string, prUrl: string): boolean {
+  const closeResultaat = run('gh', ['pr', 'close', prUrl], { cwd: repoDir, toleranter: true });
+  if (closeResultaat.code !== 0) {
+    waarschuwing(`her-trigger mislukt: gh pr close faalde (code ${String(closeResultaat.code)}).`);
+    return false;
+  }
+  const reopenResultaat = run('gh', ['pr', 'reopen', prUrl], { cwd: repoDir, toleranter: true });
+  if (reopenResultaat.code !== 0) {
+    waarschuwing(
+      `her-trigger mislukt: gh pr reopen faalde (code ${String(reopenResultaat.code)}).`,
+    );
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Het CI-run-vangnet: peilt of er een run is, her-triggert bij afwezigheid, en
+ * meldt het resultaat. Faalt `inleveren` nooit — een ontbrekende run is een
+ * waarschuwing, geen blokkade.
+ */
+function wachtOpCiRun(
+  repoDir: string,
+  branch: string,
+  sha: string,
+  prUrl: string,
+  opsMelding?: OpsMeldingConfig,
+): void {
+  kop('CI-run controleren');
+
+  // Eerste grace: run verschijnt normaal.
+  const eerste = peilCiRun(repoDir, branch, sha);
+  if (eerste === true) {
+    ok('CI-run gevonden voor de PR.');
+    return;
+  }
+  if (eerste === undefined) {
+    // Kon de CI-status niet meten (gh-storing). Niet her-triggeren: een close/reopen
+    // van een mogelijk gezonde PR is erger dan de meting overslaan (#392, #99).
+    waarschuwing(
+      `kon de CI-status niet bepalen voor ${sha} (gh-storing?) — vangnet overgeslagen, geen her-trigger.`,
+    );
+    return;
+  }
+
+  // Meting gelukt en geen run: één her-trigger via close/reopen.
+  waarschuwing(`geen CI-run gevonden voor ${sha} — her-trigger via close/reopen.`);
+  const hergetriggerd = herTriggerPr(repoDir, prUrl);
+
+  if (hergetriggerd) {
+    // Tweede grace na her-trigger.
+    const tweede = peilCiRun(repoDir, branch, sha);
+    if (tweede === true) {
+      ok('CI-run gevonden na her-trigger.');
+      return;
+    }
+    if (tweede === undefined) {
+      waarschuwing(
+        `kon de CI-status na her-trigger niet bepalen voor ${sha} (gh-storing?). Controleer PR ${prUrl} met de hand.`,
+      );
+      return;
+    }
+  }
+
+  // Geen run ondanks her-trigger (of mislukte her-trigger): waarschuw luid.
+  waarschuwing(
+    `geen CI-run na her-trigger voor PR ${prUrl} (SHA ${sha}). De PR kan BLOCKED blijven.`,
+  );
+
+  // Ops-room-melding (best-effort, #392 besluit 2).
+  if (opsMelding !== undefined) {
+    meldOps(
+      `⚠️ Geen CI-run na her-trigger: ${prUrl} (SHA ${sha}). De PR kan BLOCKED blijven in de merge-queue.`,
+      opsMelding.url,
+      opsMelding.token,
+    );
+  }
 }
 
 /**
@@ -331,6 +485,19 @@ export function inleveren(opties: InleverenOpties = {}): InleverenResultaat {
           : 'Kon geen PR aanmaken of vinden met gh.';
       throw new GebruikersFout(reden);
     }
+  }
+
+  // CI-run vangnet (#392): controleer of er een workflow-run is gestart voor de head-SHA.
+  // Draait vóór de board-update en de auto-merge-stap. Bij een nieuw geopende PR is er nog
+  // geen auto-merge, dus een eventuele close/reopen heeft daar geen bijwerking; bij een
+  // hergebruikte open PR zet de auto-merge-stap hierna auto-merge zo nodig (opnieuw).
+  const headSha = uitvoerVan('git', ['rev-parse', 'HEAD'], repoDir);
+  if (headSha === undefined) {
+    // Geen SHA = geen CI-controle. Niet stil overslaan: het doel van #392 is juist
+    // "geen stille BLOCKED-PR" — meld dus dat de controle niet kon draaien.
+    waarschuwing('kon de head-SHA niet bepalen — CI-run-controle overgeslagen.');
+  } else {
+    wachtOpCiRun(repoDir, branch, headSha, prUrl, opties.opsMelding);
   }
 
   // Review-bevindingen als PR-comment posten, zodat ze ook bij `waarschuw` zichtbaar
