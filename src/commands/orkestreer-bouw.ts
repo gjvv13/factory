@@ -6,6 +6,7 @@ import {
   appOpties,
   bordItems,
   ESCALATIE_LABEL,
+  FASTLANE_LABEL,
   haalLabelWeg,
   isBacklogRepo,
   kolomVan,
@@ -372,7 +373,8 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
     // Het epic erbij, als het item er een heeft: sinds #232 mag een slice gewoon
     // gebouwd worden, en dan wil je vóór het geld kost zien dat hij ergens bij hoort.
     const onder = item.ouder === undefined ? '' : ` (onder #${String(item.ouder)})`;
-    process.stdout.write(`  ${nummer} ${item.app.padEnd(12)} ${item.titel}${onder}\n`);
+    const prefix = item.labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+    process.stdout.write(`${prefix} ${nummer} ${item.app.padEnd(12)} ${item.titel}${onder}\n`);
   }
   if (geclaimd > 0) {
     // Zichtbaar maken wat er buiten de rij valt: een geclaimd item is niet vergeten
@@ -1863,8 +1865,9 @@ function verwijderBouwAgent(paden: OrkestratorPaden): void {
 /** De baan waarbinnen een bouw-run draait: gewoon of fastlane (#400). */
 export type BouwBaan = 'gewoon' | 'fastlane';
 
-/** Het label dat een `type:task` als fastlane markeert; alleen de mens zet dit. */
-export const FASTLANE_LABEL = 'fastlane';
+// FASTLANE_LABEL is gedefinieerd in board.ts — één bron van waarheid (#461).
+// Re-export zodat bestaande imports (tests) blijven werken.
+export { FASTLANE_LABEL };
 
 /**
  * Leest `--baan`: `gewoon` (default) of `fastlane`. Elke andere waarde is een fout;

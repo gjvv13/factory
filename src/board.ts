@@ -673,12 +673,20 @@ export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefin
   return bordItems(cwd)?.filter((item) => item.kolom === kolom);
 }
 
+/** Het label dat een item als fastlane markeert; alleen de mens zet dit (#461). */
+export const FASTLANE_LABEL = 'fastlane';
+
 /**
- * Sorteert op prioriteit → aangemaakt → issue. Items zonder prioriteit komen na
- * items mét prioriteit; onderling behouden ze hun FIFO-volgorde (#438).
+ * Sorteert op fastlane → prioriteit → aangemaakt → issue. Items met het label
+ * `fastlane` komen altijd eerst; binnen de fastlane-groep geldt de gewone
+ * volgorde. Items zonder prioriteit komen na items mét prioriteit; onderling
+ * behouden ze hun FIFO-volgorde (#438, #461).
  */
 export function sorteerOpPrioriteit(a: BacklogItem, b: BacklogItem): number {
+  const aFast = a.labels.includes(FASTLANE_LABEL) ? 0 : 1;
+  const bFast = b.labels.includes(FASTLANE_LABEL) ? 0 : 1;
   return (
+    aFast - bFast ||
     (a.prioriteit ?? Infinity) - (b.prioriteit ?? Infinity) ||
     a.aangemaakt.localeCompare(b.aangemaakt) ||
     a.issue - b.issue
