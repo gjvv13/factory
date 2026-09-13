@@ -815,4 +815,38 @@ describe('sorteerOpPrioriteit (#438)', () => {
     const gesorteerd = [...items].sort(sorteerOpPrioriteit);
     expect(gesorteerd.map((i) => i.issue)).toEqual([51, 119, 131]);
   });
+
+  // --- Fastlane-voorrang (#461) ---
+
+  it('plaatst fastlane-items vóór items zonder fastlane, ongeacht prioriteit', () => {
+    const gewoon = item({ issue: 1, prioriteit: 1 }); // hoogste prioriteit
+    const snel = item({ issue: 2, labels: ['fastlane'] }); // geen prioriteit maar fastlane
+    expect([gewoon, snel].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([2, 1]);
+  });
+
+  it('plaatst fastlane-items vóór items zonder fastlane, ongeacht aanmaakdatum', () => {
+    const oud = item({ issue: 1, aangemaakt: '2020-01-01T00:00:00Z' });
+    const nieuw = item({ issue: 2, aangemaakt: '2026-09-01T00:00:00Z', labels: ['fastlane'] });
+    expect([oud, nieuw].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([2, 1]);
+  });
+
+  it('sorteert meerdere fastlane-items onderling op prioriteit → aangemaakt → issue', () => {
+    const a = item({ issue: 10, labels: ['fastlane'], prioriteit: 5 });
+    const b = item({ issue: 20, labels: ['fastlane'], prioriteit: 3 });
+    const c = item({ issue: 30, labels: ['fastlane'], aangemaakt: '2026-01-01T00:00:00Z' });
+    const d = item({ issue: 40, labels: ['fastlane'], aangemaakt: '2026-02-01T00:00:00Z' });
+    // b (prio 3) < a (prio 5) < c (geen prio, vroeger) < d (geen prio, later)
+    expect([d, a, c, b].sort(sorteerOpPrioriteit).map((i) => i.issue)).toEqual([20, 10, 30, 40]);
+  });
+
+  it('laat items zonder fastlane in hun bestaande volgorde', () => {
+    // Zelfde als de bestaande FIFO-test, maar nu met een fastlane-item erbij om te
+    // bevestigen dat de gewone groep niet verstoord wordt.
+    const snel = item({ issue: 99, labels: ['fastlane'], aangemaakt: '2026-09-01T00:00:00Z' });
+    const a = item({ issue: 51, aangemaakt: '2026-08-09T00:00:00Z' });
+    const b = item({ issue: 119, aangemaakt: '2026-08-18T00:00:00Z' });
+    const c = item({ issue: 131, aangemaakt: '2026-08-19T00:00:00Z' });
+    const gesorteerd = [c, a, snel, b].sort(sorteerOpPrioriteit);
+    expect(gesorteerd.map((i) => i.issue)).toEqual([99, 51, 119, 131]);
+  });
 });

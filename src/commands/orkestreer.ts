@@ -18,6 +18,7 @@ import {
   bordItems,
   escalaties,
   ESCALATIE_LABEL,
+  FASTLANE_LABEL,
   kolomVan,
   isBacklogRepo,
   haalLabelWeg,
@@ -443,7 +444,8 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
   }
   for (const item of wachtrij) {
     const nummer = `#${String(item.issue)}`.padEnd(6);
-    process.stdout.write(`  ${nummer} ${item.app.padEnd(12)} ${item.titel}\n`);
+    const prefix = item.labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+    process.stdout.write(`${prefix} ${nummer} ${item.app.padEnd(12)} ${item.titel}\n`);
   }
 
   const eerste = kiesOpdracht(wachtrij, opties.issue, cwd);
@@ -1286,7 +1288,8 @@ function toonLijst(items: readonly BacklogItem[]): void {
 
 function toonRegel(item: BacklogItem): void {
   const nummer = `#${String(item.issue)}`.padEnd(6);
-  process.stdout.write(`  ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`);
+  const prefix = item.labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+  process.stdout.write(`${prefix} ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`);
 }
 
 // --- antwoord: de escalatie beantwoorden -------------------------------------

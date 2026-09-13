@@ -95,11 +95,12 @@ describe('de bouw-wachtrij', () => {
 
     const rij = bouwWachtrij(bordItems() ?? []);
 
-    // Oudste eerst: #177 (4 aug), #91 (5 aug), #106 (6 aug), #250 (7 aug), #301 (8 aug),
-    // #126 (10 aug), #182 (19 aug). En verder niets: #164 is een epic, #149 draagt
-    // escalatie, #200 heeft geen App, #87 staat al op Bouwen, #119 staat in een andere
+    // Fastlane eerst (#461), daarna oudste eerst: #301 (fastlane, 8 aug), dan
+    // #177 (4 aug), #91 (5 aug), #106 (6 aug), #250 (7 aug), #126 (10 aug),
+    // #182 (19 aug). En verder niets: #164 is een epic, #149 draagt escalatie,
+    // #200 heeft geen App, #87 staat al op Bouwen, #119 staat in een andere
     // kolom, #78 is gesloten.
-    expect(rij.map((item) => item.issue)).toEqual([177, 91, 106, 250, 301, 126, 182]);
+    expect(rij.map((item) => item.issue)).toEqual([301, 177, 91, 106, 250, 126, 182]);
   });
 
   it('laat het epic zelf staan, maar neemt zijn slice wel mee', () => {
@@ -176,15 +177,12 @@ describe('orkestreer --soort bouw --dry', () => {
 
     await orkestreerBouw({ dry: true, werkplaatsWortel: '/Users/iemand/OrkestratorWerk' });
 
-    // De kop van de rij is #177: een slice onder epic #169, dat zonder Status-waarde
-    // buiten de lezing valt. Sinds #232 is dat geen reden om hem over te slaan, dus
-    // draait de hele doorloop hier op precies het geval dat eerst uitgesloten werd.
+    // De kop van de rij is #301: een fastlane-item dat door de sorteervoorrang (#461)
+    // vóór alle andere items komt, ondanks een latere aanmaakdatum.
     const tekst = uitvoer.join('');
-    expect(tekst).toContain('#177');
-    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/177');
-    expect(tekst).toContain('slice/177-1');
-    // Het epic staat erbij, zodat je vóór het geld kost ziet dat het een slice is.
-    expect(tekst).toContain('(onder #169)');
+    expect(tekst).toContain('#301');
+    expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/301');
+    expect(tekst).toContain('slice/301-1');
     // Zonder instellingenbestand is het bouwbudget de default van $10 + $3 review.
     expect(tekst).toContain('$10 bouw');
     expect(tekst).toContain('$3 review');
@@ -916,16 +914,16 @@ describe('orkestreer --soort bouw --eenmalig', () => {
     expect(claim).toBeGreaterThanOrEqual(0);
     expect(claim).toBeLessThan(werker);
 
-    // Inleveren zonder fastlane: geen geenAutomerge-vlag (#573). De label-check in
-    // `inleveren` bepaalt of auto-merge aangaat; de orkestrator stuurt niet meer mee.
+    // De kop van de rij is #301 (fastlane-voorrang, #461). Inleveren zonder fastlane-
+    // vlag: de label-check in `inleveren` bepaalt of auto-merge aangaat (#573).
     // `externReview` zit erbij (#644): het reviewer-verdict gaat mee naar inleveren
     // zodat de gate niet dubbel draait. `toMatchObject` omdat de exacte review-inhoud
     // al in code-review.test.ts getest wordt.
     expect(geleverd).toHaveLength(1);
     expect(geleverd[0]).toMatchObject({
-      cwd: path.join(wortel, 'factory-wt', '177'),
-      // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/177 1".
-      titel: '#177 — Slice onder een epic dat geen Status heeft',
+      cwd: path.join(wortel, 'factory-wt', '301'),
+      // Zonder titel raadt `gh --fill` er een uit de branchnaam: "slice/301 1".
+      titel: '#301 — Snelle bugfix voor de CLI',
     });
     // Het reviewer-verdict wordt meegegeven zodat inleveren geen eigen review draait (#644).
     expect(geleverd[0]).toHaveProperty('externReview');
