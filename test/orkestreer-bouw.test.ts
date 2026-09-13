@@ -11,7 +11,6 @@ import {
   bouwWachtrij,
   bouwWerkplek,
   bronAppsVan,
-  FASTLANE_LABEL,
   fastlaneWachtrij,
   leesBaan,
   leesIssue,
@@ -27,7 +26,7 @@ import {
 import * as orkestreerModule from '../src/commands/orkestreer.js';
 import * as werkplaatsModule from '../src/werkplaats.js';
 import * as werkplekModule from '../src/commands/werkplek.js';
-import { bordItems } from '../src/board.js';
+import { bordItems, FASTLANE_LABEL } from '../src/board.js';
 import {
   leesStaat,
   standaardPaden,
@@ -183,6 +182,9 @@ describe('orkestreer --soort bouw --dry', () => {
     expect(tekst).toContain('#301');
     expect(tekst).toContain('/Users/iemand/OrkestratorWerk/factory-wt/301');
     expect(tekst).toContain('slice/301-1');
+    // De 🏎-indicator staat vóór het fastlane-item (#461, criterium 5). Zonder deze
+    // assertie kan de prefix stil terug naar twee spaties zonder dat de poort rood wordt.
+    expect(tekst).toContain('🏎');
     // Zonder instellingenbestand is het bouwbudget de default van $10 + $3 review.
     expect(tekst).toContain('$10 bouw');
     expect(tekst).toContain('$3 review');

@@ -1,4 +1,10 @@
-import { bordItems, escalaties, zetPrioriteit, type BacklogItem } from '../board.js';
+import {
+  bordItems,
+  escalaties,
+  fastlanePrefix,
+  zetPrioriteit,
+  type BacklogItem,
+} from '../board.js';
 import { GebruikersFout, kop, ok } from '../shell.js';
 
 /**
@@ -54,9 +60,14 @@ function toonRij(titel: string, items: readonly BacklogItem[]): void {
     return;
   }
   for (const item of items) {
+    // 🏎 vóór een fastlane-item (#461): anders staat het door de fastlane-voorrang
+    // onverklaard bovenaan een lijst die zich als prioriteitslijst presenteert.
+    const prefix = fastlanePrefix(item.labels);
     const nummer = `#${String(item.issue)}`.padEnd(6);
     const prio = item.prioriteit === undefined ? '  —' : String(item.prioriteit).padStart(3);
-    process.stdout.write(`  ${prio}  ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`);
+    process.stdout.write(
+      `${prefix}${prio}  ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`,
+    );
   }
 }
 

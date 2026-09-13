@@ -18,7 +18,7 @@ import {
   bordItems,
   escalaties,
   ESCALATIE_LABEL,
-  FASTLANE_LABEL,
+  fastlanePrefix,
   kolomVan,
   isBacklogRepo,
   haalLabelWeg,
@@ -444,7 +444,7 @@ export async function orkestreer(opties: OrkestreerOpties = {}): Promise<void> {
   }
   for (const item of wachtrij) {
     const nummer = `#${String(item.issue)}`.padEnd(6);
-    const prefix = item.labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+    const prefix = fastlanePrefix(item.labels);
     process.stdout.write(`${prefix} ${nummer} ${item.app.padEnd(12)} ${item.titel}\n`);
   }
 
@@ -1288,7 +1288,7 @@ function toonLijst(items: readonly BacklogItem[]): void {
 
 function toonRegel(item: BacklogItem): void {
   const nummer = `#${String(item.issue)}`.padEnd(6);
-  const prefix = item.labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+  const prefix = fastlanePrefix(item.labels);
   process.stdout.write(`${prefix} ${nummer} ${(item.app ?? '?').padEnd(12)} ${item.titel}\n`);
 }
 

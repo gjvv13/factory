@@ -6,6 +6,8 @@ import {
   alleKinderenDicht,
   appOpties,
   bordItems,
+  fastlanePrefix,
+  FASTLANE_LABEL,
   isBacklogRepo,
   issuesUitBereik,
   issueUitBranch,
@@ -80,6 +82,18 @@ function isVerplaatsing(aanroep: ProcesAanroep): boolean {
 function bepalerMet(huidig?: string): UitkomstBepaler {
   return (aanroep) => (isOpzoeking(aanroep) ? { stdout: opzoekAntwoord(huidig) } : {});
 }
+
+describe('fastlanePrefix (#461)', () => {
+  it('geeft de 🏎-indicator bij een fastlane-label', () => {
+    expect(fastlanePrefix([FASTLANE_LABEL])).toBe('🏎');
+    expect(fastlanePrefix(['type:bug', FASTLANE_LABEL])).toBe('🏎');
+  });
+
+  it('geeft twee spaties zonder fastlane-label (uitlijning blijft gelijk)', () => {
+    expect(fastlanePrefix([])).toBe('  ');
+    expect(fastlanePrefix(['type:task'])).toBe('  ');
+  });
+});
 
 describe('issueUitBranch', () => {
   it('herkent de slice-vorm', () => {

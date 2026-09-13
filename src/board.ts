@@ -677,6 +677,16 @@ export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefin
 export const FASTLANE_LABEL = 'fastlane';
 
 /**
+ * De regel-indicator vóór een wachtrij-item (#461): `🏎` voor een fastlane-item,
+ * anders twee spaties zodat de uitlijning gelijk blijft. Eén bron voor alle
+ * wachtrijweergaven (refine-`--dry`, bouw-`--dry`, `status`, `prioriteit`), zodat
+ * de indicator niet per plek uiteenloopt.
+ */
+export function fastlanePrefix(labels: readonly string[]): string {
+  return labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
+}
+
+/**
  * Sorteert op fastlane → prioriteit → aangemaakt → issue. Items met het label
  * `fastlane` komen altijd eerst; binnen de fastlane-groep geldt de gewone
  * volgorde. Items zonder prioriteit komen na items mét prioriteit; onderling
