@@ -37,3 +37,41 @@ jobs:
 
       # De factory toetst zichzelf met haar eigen poort.
       - run: node dist/cli.js verify
+
+  # Agent-rooktest (#673): toetst discovery, boundary en symlink-resolutie
+  # van de agent-definities. Draait alleen op push naar main als bestanden
+  # onder agents/ of .claude/agents/ veranderd zijn — te duur en auth-gebonden
+  # voor elke PR. Gebruikt de mini-runner waar claude geïnstalleerd en
+  # geauthenticeerd is.
+  agent-rooktest:
+    runs-on: mini
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Controleer of agent-definities veranderd zijn
+        id: changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -qE '^(agents/|\.claude/agents/)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v6
+        if: steps.changes.outputs.changed == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.changes.outputs.changed == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.changed == 'true'
+
+      - run: pnpm test:agent-rooktest
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          FACTORY_AGENT_ROOKTEST: '1'
+        timeout-minutes: 2
