@@ -70,6 +70,11 @@ jobs:
               echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
               exit 1
             fi
+            # Propageer de geremedieerde node naar de volgende stappen: elke run:-stap start
+            # met een verse shell, dus zonder deze regel blijft de bump op de oude node en
+            # doet de remediatie niets (#669-review).
+            nvm use "$verwacht"
+            echo "$(dirname "$(command -v node)")" >> "$GITHUB_PATH"
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"

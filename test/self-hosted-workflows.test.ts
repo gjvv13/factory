@@ -33,6 +33,10 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
       expect(mini).toContain('nvm install');
       // Een mislukte nvm install is alsnog een harde fout.
       expect(mini).toContain('exit 1');
+      // De geremedieerde node moet naar de volgende stappen propageren; anders draait de
+      // install (en build/deploy) alsnog op de oude node en is de remediatie zinloos
+      // omdat elke run:-stap in een verse shell start (#669-review).
+      expect(mini).toContain('>> "$GITHUB_PATH"');
     });
   }
 

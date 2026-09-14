@@ -73,6 +73,11 @@ jobs:
               echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
               exit 1
             fi
+            # Propageer de geremedieerde node naar de volgende stappen: elke run:-stap start
+            # met een verse shell, dus zonder deze regel blijven install/build/deploy op de
+            # oude node en doet de remediatie niets (#669-review).
+            nvm use "$verwacht"
+            echo "$(dirname "$(command -v node)")" >> "$GITHUB_PATH"
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"
@@ -83,7 +88,7 @@ jobs:
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          if pnpm install --frozen-lockfile 2>install_stderr.txt; then exit 0; fi
+          if pnpm install --frozen-lockfile 2>install_stderr.txt; then cat install_stderr.txt >&2; exit 0; fi
           cat install_stderr.txt >&2
           if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
             echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
@@ -197,6 +202,11 @@ jobs:
               echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
               exit 1
             fi
+            # Propageer de geremedieerde node naar de volgende stappen: elke run:-stap start
+            # met een verse shell, dus zonder deze regel blijven install/build/deploy op de
+            # oude node en doet de remediatie niets (#669-review).
+            nvm use "$verwacht"
+            echo "$(dirname "$(command -v node)")" >> "$GITHUB_PATH"
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"
@@ -207,7 +217,7 @@ jobs:
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          if pnpm install --frozen-lockfile 2>install_stderr.txt; then exit 0; fi
+          if pnpm install --frozen-lockfile 2>install_stderr.txt; then cat install_stderr.txt >&2; exit 0; fi
           cat install_stderr.txt >&2
           if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
             echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
