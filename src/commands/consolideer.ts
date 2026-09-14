@@ -133,19 +133,12 @@ export function leesVoorstel(
   paden: OrkestratorPaden,
   nu: Date = new Date(Date.now()),
 ): ConsolidatieVoorstel | undefined {
-  if (!existsSync(paden.consolideerVoorstelPad)) return undefined;
-  let ruw: unknown;
-  try {
-    ruw = JSON.parse(readFileSync(paden.consolideerVoorstelPad, 'utf8')) as unknown;
-  } catch {
+  const voorstel = leesVoorstelRuw(paden);
+  if (voorstel === undefined) return undefined;
+  if (nu.getTime() - new Date(voorstel.aangemaakt).getTime() >= VOORSTEL_VERVALT_MS) {
     return undefined;
   }
-  const gelezen = voorstelSchema.safeParse(ruw);
-  if (!gelezen.success) return undefined;
-  if (nu.getTime() - new Date(gelezen.data.aangemaakt).getTime() >= VOORSTEL_VERVALT_MS) {
-    return undefined;
-  }
-  return gelezen.data;
+  return voorstel;
 }
 
 /**
@@ -186,6 +179,29 @@ export function eersteOntbrekendPad(voorstel: ConsolidatieVoorstel): string | un
   return undefined;
 }
 
+/**
+ * Controleert of elk pad uit het voorstel binnen `geheugenMap` blijft. Het voorstel
+ * komt uit een model-run; een `..`- of absoluut pad zou anders bestanden búiten de
+ * geheugenmap kunnen verwijderen of overschrijven. `factory brief` toont alleen
+ * aantallen en de samenvatting, niet de paden zelf, dus de goedkeurder ziet zo'n
+ * ontsnapping niet — daarom weigert de uitvoering ze mechanisch. Geeft het eerste
+ * ontsnappende pad terug, of undefined als alles binnen de map blijft.
+ */
+export function eersteOntsnappendPad(voorstel: ConsolidatieVoorstel): string | undefined {
+  const binnen = (relatiefPad: string): boolean => {
+    const rel = path.relative(
+      voorstel.geheugenMap,
+      path.resolve(voorstel.geheugenMap, relatiefPad),
+    );
+    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  for (const actie of voorstel.acties) {
+    if (!binnen(actie.pad)) return actie.pad;
+    if (actie.nieuwePad !== undefined && !binnen(actie.nieuwePad)) return actie.nieuwePad;
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Voorstel uitvoeren
 // ---------------------------------------------------------------------------
@@ -195,6 +211,16 @@ export function eersteOntbrekendPad(voorstel: ConsolidatieVoorstel): string | un
  * beoordeling — puur bestandsmanipulatie.
  */
 export function voerVoorstelUit(voorstel: ConsolidatieVoorstel): void {
+  // Vangnet vóór elke mutatie: geen enkel pad mag buiten de geheugenmap wijzen.
+  // Alles eerst toetsen, zodat een ontsnappend pad verderop in de lijst niet pas ná
+  // andere (al uitgevoerde) verwijderingen opvalt.
+  const ontsnapt = eersteOntsnappendPad(voorstel);
+  if (ontsnapt !== undefined) {
+    throw new GebruikersFout(
+      `Pad "${ontsnapt}" wijst buiten de geheugenmap (${voorstel.geheugenMap}) — het voorstel wordt geweigerd.`,
+    );
+  }
+
   for (const actie of voorstel.acties) {
     const absoluut = path.resolve(voorstel.geheugenMap, actie.pad);
     switch (actie.soort) {
@@ -228,7 +254,7 @@ export function voerVoorstelUit(voorstel: ConsolidatieVoorstel): void {
 
   // MEMORY.md hergeneren
   const memoryPad = path.join(voorstel.geheugenMap, 'MEMORY.md');
-  writeFileSync(memoryPad, voorstel.indexRegels.join('\n'));
+  writeFileSync(memoryPad, `${voorstel.indexRegels.join('\n')}\n`);
   ok('MEMORY.md hergenereerd.');
 }
 
