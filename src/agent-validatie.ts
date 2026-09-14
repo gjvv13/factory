@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, readFileSync, readlinkSync, existsSync } from 'node:fs';
+import { lstatSync, readdirSync, readlinkSync, existsSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { agentsDir } from './paths.js';
 import { leesAgentGrenzen } from './agent-definitie.js';
@@ -11,6 +11,11 @@ export interface AgentValidatieResultaat {
   readonly bestand: string;
   readonly ok: boolean;
   readonly fout?: string;
+}
+
+/** Leesbare boodschap uit een onbekende fout. */
+function boodschap(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -38,7 +43,7 @@ export function valideerAgentDefinities(): AgentValidatieResultaat[] {
       resultaten.push({
         bestand,
         ok: false,
-        fout: `Parse-fout: ${err instanceof Error ? err.message : String(err)}`,
+        fout: `Parse-fout: ${boodschap(err)}`,
       });
       continue;
     }
@@ -53,15 +58,13 @@ export function valideerAgentDefinities(): AgentValidatieResultaat[] {
       continue;
     }
 
-    // (c) name:-veld komt overeen met bestandsnaam?
-    const inhoud = readFileSync(path.join(agentsDir, bestand), 'utf8');
-    const nameMatch = /^name:\s*(.+)$/m.exec(inhoud);
-    const nameVeld = nameMatch?.[1]?.trim();
-    if (nameVeld !== naam) {
+    // (c) name:-veld (uit het frontmatter, quotes gestript door leesAgentGrenzen)
+    //     komt overeen met de bestandsnaam?
+    if (grenzen.name !== naam) {
       resultaten.push({
         bestand,
         ok: false,
-        fout: `name-veld '${nameVeld ?? '(ontbreekt)'}' komt niet overeen met bestandsnaam '${naam}'`,
+        fout: `name-veld '${grenzen.name ?? '(ontbreekt)'}' komt niet overeen met bestandsnaam '${naam}'`,
       });
       continue;
     }
@@ -76,27 +79,56 @@ export function valideerAgentDefinities(): AgentValidatieResultaat[] {
  * Scant een map recursief en geeft paden terug die symlinks zijn waarvan het
  * doel niet bestaat (dode symlinks).
  *
- * Gebruikt `lstatSync` om symlinks te herkennen zonder ze te volgen, en
- * `readlinkSync` + `existsSync` om te controleren of het doel bereikbaar is.
+ * - `lstatSync` herkent symlinks zonder ze te volgen; `readlinkSync` + `existsSync`
+ *   bepalen of het doel bereikbaar is.
+ * - Er wordt alleen afgedaald in échte directories (via `statSync`, dat een levende
+ *   symlink naar zijn doel volgt) — dus geen ENOTDIR-als-controlflow.
+ * - Een cycle-guard op gerealiseerde paden voorkomt oneindige recursie bij een
+ *   symlink-lus (bijv. een link naar een voorouder-map).
+ * - Een map/pad dat niet gelezen kan worden is "kon niet controleren" en wordt als
+ *   zichtbare fout gegooid — nooit stil als "niets gevonden" (coding-guidelines).
  */
 export function zoekDodeSymlinks(dir: string): string[] {
   const dodeLinks: string[] = [];
+  const bezocht = new Set<string>();
 
   function scan(map: string): void {
+    // Cycle-guard: resolveer naar het echte pad en sla over als we hier al waren.
+    let echtPad: string;
+    try {
+      echtPad = realpathSync(map);
+    } catch (err) {
+      throw new Error(`kon '${map}' niet resolven bij de symlink-scan: ${boodschap(err)}`, {
+        cause: err,
+      });
+    }
+    if (bezocht.has(echtPad)) return;
+    bezocht.add(echtPad);
+
     let items: string[];
     try {
       items = readdirSync(map);
-    } catch {
-      // Map niet leesbaar — overslaan (geen fout, kan door permissies komen).
-      return;
+    } catch (err) {
+      throw new Error(`kon map '${map}' niet lezen bij de symlink-scan: ${boodschap(err)}`, {
+        cause: err,
+      });
     }
 
     for (const item of items) {
       const volledigPad = path.join(map, item);
-      const stat = lstatSync(volledigPad);
+
+      let stat;
+      try {
+        stat = lstatSync(volledigPad);
+      } catch (err) {
+        throw new Error(
+          `kon '${volledigPad}' niet stat'en bij de symlink-scan: ${boodschap(err)}`,
+          { cause: err },
+        );
+      }
 
       if (stat.isSymbolicLink()) {
-        // Resoleer het doel relatief aan de map waar de symlink staat.
+        // Resolveer het doel relatief aan de map waar de symlink staat.
         const doel = readlinkSync(volledigPad);
         const absoluutDoel = path.isAbsolute(doel)
           ? doel
@@ -104,19 +136,14 @@ export function zoekDodeSymlinks(dir: string): string[] {
 
         if (!existsSync(absoluutDoel)) {
           dodeLinks.push(volledigPad);
-          // Niet recursief in een dode symlink stappen.
+          // Dode symlink: doel bestaat niet, niet verder afdalen.
           continue;
         }
       }
 
-      // Recursief afdalen: echte directories altijd, symlinks naar directories ook
-      // (de dode symlinks zijn hierboven al afgevangen via de continue).
-      // readdirSync op iets dat geen map is gooit, wat de try/catch hierboven vangt.
-      if (stat.isDirectory()) {
-        scan(volledigPad);
-      } else if (stat.isSymbolicLink()) {
-        // De symlink is levend (anders hadden we gecontinued). Daal af als het
-        // doel een directory is — readdirSync faalt anders vanzelf in de try/catch.
+      // Daal alleen af in échte directories. `statSync` volgt een levende symlink naar
+      // zijn doel, dus dit dekt echte mappen én symlinks-naar-map in één tak.
+      if (statSync(volledigPad).isDirectory()) {
         scan(volledigPad);
       }
     }

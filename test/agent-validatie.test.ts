@@ -30,13 +30,15 @@ describe('valideerAgentDefinities', () => {
     }
   });
 
-  it('vindt alle vier de rollen in de resultaten', () => {
+  it('laat geen enkele agent-definitie als ongeldig door', () => {
+    // Niet alleen de vier bekende rollen: ook een later toegevoegde `agents/*.md`
+    // met kapot frontmatter moet de poort rood maken (#552-review).
     const resultaten = valideerAgentDefinities();
-    const namen = resultaten.map((r) => path.basename(r.bestand, '.md'));
-
-    for (const rol of VERWACHTE_ROLLEN) {
-      expect(namen, `Rol '${rol}' ontbreekt in agents/`).toContain(rol);
-    }
+    const ongeldig = resultaten.filter((r) => !r.ok);
+    expect(
+      ongeldig,
+      `Ongeldige definities: ${ongeldig.map((r) => `${r.bestand} (${r.fout ?? '?'})`).join(', ')}`,
+    ).toEqual([]);
   });
 });
 
@@ -80,6 +82,17 @@ describe('zoekDodeSymlinks', () => {
       const resultaat = zoekDodeSymlinks(tmpDir);
 
       expect(resultaat).toContain(dodeLink);
+    });
+
+    it('loopt niet oneindig door bij een symlink-lus naar een voorouder-map', () => {
+      // Een levende symlink die terugwijst naar een voorouder maakte de scan
+      // vroeger oneindig recursief (RangeError). De cycle-guard vangt dat af.
+      const submap = path.join(tmpDir, 'dieper');
+      mkdirSync(submap);
+      symlinkSync(tmpDir, path.join(submap, 'lus')); // lus → voorouder
+
+      expect(() => zoekDodeSymlinks(tmpDir)).not.toThrow();
+      expect(zoekDodeSymlinks(tmpDir)).toEqual([]);
     });
   });
 });

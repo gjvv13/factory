@@ -13,9 +13,16 @@ import { agentsDir } from './paths.js';
  * de definitie de enige bron van waarheid én blijft de grens hard.
  */
 export interface AgentGrenzen {
+  readonly name: string | undefined;
   readonly allowedTools: readonly string[];
   readonly disallowedTools: readonly string[];
   readonly model: string | undefined;
+}
+
+/** Strip één paar omringende quotes (`'` of `"`) van een YAML-scalar. */
+function stripQuotes(waarde: string): string {
+  const m = /^(['"])([\s\S]*)\1$/.exec(waarde);
+  return m?.[2] ?? waarde;
 }
 
 /**
@@ -42,8 +49,12 @@ export function leesAgentGrenzen(naam: string): AgentGrenzen {
   }
 
   const modelMatch = /^model:\s*(.+)$/m.exec(frontmatter);
+  // Toets bewust op het frontmatter-blok, niet op de hele inhoud: een `name:` in de
+  // markdown-body mag een ontbrekend frontmatter-`name` niet maskeren (#552-review).
+  const nameMatch = /^name:\s*(.+)$/m.exec(frontmatter);
 
   return {
+    name: nameMatch?.[1] === undefined ? undefined : stripQuotes(nameMatch[1].trim()),
     allowedTools: leesLijst('allowedTools'),
     disallowedTools: leesLijst('disallowedTools'),
     model: modelMatch?.[1]?.trim(),
