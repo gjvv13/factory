@@ -1,0 +1,38 @@
+name: sluit-ouder
+
+# Sluit een ouder-epic automatisch zodra zijn laatste sub-issue sluit (#627).
+#
+# Trigger: elk `issues: closed` event. De CLI checkt of het kind een ouder heeft
+# en of alle sub-issues dicht zijn; zo ja, sluit hij de ouder (met comment) en
+# recurseert door de keten. Geen PROJECT_TOKEN nodig — het ambient GITHUB_TOKEN
+# volstaat voor issue-lees/schrijfoperaties binnen dezelfde repo.
+#
+# Soft-fail: een mislukt sluitpoging is een waarschuwing, geen harde fout.
+# De native GitHub Projects-workflow "Item gesloten → Done" verplaatst het
+# gesloten issue naar Done op het board — daar hoeft deze workflow niets voor
+# te doen.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  sluit-ouder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Dependencies installeren
+        run: pnpm install --frozen-lockfile
+      - name: Ouder-epic controleren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node dist/cli.js sluit-ouder "${{ github.event.issue.number }}" \
+            || echo "::warning::kon ouder-epic niet controleren voor #${{ github.event.issue.number }}"
