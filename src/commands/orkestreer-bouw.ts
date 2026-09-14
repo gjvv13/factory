@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   appOpties,
+  ATTENDED_LABEL,
   bordItems,
   ESCALATIE_LABEL,
   FASTLANE_LABEL,
@@ -157,7 +158,7 @@ export function bouwWachtrij(items: readonly BacklogItem[]): Bouwitem[] {
 
 /** Waarom een item niet in de bouw-wachtrij staat. */
 export interface BuitenDeRij {
-  readonly grond: 'kolom' | 'soort' | 'escalatie' | 'geen-app';
+  readonly grond: 'kolom' | 'soort' | 'escalatie' | 'geen-app' | 'attended';
   /** Eén zin, bedoeld om achter "#123 staat niet in de bouw-wachtrij: " te zetten. */
   readonly zin: string;
 }
@@ -192,6 +193,14 @@ export function redenBuitenDeRij(item: BacklogItem): BuitenDeRij | undefined {
   if (item.app === undefined || item.app === '') {
     return { grond: 'geen-app', zin: 'het heeft geen App-veld, dus geen code om te lezen' };
   }
+  // Laatste grond: een verder-bouwbaar item dat expliciet attended hoort. Een expliciete
+  // `--issue`-run overruled dit in `kiesItem` — dat ís de attended bouw.
+  if (item.labels.includes(ATTENDED_LABEL)) {
+    return {
+      grond: 'attended',
+      zin: `het draagt het label ${ATTENDED_LABEL} — bouw dit attended met \`--issue\``,
+    };
+  }
   return undefined;
 }
 
@@ -219,6 +228,12 @@ export function kiesItem(
   const inLezing = alles.find((item) => item.issue === issue);
   if (inLezing !== undefined) {
     const uitkomst = reden(inLezing);
+    // Een expliciete `--issue`-run ís de attended bouw: als het item alléén om het
+    // attended-label buiten de rij valt, bouwen we het tóch. `grond: 'attended'` wordt
+    // pas gezet nadat kolom/soort/escalatie/app zijn getoetst, dus de App staat vast.
+    if (uitkomst?.grond === 'attended') {
+      return { ...inLezing, app: inLezing.app ?? '' };
+    }
     throw new GebruikersFout(
       `#${String(issue)} staat niet in de bouw-wachtrij: ${uitkomst?.zin ?? 'onbekende reden'}.`,
     );
@@ -1886,6 +1901,12 @@ export function redenBuitenFastlane(item: BacklogItem): BuitenDeRij | undefined 
   }
   if (item.app === undefined || item.app === '') {
     return { grond: 'geen-app', zin: 'het heeft geen App-veld, dus geen code om te lezen' };
+  }
+  if (item.labels.includes(ATTENDED_LABEL)) {
+    return {
+      grond: 'attended',
+      zin: `het draagt het label ${ATTENDED_LABEL} — bouw dit attended met \`--issue\``,
+    };
   }
   // Child-slices (sub-issues van een epic) zijn uitgesloten: die horen in de
   // geordende gewone baan (#397, ADR 005).

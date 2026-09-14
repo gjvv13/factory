@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   alleKinderenDicht,
   appOpties,
+  ATTENDED_LABEL,
   bordItems,
   fastlanePrefix,
   FASTLANE_LABEL,
@@ -92,6 +93,11 @@ describe('fastlanePrefix (#461)', () => {
   it('geeft twee spaties zonder fastlane-label (uitlijning blijft gelijk)', () => {
     expect(fastlanePrefix([])).toBe('  ');
     expect(fastlanePrefix(['type:task'])).toBe('  ');
+  });
+
+  it('geeft de ✋-indicator bij een attended-label — ook vóór fastlane', () => {
+    expect(fastlanePrefix([ATTENDED_LABEL])).toBe('✋');
+    expect(fastlanePrefix(['type:task', ATTENDED_LABEL, FASTLANE_LABEL])).toBe('✋');
   });
 });
 
