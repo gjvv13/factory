@@ -152,7 +152,8 @@ describe('promote', () => {
   it('stopt bij de eerste fout en raakt de omgeving daarna niet meer aan', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) =>
-      a.argumenten.includes('install') ? { code: 1 } : {},
+      // Laat beide installs falen (de eerste frozen, de retry ook) met een generieke fout.
+      a.argumenten.includes('install') ? { code: 1, stderr: 'generic error' } : {},
     );
     stelUitvoerderIn(uitvoerder);
 
@@ -162,6 +163,33 @@ describe('promote', () => {
     expect(aanroepen.some((a) => a.argumenten.includes('migrate'))).toBe(false);
     expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('vangt lockfile-drift op en herhaalt zonder --frozen-lockfile (#669)', async () => {
+    process.chdir(maakApp());
+    let installatieNummer = 0;
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) => {
+      if (a.argumenten.includes('install')) {
+        installatieNummer += 1;
+        // Eerste install: lockfile-drift. Tweede install (zonder --frozen-lockfile): slaagt.
+        if (installatieNummer === 1) {
+          return { code: 1, stderr: 'ERR_PNPM_OUTDATED_LOCKFILE Cannot install' };
+        }
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+
+    await promote('prod', 'v1.0.0', { ja: true });
+
+    const installs = aanroepen.filter((a) => a.argumenten.includes('install'));
+    expect(installs).toHaveLength(2);
+    // Eerste poging: met --frozen-lockfile.
+    expect(installs[0]?.argumenten).toContain('--frozen-lockfile');
+    // Tweede poging: zonder --frozen-lockfile.
+    expect(installs[1]?.argumenten).not.toContain('--frozen-lockfile');
+    // De rest van de pipeline draaide wel door.
+    expect(aanroepen.some((a) => a.argumenten.includes('build'))).toBe(true);
   });
 
   it('breekt af als de nieuwe versie vooraf niet gezond wordt, zonder de omgeving aan te raken', async () => {
