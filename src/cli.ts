@@ -3,6 +3,7 @@ import { afronden } from './commands/afronden.js';
 import { backup } from './commands/backup.js';
 import { board } from './commands/board.js';
 import { brief } from './commands/brief.js';
+import { consolideer } from './commands/consolideer.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
@@ -70,6 +71,8 @@ const HULP = `factory — pipeline van idee tot productie
   factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
   factory brief                          beslis-gericht overzicht over alle apps (regie-brief, #404)
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
+  factory consolideer <--dry|--voer-uit>  geheugenconsolidatie: voorstel genereren of doorvoeren
+  factory consolideer <--installeer|--verwijder>  de LaunchAgent die --dry elke maandag om 09:00 draait
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
 `;
 
@@ -259,6 +262,18 @@ async function main(argumenten: string[]): Promise<void> {
     case 'brief':
       brief();
       return;
+    case 'consolideer': {
+      const { schakelaars: consSchakelaars } = leesArgumenten(rest, {
+        schakelaars: ['--dry', '--voer-uit', '--installeer', '--verwijder'],
+      });
+      await consolideer({
+        dry: consSchakelaars.has('--dry'),
+        voerUit: consSchakelaars.has('--voer-uit'),
+        installeer: consSchakelaars.has('--installeer'),
+        verwijder: consSchakelaars.has('--verwijder'),
+      });
+      return;
+    }
     case 'board': {
       const { positioneel } = leesArgumenten(rest);
       board(positioneel[0], positioneel[1]);
