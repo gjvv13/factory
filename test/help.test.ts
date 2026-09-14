@@ -44,7 +44,10 @@ describe('CLAUDE.md', () => {
     // `heeft-migratie` is een interne poort voor de workflow, geen commando dat je
     // zelf draait; die hoort bewust niet in de tabel.
     const ontbreekt = uitHulp.filter(
-      (naam) => naam !== 'heeft-migratie' && !claude.includes(`\`factory ${naam ?? ''}`),
+      (naam) =>
+        naam !== 'heeft-migratie' &&
+        naam !== 'sluit-ouder' &&
+        !claude.includes(`\`factory ${naam ?? ''}`),
     );
     expect(ontbreekt).toEqual([]);
   });

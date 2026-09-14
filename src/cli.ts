@@ -27,6 +27,7 @@ import {
   orkestreerBouw,
 } from './commands/orkestreer-bouw.js';
 import { promote } from './commands/promote.js';
+import { sluitOuder } from './commands/sluit-ouder.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
 import { sync } from './commands/sync.js';
@@ -74,6 +75,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory consolideer <--dry|--voer-uit>  geheugenconsolidatie: voorstel genereren of doorvoeren
   factory consolideer <--installeer|--verwijder>  de LaunchAgent die --dry elke maandag om 09:00 draait
   factory afronden <vorigeTag> <tag>     factory-eigen items uit het tagbereik op Done (release-stap, #185)
+  factory sluit-ouder <issue>           ouder-epic sluiten als alle sub-issues dicht zijn (#627)
 `;
 
 async function main(argumenten: string[]): Promise<void> {
@@ -282,6 +284,11 @@ async function main(argumenten: string[]): Promise<void> {
     case 'afronden': {
       const { positioneel } = leesArgumenten(rest);
       afronden(positioneel[0], positioneel[1]);
+      return;
+    }
+    case 'sluit-ouder': {
+      const { positioneel: sluitOuderPositioneel } = leesArgumenten(rest);
+      sluitOuder(sluitOuderPositioneel[0]);
       return;
     }
     case undefined:

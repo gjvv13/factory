@@ -347,8 +347,13 @@ export function zetKolom(issue: number, kolom: Kolom, cwd?: string): boolean {
  * Plaatst één comment op een backlog-issue. Ook dit mag de pijplijn niet ophouden,
  * dus een fout is een waarschuwing.
  */
-export function plaatsComment(issue: number, tekst: string, cwd?: string): void {
-  const omgeving = ghOmgeving();
+export function plaatsComment(
+  issue: number,
+  tekst: string,
+  cwd?: string,
+  omgevingOverride?: GhOmgeving,
+): void {
+  const omgeving = omgevingOverride ?? ghOmgeving();
   if (!omgeving.kan) {
     return;
   }
@@ -427,8 +432,18 @@ export function issuesUitBereik(vorigeTag: string, tag: string, cwd?: string): n
 }
 
 /** Leest één veld van een backlog-issue via REST; undefined als het er niet is. */
-function issueVeld(issue: number, jq: string, cwd?: string): string | undefined {
-  const omgeving = ghOmgeving();
+interface GhOmgeving {
+  readonly kan: boolean;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+function issueVeld(
+  issue: number,
+  jq: string,
+  cwd?: string,
+  omgevingOverride?: GhOmgeving,
+): string | undefined {
+  const omgeving = omgevingOverride ?? ghOmgeving();
   if (!omgeving.kan) {
     return undefined;
   }
@@ -573,8 +588,8 @@ export function openKinderenAantal(issue: number, cwd?: string): number {
 }
 
 /** Sluit een backlog-issue. Faalt zacht, net als de rest van dit bestand. */
-export function sluitIssue(issue: number, cwd?: string): void {
-  const omgeving = ghOmgeving();
+export function sluitIssue(issue: number, cwd?: string, omgevingOverride?: GhOmgeving): void {
+  const omgeving = omgevingOverride ?? ghOmgeving();
   if (!omgeving.kan) {
     return;
   }
@@ -591,6 +606,69 @@ export function sluitIssue(issue: number, cwd?: string): void {
   if (uitkomst.code !== 0) {
     waarschuwing(`kon #${String(issue)} niet sluiten.`);
   }
+}
+
+// --- Auth: issue-only operaties zonder PROJECT_TOKEN (#627) -----------------
+
+/**
+ * De omgeving waarin `gh` issues mag lezen en sluiten, of `kan: false` als dat niet kan.
+ *
+ * In tegenstelling tot `ghOmgeving()` (die `PROJECT_TOKEN` vereist voor board-schrijf-
+ * operaties) heeft deze functie genoeg aan het ambient `GH_TOKEN`/`GITHUB_TOKEN` dat
+ * GitHub Actions meelevert — issue-lees/schrijf valt binnen de repo-scope van dat token.
+ * Lokaal gebruikt `gh` de gewone auth van de gebruiker.
+ */
+export function ghIssueOmgeving(): { readonly kan: boolean; readonly env?: NodeJS.ProcessEnv } {
+  // Liefst PROJECT_TOKEN als het er is — consistent met bestaand gedrag.
+  const pat = process.env['PROJECT_TOKEN'];
+  if (pat !== undefined && pat !== '') {
+    return { kan: true, env: { ...process.env, GH_TOKEN: pat } };
+  }
+  // In CI zonder PROJECT_TOKEN: het ambient GH_TOKEN volstaat voor issue-operaties.
+  const ghToken = process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'];
+  if (process.env['GITHUB_ACTIONS'] === 'true') {
+    return ghToken !== undefined && ghToken !== '' ? { kan: true } : { kan: false };
+  }
+  return { kan: true };
+}
+
+// --- Ouder-epic automatisch sluiten (#627) ----------------------------------
+
+/**
+ * Sluit de ouder-epic van `kind` als alle sub-issues dicht zijn, met een
+ * traceerbaarheidscomment. Recurseert door de ouder-keten (ouder → grootouder)
+ * zodat geneste epics in dezelfde run worden afgehandeld — `GITHUB_TOKEN`-closes
+ * triggeren geen workflows, dus event-chaining werkt niet.
+ *
+ * Alle `gh`-aanroepen gebruiken `ghIssueOmgeving()`: geen `PROJECT_TOKEN` nodig.
+ */
+export function sluitOuderAlsAf(kind: number, cwd?: string): void {
+  const omgeving = ghIssueOmgeving();
+  if (!omgeving.kan) {
+    waarschuwing('geen bruikbaar token — ouder-epic niet gecontroleerd.');
+    return;
+  }
+  sluitOuderKeten(kind, omgeving, cwd);
+}
+
+function sluitOuderKeten(kind: number, omgeving: GhOmgeving, cwd: string | undefined): void {
+  // ouderVan en alleKinderenDicht lopen via issueVeld; geef de omgeving door zodat
+  // de keten ook werkt zonder PROJECT_TOKEN (alleen GH_TOKEN in CI, #627).
+  const ouderUrl = issueVeld(kind, JQ_OUDER, cwd, omgeving);
+  const ouder = ouderUrl === undefined ? undefined : parseOuderAntwoord(ouderUrl);
+  if (ouder === undefined) {
+    return;
+  }
+  const kinderenRuw = issueVeld(ouder, JQ_KINDEREN, cwd, omgeving);
+  if (kinderenRuw === undefined || !parseKinderenAntwoord(kinderenRuw)) {
+    return;
+  }
+  plaatsComment(ouder, `Alle sub-issues zijn gesloten (laatste: #${String(kind)}).`, cwd, omgeving);
+  sluitIssue(ouder, cwd, omgeving);
+  ok(`#${String(ouder)} is afgerond — alle sub-issues zijn gesloten (laatste: #${String(kind)})`);
+
+  // Recursie: de ouder kan zelf ook een kind zijn van een grootouder-epic.
+  sluitOuderKeten(ouder, omgeving, cwd);
 }
 
 // --- De wachtrij: welke items staan in een kolom -----------------------------
@@ -1027,7 +1105,6 @@ export function zetItemsUitBereikOpDone(
   vanaf: string,
   tag: string,
   itemMelding: string,
-  ouderMelding: string,
   cwd?: string,
 ): AfrondUitkomst {
   const issues = [...issuesUitBereik(vanaf, tag, cwd)];
@@ -1074,13 +1151,9 @@ export function zetItemsUitBereikOpDone(
     sluitIssue(issue, cwd);
     ok(`#${String(issue)} staat op Done`);
 
-    // Was dit de laatste slice, dan is de epic zelf ook af.
-    const ouder = ouderVan(issue, cwd);
-    if (ouder !== undefined && alleKinderenDicht(ouder, cwd)) {
-      plaatsComment(ouder, ouderMelding, cwd);
-      sluitIssue(ouder, cwd);
-      ok(`#${String(ouder)} is afgerond — alle slices zijn af`);
-    }
+    // De ouder-epic wordt nu event-gedreven gesloten via `sluit-ouder.yml` (#627);
+    // de workflow draait bij elk issue-close-event en recurseert zelf door de keten.
+    // Hier hoeft dus niets meer: de dubbele-comment-overlap is weg.
   }
   return { verzet, overgeslagen };
 }

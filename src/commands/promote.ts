@@ -309,11 +309,5 @@ function meldOpBacklog(
   }
   // Geen eigen tijdstempel: GitHub zet er zelf een op de comment, en de
   // Clock-regel uit de guidelines verbiedt new Date() hier terecht.
-  zetItemsUitBereikOpDone(
-    vanaf,
-    tag,
-    `Prod draait \`${versie}\`.`,
-    `Alle slices draaien op prod (\`${versie}\`).`,
-    repoDir,
-  );
+  zetItemsUitBereikOpDone(vanaf, tag, `Prod draait \`${versie}\`.`, repoDir);
 }

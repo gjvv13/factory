@@ -556,7 +556,7 @@ describe('zetItemsUitBereikOpDone', () => {
     };
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaler).uitvoerder);
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [185],
       overgeslagen: [],
     });
@@ -566,7 +566,7 @@ describe('zetItemsUitBereikOpDone', () => {
     herstelOmgeving = zetBoardOmgeving({ inWorkflow: true });
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaler).uitvoerder);
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [],
       overgeslagen: [185],
     });
@@ -603,7 +603,7 @@ describe('zetItemsUitBereikOpDone', () => {
       }).uitvoerder,
     );
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [],
       overgeslagen: [185],
     });
@@ -626,7 +626,7 @@ describe('zetItemsUitBereikOpDone', () => {
       }).uitvoerder,
     );
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [],
       overgeslagen: [],
     });
@@ -646,7 +646,7 @@ describe('zetItemsUitBereikOpDone', () => {
     });
     stelUitvoerderIn(uitvoerder);
 
-    zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar met v1.1.0.', 'Epic klaar.');
+    zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar met v1.1.0.');
 
     expect(aanroepen.find((a) => a.argumenten[0] === 'project')?.argumenten).toContain(
       'optie-done',
@@ -677,7 +677,7 @@ describe('zetItemsUitBereikOpDone', () => {
       }).uitvoerder,
     );
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [],
       overgeslagen: [185],
     });
@@ -700,7 +700,7 @@ describe('zetItemsUitBereikOpDone', () => {
       }).uitvoerder,
     );
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [185],
       overgeslagen: [],
     });
@@ -722,7 +722,7 @@ describe('zetItemsUitBereikOpDone', () => {
       }).uitvoerder,
     );
 
-    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.', 'Epic klaar.')).toEqual({
+    expect(zetItemsUitBereikOpDone('v1.0.0', 'v1.1.0', 'Klaar.')).toEqual({
       verzet: [185],
       overgeslagen: [],
     });

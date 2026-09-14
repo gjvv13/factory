@@ -29,12 +29,7 @@ export function afronden(vorigeTag: string | undefined, tag: string | undefined)
     );
   }
   kop(`Factory-items uit ${vorigeTag}..${tag} afronden`);
-  const uitkomst = zetItemsUitBereikOpDone(
-    vorigeTag,
-    tag,
-    `Factory-release \`${tag}\` draait.`,
-    `Alle slices draaien in factory-release \`${tag}\`.`,
-  );
+  const uitkomst = zetItemsUitBereikOpDone(vorigeTag, tag, `Factory-release \`${tag}\` draait.`);
   if (uitkomst.overgeslagen.length > 0) {
     schrijfWorkflowUitvoer(
       'bord_overgeslagen',
