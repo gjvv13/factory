@@ -47,6 +47,12 @@ export interface OrkestratorPaden {
   readonly bouwAgentPad: string;
   /** Persistent per-tool weigeringstellers voor auto-groei (#543). */
   readonly tellersPad: string;
+  /** De LaunchAgent-plist die de wekelijkse consolidatie draait (#372). */
+  readonly consolideerAgentPad: string;
+  /** Het voorstelbestand dat de consolidatie-dry-run achterlaat (#372). */
+  readonly consolideerVoorstelPad: string;
+  /** Het logbestand van de consolideer-agent (#372). */
+  readonly consolideerLogPad: string;
 }
 
 /**
@@ -77,6 +83,20 @@ export function standaardPaden(home?: string): OrkestratorPaden {
       'factory',
       'wrijving-tellers.json',
     ),
+    consolideerAgentPad: path.join(
+      wortel,
+      'Library',
+      'LaunchAgents',
+      `${CONSOLIDEER_LAUNCH_LABEL}.plist`,
+    ),
+    consolideerVoorstelPad: path.join(
+      wortel,
+      'Library',
+      'Application Support',
+      'factory',
+      'consolidatie-voorstel.json',
+    ),
+    consolideerLogPad: path.join(wortel, 'Library', 'Logs', `${CONSOLIDEER_LAUNCH_LABEL}.log`),
   };
 }
 
@@ -84,6 +104,8 @@ export function standaardPaden(home?: string): OrkestratorPaden {
 export const LAUNCH_LABEL = 'nl.factory.orkestreer';
 /** Het launchd-label van de bouw-nacht-agent (#343). */
 export const BOUW_LAUNCH_LABEL = 'nl.factory.orkestreer.bouw';
+/** Het launchd-label van de consolideer-agent (#372). */
+export const CONSOLIDEER_LAUNCH_LABEL = 'nl.factory.consolideer';
 
 /** De omgevingsvariabele waarmee de `claude`-CLI zich onbemand aanmeldt. */
 export const TOKEN_SLEUTEL = 'CLAUDE_CODE_OAUTH_TOKEN';
@@ -135,6 +157,11 @@ const instellingenSchema = z.object({
   DEPLOY_NOTIFY_URL: z.url().optional(),
   /** Bearer-token voor het notify-endpoint (#401). */
   DEPLOY_NOTIFY_TOKEN: z.string().min(1).optional(),
+  /**
+   * Het projectpad waar de geheugenbestanden staan (#372). De headless Claude-run
+   * draait met dit pad als `cwd`, zodat Claude de juiste geheugenmap laadt.
+   */
+  FACTORY_GEHEUGEN_PROJECT: z.string().min(1).optional(),
 });
 
 export interface Instellingen {
@@ -157,6 +184,8 @@ export interface Instellingen {
   readonly notifyUrl?: string;
   /** Bearer-token voor het notify-endpoint (#401). */
   readonly notifyToken?: string;
+  /** Het projectpad waar de geheugenbestanden staan (#372). */
+  readonly geheugenProject?: string;
 }
 
 /** Regels in `sleutel=waarde`-vorm, zoals de env-bestanden van de apps. */
@@ -214,6 +243,7 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
   const token = gelezen.data[TOKEN_SLEUTEL];
   const notifyUrl = gelezen.data.DEPLOY_NOTIFY_URL;
   const notifyToken = gelezen.data.DEPLOY_NOTIFY_TOKEN;
+  const geheugenProject = gelezen.data.FACTORY_GEHEUGEN_PROJECT;
   return {
     dagmaximum: gelezen.data.FACTORY_DAGMAXIMUM,
     bouwDagmaximum: gelezen.data.FACTORY_BOUW_DAGMAXIMUM,
@@ -226,6 +256,7 @@ export function leesInstellingen(paden: OrkestratorPaden): Instellingen {
     ...(token === undefined ? {} : { token }),
     ...(notifyUrl === undefined ? {} : { notifyUrl }),
     ...(notifyToken === undefined ? {} : { notifyToken }),
+    ...(geheugenProject === undefined ? {} : { geheugenProject }),
   };
 }
 
