@@ -25,6 +25,7 @@ import {
   type OpenPr,
 } from '../regie-brief.js';
 import { uitvoerVan, waarschuwing } from '../shell.js';
+import { leesVoorstel } from './consolideer.js';
 
 // ---------------------------------------------------------------------------
 // Deploy-run-status ophalen
@@ -216,7 +217,10 @@ export function brief(nu: Date = new Date(Date.now())): void {
   const deployRuns = haalDeployRuns(apps);
   const openPrs = haalOpenBouwPrs(apps);
 
-  // 5. Brief bouwen en tonen
+  // 5. Consolidatievoorstel lezen (#372)
+  const consolidatieVoorstel = leesVoorstel(paden, nu);
+
+  // 6. Brief bouwen en tonen
   const bronnen: BriefBronnen = {
     items,
     escalatieNummers: escalatieSet,
@@ -224,6 +228,7 @@ export function brief(nu: Date = new Date(Date.now())): void {
     runlog: runlogEntries,
     deployRuns,
     openPrs,
+    ...(consolidatieVoorstel === undefined ? {} : { consolidatieVoorstel }),
     nu,
   };
   const tekst = bouwBrief(bronnen);

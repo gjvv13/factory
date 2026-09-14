@@ -56,6 +56,15 @@ export interface BriefBronnen {
   readonly deployRuns: readonly DeployRunStatus[];
   /** Open bouw-PR's, voor het leeftijdssignaal (#558). */
   readonly openPrs: readonly OpenPr[];
+  /**
+   * Consolidatievoorstel, als er een geldig (niet-verlopen) voorstel is (#372).
+   * De brief gebruikt alleen `acties` en `samenvatting`; het volledige type
+   * staat in `commands/consolideer.ts`.
+   */
+  readonly consolidatieVoorstel?: {
+    readonly acties: ReadonlyArray<{ readonly soort: string }>;
+    readonly samenvatting: string;
+  };
   /** Het moment waarop de brief wordt gebouwd; bepaalt de "stil"-grens. */
   readonly nu: Date;
 }
@@ -181,6 +190,25 @@ function vastgelopenSectie(bronnen: BriefBronnen): BriefSectie | undefined {
   return { kop: '⏸️ Vastgelopen / stil', regels };
 }
 
+/** Consolidatievoorstel als brief-sectie (#372). Verschijnt alleen als er een voorstel is. */
+function consolidatieSectie(bronnen: BriefBronnen): BriefSectie | undefined {
+  if (bronnen.consolidatieVoorstel === undefined) return undefined;
+  const v = bronnen.consolidatieVoorstel;
+  const telling: Record<string, number> = {};
+  for (const actie of v.acties) {
+    telling[actie.soort] = (telling[actie.soort] ?? 0) + 1;
+  }
+  const onderdelen = Object.entries(telling)
+    .map(([soort, aantal]) => `${String(aantal)}× ${soort}`)
+    .join(', ');
+  const regels = [
+    `- ${String(v.acties.length)} acties: ${onderdelen}`,
+    `  ${v.samenvatting}`,
+    '- Draai `factory consolideer --voer-uit` om door te voeren.',
+  ];
+  return { kop: '🧹 Geheugenconsolidatie', regels };
+}
+
 /** Deploy-status per app, als aanvulling onderaan de brief. */
 function deployStatusSectie(bronnen: BriefBronnen): BriefSectie | undefined {
   if (bronnen.deployRuns.length === 0) return undefined;
@@ -223,6 +251,7 @@ export function bouwBrief(bronnen: BriefBronnen): string {
     wachtOpAkkoordSectie(bronnen),
     oudeBouwPrsSectie(bronnen),
     geescaleerdSectie(bronnen),
+    consolidatieSectie(bronnen),
     vastgelopenSectie(bronnen),
     deployStatusSectie(bronnen),
   ].filter((sectie): sectie is BriefSectie => sectie !== undefined);
