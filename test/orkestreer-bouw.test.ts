@@ -12,6 +12,7 @@ import {
   bouwWerkplek,
   bronAppsVan,
   fastlaneWachtrij,
+  kiesItem,
   leesBaan,
   leesIssue,
   leesReeks,
@@ -378,6 +379,10 @@ describe('redenBuitenDeRij', () => {
     });
     expect(redenBuitenDeRij(item({ labels: ['type:epic'] }))?.grond).toBe('soort');
     expect(redenBuitenDeRij(item({ labels: ['type:task', 'escalatie'] }))?.grond).toBe('escalatie');
+    expect(redenBuitenDeRij(item({ labels: ['type:task', 'attended'] }))).toEqual({
+      grond: 'attended',
+      zin: 'het draagt het label attended — bouw dit attended met `--issue`',
+    });
     // Zonder de sleutel, niet met `app: undefined`: exactOptionalPropertyTypes maakt
     // dat onderscheid, en een item zonder App-veld heeft de sleutel simpelweg niet.
     const zonderApp: Parameters<typeof redenBuitenDeRij>[0] = {
@@ -388,6 +393,28 @@ describe('redenBuitenDeRij', () => {
       labels: ['type:task'],
     };
     expect(redenBuitenDeRij(zonderApp)?.grond).toBe('geen-app');
+  });
+});
+
+describe('kiesItem attended-override', () => {
+  const attendedItem = {
+    issue: 372,
+    titel: 'grote slice',
+    kolom: 'Klaar voor Bouwen' as const,
+    aangemaakt: '2026-08-01T00:00:00Z',
+    labels: ['type:task', 'attended'],
+    app: 'factory',
+  };
+
+  it('sluit een attended-item uit de automatische wachtrij', () => {
+    expect(bouwWachtrij([attendedItem]).map((i) => i.issue)).not.toContain(372);
+  });
+
+  it('bouwt een attended-item tóch bij een expliciete --issue-run', () => {
+    // De attended bouw zelf: expliciet gevraagd, dus het label mag niet blokkeren.
+    const gekozen = kiesItem([], [attendedItem], 372, '/x');
+    expect(gekozen?.issue).toBe(372);
+    expect(gekozen?.app).toBe('factory');
   });
 });
 
@@ -489,6 +516,10 @@ describe('redenBuitenFastlane (#400)', () => {
     expect(redenBuitenFastlane(item({ labels: ['type:bug', 'escalatie'] }))?.grond).toBe(
       'escalatie',
     );
+  });
+
+  it('weigert een attended-item', () => {
+    expect(redenBuitenFastlane(item({ labels: ['type:bug', 'attended'] }))?.grond).toBe('attended');
   });
 
   it('weigert een item zonder App', () => {

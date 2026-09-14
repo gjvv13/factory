@@ -677,12 +677,15 @@ export function wachtrijVan(kolom: Kolom, cwd?: string): BacklogItem[] | undefin
 export const FASTLANE_LABEL = 'fastlane';
 
 /**
- * De regel-indicator vóór een wachtrij-item (#461): `🏎` voor een fastlane-item,
- * anders twee spaties zodat de uitlijning gelijk blijft. Eén bron voor alle
- * wachtrijweergaven (refine-`--dry`, bouw-`--dry`, `status`, `prioriteit`), zodat
- * de indicator niet per plek uiteenloopt.
+ * De regel-indicator vóór een wachtrij-item (#461): `✋` voor een attended-item (de
+ * onbemande bouwer slaat het over — het staat er, maar wordt niet vanzelf gebouwd),
+ * `🏎` voor een fastlane-item, anders twee spaties zodat de uitlijning gelijk blijft.
+ * Eén bron voor alle wachtrijweergaven (refine-`--dry`, bouw-`--dry`, `status`,
+ * `prioriteit`), zodat de indicator niet per plek uiteenloopt. Attended wint van
+ * fastlane: dat een item niet vanzelf gebouwd wordt is het belangrijkere signaal.
  */
 export function fastlanePrefix(labels: readonly string[]): string {
+  if (labels.includes(ATTENDED_LABEL)) return '✋';
   return labels.includes(FASTLANE_LABEL) ? '🏎' : '  ';
 }
 
@@ -830,6 +833,13 @@ let laatsteAppOpties: string[] | undefined;
 
 /** Het label waaraan een geëscaleerd item te herkennen is. */
 export const ESCALATIE_LABEL = 'escalatie';
+
+/**
+ * Het label dat zegt: dit item wordt alléén attended (met de mens erbij) gebouwd.
+ * De onbemande bouw-werker slaat het over in beide banen; een expliciete `--issue`-run
+ * bouwt het wel (dat ís de attended bouw). Alleen door de mens gezet, zoals `fastlane`.
+ */
+export const ATTENDED_LABEL = 'attended';
 
 /**
  * De open backlog-issues met het escalatie-label, of undefined als het niet gelezen
