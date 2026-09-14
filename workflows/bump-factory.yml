@@ -62,10 +62,14 @@ jobs:
           verwacht=$(tr -d ' \n' < .nvmrc)
           huidig=$(node -p "process.versions.node.split('.')[0]")
           if [ "$huidig" != "$verwacht" ]; then
-            # Luid, niet stil doorbouwen op de verkeerde node: dat is precies het soort
-            # verschil dat pas in productie opvalt.
-            echo "::error::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — installeer die node op de mini (nvm install $verwacht)."
-            exit 1
+            # Playbook: node-drift — remedieer met nvm install in plaats van exit 1.
+            # De waarschuwing maakt de drift zichtbaar zonder de run rood te maken (#669).
+            echo "::warning::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — wordt automatisch geremedieerd."
+            . "$HOME/.nvm/nvm.sh"
+            if ! nvm install "$verwacht"; then
+              echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
+              exit 1
+            fi
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"

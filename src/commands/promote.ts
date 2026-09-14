@@ -10,6 +10,7 @@ import {
 } from '../app-config.js';
 import { zetItemsUitBereikOpDone } from '../board.js';
 import { versieUitHealth } from '../migratie.js';
+import { isLockfileDrift } from '../playbooks.js';
 import {
   bevestig,
   GebruikersFout,
@@ -138,7 +139,26 @@ export async function promote(
   const { commando, basisArgumenten } = pakketbeheerder();
 
   kop('Afhankelijkheden installeren');
-  installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
+  {
+    // Playbook: lockfile-drift — probeer eerst met --frozen-lockfile; bij een
+    // lockfile-drift (ERR_PNPM_OUTDATED_LOCKFILE of ERR_PNPM_FROZEN_LOCKFILE)
+    // remediëren we met een gewone install en een waarschuwing (#669).
+    const poging = installeer(['--frozen-lockfile', '--prod=false'], {
+      cwd: werkmap,
+      capture: true,
+      toleranter: true,
+    });
+    if (poging.code !== 0) {
+      if (isLockfileDrift(poging.stderr)) {
+        waarschuwing('lockfile-drift gedetecteerd — herhaalt zonder --frozen-lockfile (#669).');
+        installeer(['--prod=false'], { cwd: werkmap, capture: true });
+      } else {
+        throw new GebruikersFout(
+          `pnpm install --frozen-lockfile faalde met code ${String(poging.code)}`,
+        );
+      }
+    }
+  }
 
   kop('Bouwen');
   run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });

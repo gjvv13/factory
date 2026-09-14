@@ -65,26 +65,35 @@ jobs:
           verwacht=$(tr -d ' \n' < .nvmrc)
           huidig=$(node -p "process.versions.node.split('.')[0]")
           if [ "$huidig" != "$verwacht" ]; then
-            # Luid, niet stil doorbouwen op de verkeerde node: dat is precies het soort
-            # verschil dat pas in productie opvalt.
-            echo "::error::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — installeer die node op de mini (nvm install $verwacht)."
-            exit 1
+            # Playbook: node-drift — remedieer met nvm install in plaats van exit 1.
+            # De waarschuwing maakt de drift zichtbaar zonder de run rood te maken (#669).
+            echo "::warning::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — wordt automatisch geremedieerd."
+            . "$HOME/.nvm/nvm.sh"
+            if ! nvm install "$verwacht"; then
+              echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
+              exit 1
+            fi
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"
       # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
       # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
-      # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI
-      # is grep-op-stderr broos, en een deterministische fout (lockfile-mismatch) faalt
-      # zo alsnog snel en netjes na drie korte pogingen.
-      - name: Dependencies installeren (met DNS-retry)
+      # oplopende backoff. Bij een lockfile-drift (ERR_PNPM_OUTDATED_LOCKFILE of
+      # ERR_PNPM_FROZEN_LOCKFILE) remediëren we met --no-frozen-lockfile in plaats van
+      # blind te herhalen (#669).
+      - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          for poging in 1 2 3; do
+          if pnpm install --frozen-lockfile 2>install_stderr.txt; then exit 0; fi
+          cat install_stderr.txt >&2
+          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
+            echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
+            pnpm install --no-frozen-lockfile
+            exit $?
+          fi
+          for poging in 2 3; do
+            echo "::warning::pnpm install faalde (poging $((poging - 1))/3) — opnieuw over $(((poging - 1) * 5))s…"
+            sleep $(((poging - 1) * 5))
             if pnpm install --frozen-lockfile; then exit 0; fi
-            if [ "$poging" -lt 3 ]; then
-              echo "::warning::pnpm install faalde (poging $poging/3) — opnieuw over $((poging * 5))s…"
-              sleep "$((poging * 5))"
-            fi
           done
           echo "::error::pnpm install bleef falen na 3 pogingen"
           exit 1
@@ -180,26 +189,35 @@ jobs:
           verwacht=$(tr -d ' \n' < .nvmrc)
           huidig=$(node -p "process.versions.node.split('.')[0]")
           if [ "$huidig" != "$verwacht" ]; then
-            # Luid, niet stil doorbouwen op de verkeerde node: dat is precies het soort
-            # verschil dat pas in productie opvalt.
-            echo "::error::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — installeer die node op de mini (nvm install $verwacht)."
-            exit 1
+            # Playbook: node-drift — remedieer met nvm install in plaats van exit 1.
+            # De waarschuwing maakt de drift zichtbaar zonder de run rood te maken (#669).
+            echo "::warning::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — wordt automatisch geremedieerd."
+            . "$HOME/.nvm/nvm.sh"
+            if ! nvm install "$verwacht"; then
+              echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
+              exit 1
+            fi
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"
       # Bounded retry rond de install: de mini heeft af en toe een transiente DNS-blip
       # naar codeload/de registry (#99). We herhalen een install-fout max 3× met
-      # oplopende backoff. Onvoorwaardelijk (niet DNS-specifiek zoals in de CLI): in CI
-      # is grep-op-stderr broos, en een deterministische fout (lockfile-mismatch) faalt
-      # zo alsnog snel en netjes na drie korte pogingen.
-      - name: Dependencies installeren (met DNS-retry)
+      # oplopende backoff. Bij een lockfile-drift (ERR_PNPM_OUTDATED_LOCKFILE of
+      # ERR_PNPM_FROZEN_LOCKFILE) remediëren we met --no-frozen-lockfile in plaats van
+      # blind te herhalen (#669).
+      - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          for poging in 1 2 3; do
+          if pnpm install --frozen-lockfile 2>install_stderr.txt; then exit 0; fi
+          cat install_stderr.txt >&2
+          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
+            echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
+            pnpm install --no-frozen-lockfile
+            exit $?
+          fi
+          for poging in 2 3; do
+            echo "::warning::pnpm install faalde (poging $((poging - 1))/3) — opnieuw over $(((poging - 1) * 5))s…"
+            sleep $(((poging - 1) * 5))
             if pnpm install --frozen-lockfile; then exit 0; fi
-            if [ "$poging" -lt 3 ]; then
-              echo "::warning::pnpm install faalde (poging $poging/3) — opnieuw over $((poging * 5))s…"
-              sleep "$((poging * 5))"
-            fi
           done
           echo "::error::pnpm install bleef falen na 3 pogingen"
           exit 1

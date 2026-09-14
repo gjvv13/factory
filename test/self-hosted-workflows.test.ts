@@ -27,12 +27,21 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
       expect(mini).toContain('corepack enable pnpm');
     });
 
-    it(`${bestand} valt luid als de runner een andere node heeft dan .nvmrc`, () => {
-      // Stil doorbouwen op de verkeerde node is het soort verschil dat pas in
-      // productie opvalt.
-      expect(miniJobs(bestand)).toContain('::error::de runner draait node');
+    it(`${bestand} remedieert node-drift met nvm install (#669)`, () => {
+      const mini = miniJobs(bestand);
+      // Bij een mismatch wordt nvm gesourced en de gevraagde node geïnstalleerd.
+      expect(mini).toContain('nvm install');
+      // Een mislukte nvm install is alsnog een harde fout.
+      expect(mini).toContain('exit 1');
     });
   }
+
+  it('deploy.yml detecteert lockfile-drift en remedieert met --no-frozen-lockfile (#669)', () => {
+    const inhoud = readFileSync('workflows/deploy.yml', 'utf8');
+    expect(inhoud).toContain('ERR_PNPM_OUTDATED_LOCKFILE');
+    expect(inhoud).toContain('ERR_PNPM_FROZEN_LOCKFILE');
+    expect(inhoud).toContain('--no-frozen-lockfile');
+  });
 
   it('de rerun-waakhond bewaakt ook de bump, niet alleen de deploy (#270)', () => {
     // Alle vijftien de action-download-mislukkingen van de week tot 2026-08-21 zaten in
