@@ -59,7 +59,7 @@
     "test:unit": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:agent-rooktest": "vitest run --config vitest.integration.config.ts --testPathPattern agent-rooktest",
+    "test:agent-rooktest": "vitest run --config vitest.integration.config.ts agent-rooktest",
     "verify": "node dist/cli.js verify"
   },
   "dependencies": {

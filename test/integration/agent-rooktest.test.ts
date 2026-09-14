@@ -156,6 +156,9 @@ describe.skipIf(!claudeBeschikbaar())('agent-rooktest (#673)', () => {
         `boundary ${rol}: verwacht dat ${config.verboden} geweigerd is, ` +
           `maar permission_denials = ${JSON.stringify(denials)}`,
       ).toBe(true);
-    });
+      // Twee seriële draaiClaude-calls (elk 25s spawnSync-timeout) passen niet in de
+      // vitest-default van 30s; geef deze test 60s zodat de spawnSync-timeout de fout
+      // rapporteert i.p.v. een vitest-SIGTERM (#673-review).
+    }, 60_000);
   }
 });
