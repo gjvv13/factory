@@ -405,7 +405,9 @@ describe('promote', () => {
     });
   }
 
-  it('sluit de epic zodra zijn laatste slice op prod draait (#127)', async () => {
+  it('sluit alleen de slice, niet de epic — dat doet sluit-ouder.yml (#627)', async () => {
+    // Vóór #627 sloot zetItemsUitBereikOpDone de ouder als bijeffect. Nu doet de
+    // workflow dat event-gedreven; promote sluit alleen de slice zelf.
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = ouderOpnemer('3/3');
     stelUitvoerderIn(uitvoerder);
@@ -416,8 +418,8 @@ describe('promote', () => {
     const gesloten = aanroepen
       .filter((a) => a.argumenten[0] === 'issue' && a.argumenten[1] === 'close')
       .map((a) => a.argumenten[2]);
-    // Eerst de slice zelf, daarna de epic.
-    expect(gesloten).toEqual(['128', '26']);
+    // Alleen de slice, niet de epic.
+    expect(gesloten).toEqual(['128']);
   });
 
   it('laat de epic open zolang er nog een slice openstaat', async () => {

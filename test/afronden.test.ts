@@ -154,14 +154,16 @@ describe('afronden', () => {
     expect(gesloten(aanroepen)).toHaveLength(2);
   });
 
-  it('sluit de ouder-epic zodra zijn laatste slice dicht is', () => {
+  it('sluit de ouder-epic niet meer vanuit afronden — dat doet sluit-ouder.yml (#627)', () => {
+    // Vóór #627 sloot zetItemsUitBereikOpDone de ouder als bijeffect. Nu doet de
+    // workflow dat event-gedreven; afronden sluit alleen de slice zelf.
     const { uitvoerder, aanroepen } = opnemer({ ouder: '2/2' });
     stelUitvoerderIn(uitvoerder);
 
     afronden('v1.0.0', 'v1.1.0');
 
-    // Eerst de slice zelf, daarna de epic.
-    expect(gesloten(aanroepen)).toEqual(['185', '50']);
+    // Alleen de slice, niet de ouder.
+    expect(gesloten(aanroepen)).toEqual(['185']);
   });
 
   it('laat een item dat al op Done staat met rust (idempotent)', () => {
