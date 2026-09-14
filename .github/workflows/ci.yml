@@ -37,3 +37,46 @@ jobs:
 
       # De factory toetst zichzelf met haar eigen poort.
       - run: node dist/cli.js verify
+
+  # Agent-rooktest (#673): toetst discovery, boundary en symlink-resolutie
+  # van de agent-definities. Draait alleen op push naar main als bestanden
+  # onder agents/ of .claude/agents/ veranderd zijn — te duur en auth-gebonden
+  # voor elke PR. Gebruikt de mini-runner waar claude geïnstalleerd en
+  # geauthenticeerd is.
+  agent-rooktest:
+    runs-on: mini
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Controleer of agent-definities veranderd zijn
+        id: changes
+        run: |
+          # Volledige push-range (event.before..sha), niet alleen de laatste commit:
+          # bij een merge- of multi-commit-push zou HEAD~1..HEAD agents/-wijzigingen in
+          # eerdere commits missen en de rooktest onterecht overslaan (#673-review).
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qE '^(agents/|\.claude/agents/)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v6
+        if: steps.changes.outputs.changed == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.changes.outputs.changed == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: steps.changes.outputs.changed == 'true'
+
+      - run: pnpm test:agent-rooktest
+        if: steps.changes.outputs.changed == 'true'
+        env:
+          FACTORY_AGENT_ROOKTEST: '1'
+        # Worst case: 4 rollen × 2 seriële claude-aanroepen × 25s spawnSync-timeout = 200s.
+        # 2 min was te krap en kon de job killen vóór de test klaar was (#673-review).
+        timeout-minutes: 5
