@@ -10,15 +10,13 @@
 import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { zetLabel, verwijderLabel, schrijfBody } from './board.js';
+import { EIGENAAR, BACKLOG_REPO, zetLabel, verwijderLabel, schrijfBody } from './board.js';
 import { ok, run, waarschuwing, GebruikersFout } from './shell.js';
 
 // ---------------------------------------------------------------------------
 // Constanten
 // ---------------------------------------------------------------------------
 
-const EIGENAAR = 'gjvv13';
-const BACKLOG_REPO = 'factory';
 const PROJECT_NUMMER = 2;
 
 const EPIC_LABEL = 'type:epic';

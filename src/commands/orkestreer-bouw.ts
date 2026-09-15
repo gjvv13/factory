@@ -5,7 +5,9 @@ import path from 'node:path';
 import {
   appOpties,
   ATTENDED_LABEL,
+  BACKLOG_REPO,
   bordItems,
+  EIGENAAR,
   ESCALATIE_LABEL,
   FASTLANE_LABEL,
   fastlanePrefix,
@@ -93,7 +95,6 @@ const BOUW_KOLOM: Kolom = 'Klaar voor Bouwen';
 const GECLAIMD_KOLOM: Kolom = 'Bouwen';
 /** Alleen kleine klussen. Een epic is geen bouwopdracht, en een slice hoort bij zijn epic. */
 const BOUWBARE_SOORTEN = ['type:bug', 'type:task'] as const;
-const EIGENAAR = 'gjvv13';
 
 /** Een item dat een bouw-werker aankan: het `App`-veld moet gezet zijn. */
 export interface Bouwitem extends BacklogItem {
@@ -1265,7 +1266,7 @@ function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: st
       'pr',
       'create',
       '--repo',
-      `${EIGENAAR}/factory`,
+      `${EIGENAAR}/${BACKLOG_REPO}`,
       '--title',
       `auto-groei: ${groei.map((g) => g.label).join(', ')}`,
       '--body',
@@ -1277,7 +1278,7 @@ function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: st
   );
 
   // Auto-merge via de merge-queue.
-  run('gh', ['pr', 'merge', branch, '--auto', '--squash', '--repo', `${EIGENAAR}/factory`], {
+  run('gh', ['pr', 'merge', branch, '--auto', '--squash', '--repo', `${EIGENAAR}/${BACKLOG_REPO}`], {
     cwd: factorySpiegelPad,
     capture: true,
     toleranter: true,

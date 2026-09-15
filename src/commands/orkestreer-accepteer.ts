@@ -3,6 +3,7 @@ import path from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import {
   bordItems,
+  EIGENAAR,
   orkestratorComments,
   plaatsComment,
   zetLabel,
@@ -36,7 +37,6 @@ const ACCEPTEER_KOLOM = 'Uitrollen' as const;
 export const ACCEPTEER_MARKERING = '<!-- accepteer:bewijs -->';
 
 const APP_CONFIG_BESTAND = 'factory.json';
-const EIGENAAR = 'gjvv13';
 
 /** Een item dat geaccepteerd kan worden: het `App`-veld moet gezet zijn. */
 export interface Accepteeritem extends BacklogItem {
