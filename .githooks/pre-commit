@@ -12,12 +12,11 @@ if ! command -v node >/dev/null 2>&1 && [ -s "$HOME/.nvm/nvm.sh" ]; then
 fi
 
 cd "$(git rev-parse --show-toplevel)"
-corepack pnpm run build
 
-# dist/ staat bewust in git: applicaties halen de factory als git-dependency
-# binnen, en pnpm mag daar geen buildstap draaien zonder toestemming die je per
-# commit-hash zou moeten vastleggen. De build hoort dus in dezelfde commit als
-# de bron waar hij bij hoort, en wordt daarom hier meegenomen.
-git add dist
+# dist/ staat sinds #558 níet meer in versiebeheer (gitignored; `prepare` bouwt
+# het bij elke install). We bouwen hier nog wél, zodat `node dist/cli.js verify`
+# de huidige bron draait en niet een verouderde dist — maar we stagen dist niet
+# meer (`git add dist` faalde op het gitignore-pad en brak zo elke commit, #701).
+corepack pnpm run build
 
 node dist/cli.js verify --pre-commit

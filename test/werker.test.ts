@@ -234,6 +234,58 @@ describe('draaiWerker', () => {
     expect(uitkomst.fout).toContain('geweigerd');
   });
 
+  it('meldt een run zonder structured_output leesbaar, zonder Zod-ruis (#700)', async () => {
+    // De val uit #695/#464: `is_error: false`, exit 0, maar het model stopte zonder de
+    // structured-output aan te roepen — en zónder weigeringen (te grote opdracht die
+    // vlak onder het budget strandt). Vroeger lekte dat als de cryptische
+    // "geen bruikbaar verdict: : Invalid input: expected object, received undefined".
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        total_cost_usd: 4.65,
+        num_turns: 2,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('geen verdict');
+    expect(uitkomst.fout).toContain('structured_output');
+    // Geen lekkende Zod-internals of dubbele dubbelepunt meer.
+    expect(uitkomst.fout).not.toContain('Invalid input');
+    expect(uitkomst.fout).not.toContain(': :');
+    // Zonder weigeringen hoort er ook geen weigering-staart in de melding te staan.
+    expect(uitkomst.fout).not.toContain('geweigerd');
+    // Kosten en beurten blijven bij de melding — het signaal "hij deed vrijwel niets".
+    expect(uitkomst.kosten).toBeCloseTo(4.65, 2);
+    expect(uitkomst.beurten).toBe(2);
+  });
+
+  it('vangt ook een expliciete structured_output: null (#700)', async () => {
+    // Het schema is `z.unknown().optional()`, dus een envelop mét `"structured_output":
+    // null` komt net zo goed langs als een ontbrekend veld. Beide horen op dezelfde
+    // leesbare melding te landen, niet op de rauwe Zod-"received null".
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        structured_output: null,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('geen verdict');
+    expect(uitkomst.fout).not.toContain('Invalid input');
+  });
+
   it('houdt de werker buiten de werkmap — opgenomen met de echte rechtenlijst', async () => {
     // Deze fixture is een echte run mét `werkerArgumenten()`: de werker kreeg de
     // opdracht een bestand te maken en probeerde het op zes manieren (`>`, `tee`,
