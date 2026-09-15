@@ -771,6 +771,27 @@ async function leesEnvelop(opdracht: WerkerOpdracht): Promise<
       },
     };
   }
+
+  // `is_error: false` mét een lege `structured_output` is geen "waarschijnlijk gelukt":
+  // de run eindigde zonder de structured-output aan te roepen — het model stopte (bv. een
+  // te grote opdracht die vlak onder het budget strandt, #695/#464) of elk schrijfrecht
+  // werd geweigerd. Dat hier vangen geeft alle vier de werkersoorten één leesbare melding,
+  // in plaats van verderop een rauwe Zod-fout op `undefined` ("geen bruikbaar verdict: :
+  // Invalid input: expected object, received undefined", #700). De weigering-telling gaat
+  // mee, want "geen verdict omdat alles geweigerd werd" is een andere diagnose dan "geen
+  // verdict omdat de run halverwege stopte".
+  if (data.structured_output === undefined) {
+    const weigering =
+      basis.weigeringen > 0 ? ` (${String(basis.weigeringen)}× gereedschap geweigerd)` : '';
+    return {
+      soort: 'mislukt',
+      uitkomst: {
+        ...basis,
+        afloop: 'mislukt',
+        fout: `de werker gaf geen verdict terug (geen structured_output)${weigering}`,
+      },
+    };
+  }
   return { soort: 'gelezen', basis, structured: data.structured_output };
 }
 
