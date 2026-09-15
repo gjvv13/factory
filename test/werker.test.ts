@@ -265,6 +265,27 @@ describe('draaiWerker', () => {
     expect(uitkomst.beurten).toBe(2);
   });
 
+  it('vangt ook een expliciete structured_output: null (#700)', async () => {
+    // Het schema is `z.unknown().optional()`, dus een envelop mét `"structured_output":
+    // null` komt net zo goed langs als een ontbrekend veld. Beide horen op dezelfde
+    // leesbare melding te landen, niet op de rauwe Zod-"received null".
+    metUitvoer(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: OPDRACHT.sessie,
+        structured_output: null,
+      }),
+    );
+
+    const uitkomst = await draaiWerker(OPDRACHT);
+
+    expect(uitkomst.afloop).toBe('mislukt');
+    expect(uitkomst.fout).toContain('geen verdict');
+    expect(uitkomst.fout).not.toContain('Invalid input');
+  });
+
   it('houdt de werker buiten de werkmap — opgenomen met de echte rechtenlijst', async () => {
     // Deze fixture is een echte run mét `werkerArgumenten()`: de werker kreeg de
     // opdracht een bestand te maken en probeerde het op zes manieren (`>`, `tee`,

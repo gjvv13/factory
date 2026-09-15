@@ -693,6 +693,16 @@ function weigeringLabel(denial: {
   return metSubcommando.includes(verb) && woorden[1] !== undefined ? `${verb} ${woorden[1]}` : verb;
 }
 
+/**
+ * De "(N× gereedschap geweigerd)"-staart voor een foutmelding, of leeg bij een schone run.
+ * "geen verdict omdat alles geweigerd werd" is een andere diagnose dan "geen verdict omdat
+ * de run halverwege stopte", dus de telling komt in de melding mee. Eén plek, zodat de twee
+ * meldingen (`leesEnvelop` en `draaiWerker`) niet uit de pas kunnen lopen.
+ */
+function weigeringStaart(weigeringen: number): string {
+  return weigeringen > 0 ? ` (${String(weigeringen)}× gereedschap geweigerd)` : '';
+}
+
 async function leesEnvelop(opdracht: WerkerOpdracht): Promise<
   | { readonly soort: 'mislukt'; readonly uitkomst: WerkerBasis }
   | {
@@ -776,19 +786,17 @@ async function leesEnvelop(opdracht: WerkerOpdracht): Promise<
   // de run eindigde zonder de structured-output aan te roepen — het model stopte (bv. een
   // te grote opdracht die vlak onder het budget strandt, #695/#464) of elk schrijfrecht
   // werd geweigerd. Dat hier vangen geeft alle vier de werkersoorten één leesbare melding,
-  // in plaats van verderop een rauwe Zod-fout op `undefined` ("geen bruikbaar verdict: :
-  // Invalid input: expected object, received undefined", #700). De weigering-telling gaat
-  // mee, want "geen verdict omdat alles geweigerd werd" is een andere diagnose dan "geen
-  // verdict omdat de run halverwege stopte".
-  if (data.structured_output === undefined) {
-    const weigering =
-      basis.weigeringen > 0 ? ` (${String(basis.weigeringen)}× gereedschap geweigerd)` : '';
+  // in plaats van verderop een rauwe Zod-fout ("geen bruikbaar verdict: : Invalid input:
+  // expected object, received undefined", #700). We vangen zowel `undefined` als een
+  // expliciete `null`: het schema is `z.unknown().optional()`, dus beide vormen komen langs
+  // en zouden anders allebei op dezelfde rauwe Zod-melding stranden.
+  if (data.structured_output === undefined || data.structured_output === null) {
     return {
       soort: 'mislukt',
       uitkomst: {
         ...basis,
         afloop: 'mislukt',
-        fout: `de werker gaf geen verdict terug (geen structured_output)${weigering}`,
+        fout: `de werker gaf geen verdict terug (geen structured_output)${weigeringStaart(basis.weigeringen)}`,
       },
     };
   }
@@ -903,14 +911,10 @@ export async function draaiWerker(opdracht: WerkerOpdracht): Promise<WerkerUitko
     // de proef gaf `is_error: false` mét een net excuus in `result` — zonder verdict is
     // er geen bewijs dat er iets gebeurd is.
     const details = verdict.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
-    const weigering =
-      gelezen.basis.weigeringen > 0
-        ? ` (${String(gelezen.basis.weigeringen)}× gereedschap geweigerd)`
-        : '';
     return {
       ...gelezen.basis,
       afloop: 'mislukt',
-      fout: `geen bruikbaar verdict: ${details}${weigering}`,
+      fout: `geen bruikbaar verdict: ${details}${weigeringStaart(gelezen.basis.weigeringen)}`,
     };
   }
   return { ...gelezen.basis, afloop: verdict.data.uitkomst, verdict: verdict.data };
