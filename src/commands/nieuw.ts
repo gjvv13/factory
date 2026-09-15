@@ -1,6 +1,7 @@
 import { cpSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { APP_CONFIG_BESTAND, leesAppConfig } from '../app-config.js';
+import { EIGENAAR } from '../board.js';
 import { factoryPakketDir, skeletonDir } from '../paths.js';
 import { GebruikersFout, git, kop, ok, run, waarschuwing } from '../shell.js';
 import { syncNaarApp } from './sync.js';
@@ -9,8 +10,7 @@ import { syncNaarApp } from './sync.js';
 const EERSTE_BLOK = 3000;
 const BLOKGROOTTE = 10;
 
-/** De gebruiker en het nummer van het backlog-board waar de App-kolom op leeft. */
-const BACKLOG_OWNER = 'gjvv13';
+/** Het nummer van het backlog-board waar de App-kolom op leeft. */
 const BACKLOG_PROJECT = 2;
 /** De naam van het single-select-veld dat per issue de applicatie aangeeft. */
 const APP_VELD = 'App';
@@ -111,7 +111,7 @@ function voegAppOptieToe(naam: string): void {
   kop('App-optie op het board aanmaken');
   try {
     const leesQuery =
-      `query { user(login: "${BACKLOG_OWNER}") ` +
+      `query { user(login: "${EIGENAAR}") ` +
       `{ projectV2(number: ${String(BACKLOG_PROJECT)}) ` +
       `{ field(name: "${APP_VELD}") { ... on ProjectV2SingleSelectField ` +
       `{ id options { id name color } } } } } }`;
@@ -159,7 +159,7 @@ function voegAppOptieToe(naam: string): void {
  */
 function maakGitHubRepo(naam: string, appDir: string): void {
   kop('GitHub-repo aanmaken');
-  const repo = `${BACKLOG_OWNER}/${naam}`;
+  const repo = `${EIGENAAR}/${naam}`;
   const uitkomst = run(
     'gh',
     ['repo', 'create', repo, '--private', '--source', appDir, '--remote', 'origin', '--push'],
@@ -182,7 +182,7 @@ function maakGitHubRepo(naam: string, appDir: string): void {
  * halen we hier expliciet níet op — dat hoort bij de mens, niet bij de generator.
  */
 function drukDeployChecklist(naam: string): void {
-  const repo = `${BACKLOG_OWNER}/${naam}`;
+  const repo = `${EIGENAAR}/${naam}`;
   process.stdout.write(
     [
       '',
@@ -197,7 +197,7 @@ function drukDeployChecklist(naam: string): void {
 
 /** Foutpad: de app staat lokaal klaar; druk de handmatige repo-stap af, plus de checklist. */
 function drukHandmatigeRepo(naam: string, appDir: string): void {
-  const repo = `${BACKLOG_OWNER}/${naam}`;
+  const repo = `${EIGENAAR}/${naam}`;
   process.stdout.write(
     [
       '',

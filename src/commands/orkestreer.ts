@@ -15,7 +15,9 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   appOpties,
+  BACKLOG_REPO,
   bordItems,
+  EIGENAAR,
   escalaties,
   ESCALATIE_LABEL,
   fastlanePrefix,
@@ -81,8 +83,6 @@ import { versWerkplaats, werkplaatsVan, werkplaatsWortel } from '../werkplaats.j
 const WACHTRIJ_KOLOM: Kolom = 'Klaar voor technische refinement';
 /** Waar het item tijdens en na de run staat; daar wacht het op het akkoord. */
 const WERK_KOLOM: Kolom = 'Technisch refinen';
-
-const EIGENAAR = 'gjvv13';
 
 // --- Lock: één orkestrator-run tegelijk, zelfde patroon als `factory integreer` ---
 const LOCK_PAD = path.join(os.tmpdir(), 'factory-orkestreer.lock');
@@ -1224,7 +1224,7 @@ function prStatus(
   app: string | undefined,
   cwd?: string,
 ): { url: string; ci: string } | undefined {
-  const repo = `${EIGENAAR}/${app ?? 'factory'}`;
+  const repo = `${EIGENAAR}/${app ?? BACKLOG_REPO}`;
   const ruw = uitvoerVan(
     'gh',
     ['pr', 'view', `slice/${String(issue)}-1`, '--repo', repo, '--json', 'url,statusCheckRollup'],
@@ -1608,7 +1608,7 @@ export function bouwOrkestreerPlist(opzet: OrkestreerPlistOpzet): string {
 }
 
 /** De publieke URL waarop `git ls-remote` de tags ophaalt — geen lokale repo nodig (#332). */
-const FACTORY_REMOTE = `https://github.com/${EIGENAAR}/factory.git`;
+const FACTORY_REMOTE = `https://github.com/${EIGENAAR}/${BACKLOG_REPO}.git`;
 
 /**
  * Het shellscript dat de LaunchAgent draait: eerst bijwerken, dan de nacht starten.
@@ -1636,7 +1636,7 @@ export function bouwNachtScript(opzet: OrkestreerPlistOpzet): string {
     `TAG=$(git ls-remote --tags --refs --sort=-v:refname "${FACTORY_REMOTE}" "v*" | head -1 | sed "s|.*refs/tags/||")`,
     'if [ -n "$TAG" ]; then',
     '  export FACTORY_VERWACHTE_VERSIE="${TAG#v}"',
-    `  if npm install -g "https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/$TAG" >/dev/null 2>/dev/null; then`,
+    `  if npm install -g "https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/$TAG" >/dev/null 2>/dev/null; then`,
     '    echo "==> factory bijgewerkt naar $TAG"',
     '  else',
     '    echo "WARNING bijwerken naar $TAG mislukt; nacht draait op de huidige versie"',
@@ -1720,7 +1720,11 @@ function installeerAgent(paden: OrkestratorPaden): void {
   } else {
     run(
       'npm',
-      ['install', '-g', `https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/${tag}`],
+      [
+        'install',
+        '-g',
+        `https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/${tag}`,
+      ],
       {
         capture: true,
       },
