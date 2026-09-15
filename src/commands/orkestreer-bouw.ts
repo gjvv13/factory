@@ -1278,11 +1278,15 @@ function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: st
   );
 
   // Auto-merge via de merge-queue.
-  run('gh', ['pr', 'merge', branch, '--auto', '--squash', '--repo', `${EIGENAAR}/${BACKLOG_REPO}`], {
-    cwd: factorySpiegelPad,
-    capture: true,
-    toleranter: true,
-  });
+  run(
+    'gh',
+    ['pr', 'merge', branch, '--auto', '--squash', '--repo', `${EIGENAAR}/${BACKLOG_REPO}`],
+    {
+      cwd: factorySpiegelPad,
+      capture: true,
+      toleranter: true,
+    },
+  );
 
   // Spiegel herstellen.
   run('git', ['checkout', 'main'], { cwd: factorySpiegelPad, capture: true, toleranter: true });

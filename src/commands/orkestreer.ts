@@ -1720,7 +1720,11 @@ function installeerAgent(paden: OrkestratorPaden): void {
   } else {
     run(
       'npm',
-      ['install', '-g', `https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/${tag}`],
+      [
+        'install',
+        '-g',
+        `https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/${tag}`,
+      ],
       {
         capture: true,
       },
