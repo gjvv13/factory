@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@pact-foundation/pact": "^17.0.1",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.1.2",
     "@vitest/coverage-v8": "^4.1.10",
     "drizzle-kit": "^0.31.10",
