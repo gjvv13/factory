@@ -31,6 +31,10 @@
       "types": "./configs/vitest-e2e.d.ts",
       "default": "./configs/vitest-e2e.js"
     },
+    "./e2e-network-guard": {
+      "types": "./configs/e2e-network-guard.d.ts",
+      "default": "./configs/e2e-network-guard.js"
+    },
     "./e2e-coverage": {
       "types": "./dist/e2e-coverage.d.ts",
       "default": "./dist/e2e-coverage.js"
