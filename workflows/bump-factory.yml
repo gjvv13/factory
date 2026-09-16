@@ -3,10 +3,16 @@ name: bump-factory
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Houdt de app automatisch op de nieuwste factory (#132). Is er een nieuwere tag dan de
-# pin in package.json, dan bumpt hij de dep, draait `factory sync` (zodat CLI én
+# Houdt de app automatisch op de nieuwste factory (#132). Is er een nieuwere factory dan
+# in package.json staat, dan bumpt hij de dep, draait `factory sync` (zodat CLI én
 # workflow/skill/hook-wijzigingen meekomen), commit dat naar main en tript de
 # deploy-pijplijn af. Zo bereikt een factory-release deze app zonder handwerk.
+#
+# Model-bewust (#695/#708): een git-dep (`git+…#<tag>`) bumpt naar de nieuwste git-tag,
+# een registry-dep (`^<versie>`) naar de nieuwste npm-versie. Zo bedient één workflow
+# gemigreerde én niet-gemigreerde apps tijdens de git→registry-migratie. De sync draait
+# ongeacht het model, want gesyncte bestanden (workflows/skills/hooks) komen bij elke
+# factory-release mee — daarom volstaat dependabot alléén niet (dat draait geen sync).
 #
 # De factory **vertelt** het zelf: `release.yml` daar dispatcht deze workflow zodra de tag
 # staat (#236). De cron is alleen nog het vangnet voor een gemiste dispatch en draait
@@ -78,25 +84,45 @@ jobs:
           fi
           corepack enable pnpm
           echo "node $(node --version), pnpm $(pnpm --version)"
-      - name: Bump de factory als er een nieuwere tag is
+      - name: Bump de factory als er een nieuwere versie is
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
         run: |
-          # Lees de factory-dep: probeer eerst de scoped sleutel, dan de oude als fallback.
-          huidig=$(node -p "const d=require('./package.json').devDependencies;(d['@gjvv13/factory']||d.factory).split('#').pop()")
-          # Nieuwste factory-tag, semver-gesorteerd. De factory-repo is publiek, dus
-          # ls-remote heeft geen sleutel nodig. Een mislukte opzoeking mag niet
-          # doorgaan als "niets te doen": dat verbergt een netwerkblip achter een
-          # groen vinkje (#263).
-          if ! tags=$(git ls-remote --tags --refs https://github.com/gjvv13/factory.git 'v*' 2>&1); then
-            echo "::error::kon de factory-tags niet opvragen: ${tags:-git ls-remote gaf niets terug}. Zie #263."
+          # Lees de huidige factory-dep (scoped sleutel, oude kale `factory` als fallback).
+          dep=$(node -p "const d=require('./package.json').devDependencies;d['@gjvv13/factory']||d.factory||''")
+          if [ -z "$dep" ]; then
+            echo "::error::geen @gjvv13/factory-dep in package.json — niets te bumpen."
             exit 1
           fi
-          nieuwste=$(printf '%s' "$tags" | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)
-          if [ -z "$nieuwste" ]; then
-            echo "::error::git ls-remote lukte, maar leverde geen v*-tags op — dat klopt niet."
-            exit 1
+          # Model-bewust (#695/#708): een git-dep (`git+…#<tag>`) bumpt naar de nieuwste
+          # git-tag; een registry-dep (`^<versie>`) naar de nieuwste npm-versie. Zo bedient
+          # één workflow gemigreerde én niet-gemigreerde apps tijdens de migratie. Een
+          # mislukte opzoeking mag niet als "niets te doen" doorgaan — dat verbergt een
+          # netwerkblip achter een groen vinkje (#263).
+          if printf '%s' "$dep" | grep -q '#'; then
+            model=git
+            huidig="${dep##*#}"
+            if ! tags=$(git ls-remote --tags --refs https://github.com/gjvv13/factory.git 'v*' 2>&1); then
+              echo "::error::kon de factory-tags niet opvragen: ${tags:-git ls-remote gaf niets terug}. Zie #263."
+              exit 1
+            fi
+            nieuwste=$(printf '%s' "$tags" | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)
+            if [ -z "$nieuwste" ]; then
+              echo "::error::git ls-remote lukte, maar leverde geen v*-tags op — dat klopt niet."
+              exit 1
+            fi
+          else
+            model=registry
+            huidig=$(printf '%s' "$dep" | sed 's/^[~^]//')
+            if ! nieuwste=$(npm view @gjvv13/factory version 2>&1); then
+              echo "::error::kon de nieuwste @gjvv13/factory-versie niet opvragen: ${nieuwste:-npm view gaf niets terug}. Zie #263."
+              exit 1
+            fi
+            if [ -z "$nieuwste" ]; then
+              echo "::error::npm view lukte, maar leverde geen versie op — dat klopt niet."
+              exit 1
+            fi
           fi
           if [ "$huidig" = "$nieuwste" ]; then
             echo "factory al op $huidig — niets te doen."
@@ -108,10 +134,9 @@ jobs:
             echo "::error::geen PROJECT_TOKEN in deze repo — de bump naar $nieuwste kan niet gepusht worden. Het ingebouwde GITHUB_TOKEN mag geen workflow-bestanden schrijven (#245). Zet PROJECT_TOKEN als secret: classic PAT met de scopes repo en workflow (plus project voor het board)."
             exit 1
           fi
-          echo "::notice::factory bumpen van $huidig naar $nieuwste"
-          # Migreer de dep-sleutel van `factory` naar `@gjvv13/factory` als de oude
-          # nog aanwezig is, en schrijf de nieuwe tag.
-          node -e "const fs=require('fs');const p=require('./package.json');if(p.devDependencies.factory){delete p.devDependencies.factory}p.devDependencies['@gjvv13/factory']='git+https://github.com/gjvv13/factory.git#'+process.argv[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste"
+          echo "::notice::factory bumpen van $huidig naar $nieuwste ($model-model)"
+          # Schrijf de nieuwe dep in het juiste model; migreer een oude kale `factory`-sleutel mee.
+          node -e "const fs=require('fs');const p=require('./package.json');const v=process.argv[1];const model=process.argv[2];if(p.devDependencies.factory){delete p.devDependencies.factory}p.devDependencies['@gjvv13/factory']=model==='git'?('git+https://github.com/gjvv13/factory.git#'+v):('^'+v);fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')" "$nieuwste" "$model"
           # Volledige install (niet --lockfile-only): we hebben de nieuwe factory in
           # node_modules nodig om `factory sync` ermee te draaien. `--no-frozen-lockfile`
           # is nodig omdat pnpm in CI standaard frozen is: we hebben net de factory-pin
