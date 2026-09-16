@@ -38,6 +38,40 @@ describe('release.yml — de apps op de hoogte brengen', () => {
   });
 });
 
+// De factory wordt bij release naar de publieke npm-registry gepubliceerd, zodat
+// consumenten haar als tarball installeren i.p.v. via een git-install (die crasht in
+// npm op deze pnpm-repo, #707). Zie #714.
+describe('release.yml — publiceren naar npm (#714)', () => {
+  const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
+
+  it('publiceert publiek en is token-gated (waarschuwt-en-slaat-over zonder NPM_TOKEN)', () => {
+    expect(workflow).toContain('npm publish --access public');
+    expect(workflow).toContain('NPM_TOKEN: ${{ secrets.NPM_TOKEN }}');
+    // Zonder token geen harde fout: de tag komt hoe dan ook vrij (zelfde patroon als
+    // RELEASE_PAT/PROJECT_TOKEN).
+    expect(workflow).toMatch(/if \[ -z "\$NPM_TOKEN" \]/);
+    expect(workflow).toMatch(/::warning::NPM_TOKEN niet gezet/);
+  });
+
+  it('de globale-bin-job installeert uit de registry, niet meer via git-install', () => {
+    const job = workflow.slice(workflow.indexOf('globale-bin:'));
+    expect(job).toContain('npm install -g "@gjvv13/factory@$versie"');
+    // De kapotte git-install (crashte in npm, faalde stil op EEXIST) is weg.
+    expect(job).not.toContain('git+https://github.com/gjvv13/factory.git#$TAG');
+  });
+
+  it('de gepubliceerde tarball draagt dist (het `files`-veld) — anders is er geen CLI', () => {
+    // Dit is de kern van waarom registry-install werkt waar git-install crasht: de
+    // tarball bevat de gebouwde dist, dus de consument hoeft geen `prepare` te draaien.
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      files?: string[];
+      bin?: Record<string, string>;
+    };
+    expect(pkg.files).toContain('dist');
+    expect(pkg.bin?.factory).toBe('./dist/cli.js');
+  });
+});
+
 // Een lege taglijst hoort een fout te zijn, geen stille terugval op v0.0.0 (#263).
 // De oude code deed `laatste="${laatste:-v0.0.0}"`, waardoor een lege git-fetch (of een
 // verse repo) eruitzag als een geldige nulversie.
