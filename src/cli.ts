@@ -13,6 +13,7 @@ import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { prioriteit } from './commands/prioriteit.js';
 import {
+  eigenVersie,
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
@@ -78,7 +79,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory sluit-ouder <issue>           ouder-epic sluiten als alle sub-issues dicht zijn (#627)
 `;
 
-async function main(argumenten: string[]): Promise<void> {
+export async function main(argumenten: string[]): Promise<void> {
   const [commando, ...rest] = argumenten;
 
   switch (commando) {
@@ -291,6 +292,13 @@ async function main(argumenten: string[]): Promise<void> {
       sluitOuder(sluitOuderPositioneel[0]);
       return;
     }
+    case '--version':
+    case '-v':
+    case 'version':
+      // Zodat een globaal geïnstalleerde factory zijn versie kan tonen — de apps
+      // consumeren de CLI globaal (#695) en de CI logt dit voor traceerbaarheid.
+      process.stdout.write(`${eigenVersie()}\n`);
+      return;
     case undefined:
     case 'help':
     case '--help':
@@ -302,13 +310,18 @@ async function main(argumenten: string[]): Promise<void> {
   }
 }
 
-try {
-  await main(process.argv.slice(2));
-} catch (error) {
-  if (error instanceof GebruikersFout) {
-    fout(error.message);
-  } else {
-    fout(error instanceof Error ? error.message : String(error));
+// `main` draait alleen bij een echte CLI-aanroep, niet wanneer een test de module
+// importeert om `main` los te toetsen — dezelfde VITEST-conventie als `standaardPaden()`.
+// In productie (globaal geïnstalleerd, #695) is VITEST niet gezet, dus dit is een no-op.
+if (process.env['VITEST'] === undefined) {
+  try {
+    await main(process.argv.slice(2));
+  } catch (error) {
+    if (error instanceof GebruikersFout) {
+      fout(error.message);
+    } else {
+      fout(error instanceof Error ? error.message : String(error));
+    }
+    process.exit(1);
   }
-  process.exit(1);
 }
