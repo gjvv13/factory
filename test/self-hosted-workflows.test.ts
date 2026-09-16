@@ -40,6 +40,14 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     });
   }
 
+  it('bump-factory.yml wrapt pnpm install in een retry-loop (#668)', () => {
+    const inhoud = readFileSync('workflows/bump-factory.yml', 'utf8');
+    // Bounded retry: 3 pogingen met oplopende backoff, dezelfde bescherming als deploy.yml.
+    expect(inhoud).toContain('::warning::');
+    expect(inhoud).toContain('::error::pnpm install bleef falen na 3 pogingen');
+    expect(inhoud).toContain('sleep');
+  });
+
   it('deploy.yml detecteert lockfile-drift en remedieert met --no-frozen-lockfile (#669)', () => {
     const inhoud = readFileSync('workflows/deploy.yml', 'utf8');
     expect(inhoud).toContain('ERR_PNPM_OUTDATED_LOCKFILE');
