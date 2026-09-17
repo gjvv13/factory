@@ -86,6 +86,9 @@ describe('promote', () => {
     );
 
     expect(checkout).toBeGreaterThanOrEqual(0);
+    // Geforceerd (#724): de wegwerpbare deploy-kloon moet altijd op de tag komen, ook als
+    // hij cruft aan getrackte bestanden draagt (bv. een pnpm-workspace.yaml-mutatie).
+    expect(aanroepen[checkout]?.argumenten).toContain('-f');
     expect(checkout).toBeLessThan(install);
     expect(install).toBeLessThan(build);
     expect(build).toBeLessThan(migrate);

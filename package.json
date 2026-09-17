@@ -1,6 +1,6 @@
 {
   "name": "@gjvv13/factory",
-  "version": "1.15.154",
+  "version": "1.15.163",
   "private": false,
   "type": "module",
   "description": "Software factory: pipeline, gereedschap en gedeelde configuratie voor de applicaties.",
@@ -74,7 +74,7 @@
     "istanbul-lib-report": "^3.0.1",
     "istanbul-reports": "^3.2.0",
     "typescript-eslint": "^8.70.0",
-    "zod": "^4.6.2"
+    "zod": "^4.6.4"
   },
   "peerDependencies": {
     "eslint": ">=10",

@@ -13,6 +13,7 @@ import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { prioriteit } from './commands/prioriteit.js';
 import {
+  eigenVersie,
   orkestreer,
   orkestreerAntwoord,
   orkestreerStatus,
@@ -31,6 +32,7 @@ import { sluitOuder } from './commands/sluit-ouder.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
 import { sync } from './commands/sync.js';
+import { selfUpdate } from './commands/self-update.js';
 import { werkplek } from './commands/werkplek.js';
 import { terugrol } from './commands/terugrol.js';
 import { verify } from './commands/verify.js';
@@ -55,6 +57,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
+  factory self-update                    de nieuwste factory globaal installeren uit de npm-registry
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
@@ -78,7 +81,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory sluit-ouder <issue>           ouder-epic sluiten als alle sub-issues dicht zijn (#627)
 `;
 
-async function main(argumenten: string[]): Promise<void> {
+export async function main(argumenten: string[]): Promise<void> {
   const [commando, ...rest] = argumenten;
 
   switch (commando) {
@@ -261,6 +264,9 @@ async function main(argumenten: string[]): Promise<void> {
       prioriteit(positioneel[0], positioneel[1]);
       return;
     }
+    case 'self-update':
+      selfUpdate();
+      return;
     case 'brief':
       brief();
       return;
@@ -291,6 +297,13 @@ async function main(argumenten: string[]): Promise<void> {
       sluitOuder(sluitOuderPositioneel[0]);
       return;
     }
+    case '--version':
+    case '-v':
+    case 'version':
+      // Zodat een globaal geïnstalleerde factory zijn versie kan tonen — de apps
+      // consumeren de CLI globaal (#695) en de CI logt dit voor traceerbaarheid.
+      process.stdout.write(`${eigenVersie()}\n`);
+      return;
     case undefined:
     case 'help':
     case '--help':
@@ -302,13 +315,18 @@ async function main(argumenten: string[]): Promise<void> {
   }
 }
 
-try {
-  await main(process.argv.slice(2));
-} catch (error) {
-  if (error instanceof GebruikersFout) {
-    fout(error.message);
-  } else {
-    fout(error instanceof Error ? error.message : String(error));
+// `main` draait alleen bij een echte CLI-aanroep, niet wanneer een test de module
+// importeert om `main` los te toetsen — dezelfde VITEST-conventie als `standaardPaden()`.
+// In productie (globaal geïnstalleerd, #695) is VITEST niet gezet, dus dit is een no-op.
+if (process.env['VITEST'] === undefined) {
+  try {
+    await main(process.argv.slice(2));
+  } catch (error) {
+    if (error instanceof GebruikersFout) {
+      fout(error.message);
+    } else {
+      fout(error instanceof Error ? error.message : String(error));
+    }
+    process.exit(1);
   }
-  process.exit(1);
 }

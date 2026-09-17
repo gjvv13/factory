@@ -319,23 +319,17 @@ function factoryDep(appDir: string): string {
 }
 
 /**
- * Zet de factory-git-dep (`git+https://…/factory.git#vX.Y.Z`) om in een codeload-
- * tarball-URL + kale versie. We installeren globaal via de tarball en niet via de
- * git-URL: `npm install -g git+https` symlinkt op npm 10 naar een cache-tmp die
- * daarna wordt opgeruimd (dood symlink, geen werkende bin); de tarball kopieert wél.
+ * Leidt de kale factory-versie af uit de **registry-dep** (`^1.15.160`, `~1.15.160` of
+ * `1.15.160`). Sinds de git→registry-migratie (#695) is de app-dep een registry-range,
+ * geen git-URL meer; we installeren de globale factory via `@gjvv13/factory@<versie>` uit
+ * de registry (#696) — die tarball draagt de gebouwde dist, dus een werkende bin.
  */
-export function tarballVanDep(dep: string): { url: string; versie: string } {
-  const m = dep.match(/github\.com\/([^/]+)\/([^/#]+?)(?:\.git)?#(.+)$/);
-  const owner = m?.[1];
-  const repo = m?.[2];
-  const ref = m?.[3];
-  if (owner === undefined || repo === undefined || ref === undefined) {
-    throw new GebruikersFout(`Kan de factory-tarball niet afleiden uit '${dep}'.`);
+export function versieVanDep(dep: string): string {
+  const versie = dep.match(/^[\^~]?(\d+\.\d+\.\d+)/)?.[1];
+  if (versie === undefined) {
+    throw new GebruikersFout(`Kan de factory-versie niet afleiden uit '${dep}'.`);
   }
-  return {
-    url: `https://codeload.github.com/${owner}/${repo}/tar.gz/refs/tags/${ref}`,
-    versie: ref.replace(/^v/, ''),
-  };
+  return versie;
 }
 
 /** `a >= b`, per numeriek versie-onderdeel (vX.Y.Z). */
@@ -379,12 +373,12 @@ function installeerLaunchAgent(config: AppConfig): void {
   // een even nieuwe (of nieuwere) globale factory, dan slaan we de install over —
   // zo downgradet een app met een oudere pin de gedeelde bin nooit.
   kop('Factory globaal installeren');
-  const { url, versie } = tarballVanDep(dep);
+  const versie = versieVanDep(dep);
   const globaal = globaleFactoryVersie();
   if (globaal !== undefined && minstensVersie(globaal, versie)) {
     ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
   } else {
-    run('npm', ['install', '-g', url], { capture: true });
+    run('npm', ['install', '-g', `@gjvv13/factory@${versie}`], { capture: true });
   }
   const prefix = uitvoerVan('npm', ['prefix', '-g'], config.appDir) ?? '/usr/local';
   const bin = path.join(prefix, 'bin', 'factory');

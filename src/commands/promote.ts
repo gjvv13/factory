@@ -113,7 +113,14 @@ export async function promote(
   const remotes = (uitvoerVan('git', ['remote'], werkmap) ?? '').split('\n').filter(Boolean);
   git(['remote', remotes.includes('origin') ? 'set-url' : 'add', 'origin', repoDir], werkmap);
   git(['fetch', '-q', '--tags', 'origin'], werkmap);
-  git(['checkout', '-q', '--detach', tag], werkmap);
+  // Geforceerd (`-f`): de deploy-kloon is wegwerpbaar en moet altijd exact op de tag
+  // staan. Hij kan cruft aan getrackte bestanden dragen — bijvoorbeeld een
+  // `pnpm-workspace.yaml`-mutatie die pnpm bij een eerdere install achterliet (de
+  // #665-build-poort-regel, of een `minimumReleaseAge`-exclude) — en een gewone checkout
+  // weigert dan met "local changes would be overwritten", waardoor de uitrol strandt op
+  // wat juist weggegooid hoort te worden (#724). `-f` raakt alleen getrackte conflicten,
+  // geen `git clean`, dus untracked `*.secrets.env` en de db blijven staan.
+  git(['checkout', '-q', '-f', '--detach', tag], werkmap);
   // `*.secrets.env` wordt uitgesloten: dat bestand hoort niet in git (tokens,
   // sleutels) en staat alleen in de werkmap. Zonder deze uitsluiting wist elke
   // promote de secrets, waarna een verse start de omgeving niet meer kan opbouwen.
