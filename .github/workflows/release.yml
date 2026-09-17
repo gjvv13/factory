@@ -166,15 +166,10 @@ jobs:
             # gh's eigen uitleg vasthouden. Een waarschuwing zonder reden kostte een
             # handmatige uitzoekronde toen het token de dispatch niet mocht (#244);
             # stdout gaat weg, stderr houden we. Zelfde les als #195 in board.ts.
-            # Naam-tolerant (#695/#707): een naar het globale-CLI-model gemigreerde app
-            # heeft `factory-sync.yml` i.p.v. `bump-factory.yml`. Probeer de sync-only
-            # workflow eerst en val terug op bump-factory, zodat gemigreerde en niet-
-            # gemigreerde apps naast elkaar bestaan tijdens de migratie. Pas als béíde
-            # falen is het echt mis (dan houdt `fout` de bump-factory-reden vast).
-            if fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run factory-sync.yml \
-              --repo "gjvv13/$app" --ref main 2>&1 >/dev/null); then
-              echo "::notice::$app op de hoogte gebracht van $v (factory-sync)"
-            elif fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
+            # Alle apps draaien op registry-dep en gebruiken `bump-factory.yml` (model-bewust,
+            # #708). De eerdere naam-tolerante dispatch (probeer eerst een sync-only workflow)
+            # was een dode tak van de verlaten globale-CLI-aanpak (#695/T9) en is weg (#696).
+            if fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
               --repo "gjvv13/$app" --ref main 2>&1 >/dev/null); then
               echo "::notice::$app op de hoogte gebracht van $v (bump-factory)"
             else

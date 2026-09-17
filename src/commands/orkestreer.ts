@@ -1636,7 +1636,7 @@ export function bouwNachtScript(opzet: OrkestreerPlistOpzet): string {
     `TAG=$(git ls-remote --tags --refs --sort=-v:refname "${FACTORY_REMOTE}" "v*" | head -1 | sed "s|.*refs/tags/||")`,
     'if [ -n "$TAG" ]; then',
     '  export FACTORY_VERWACHTE_VERSIE="${TAG#v}"',
-    `  if npm install -g "https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/$TAG" >/dev/null 2>/dev/null; then`,
+    '  if npm install -g "@gjvv13/factory@$FACTORY_VERWACHTE_VERSIE" >/dev/null 2>/dev/null; then',
     '    echo "==> factory bijgewerkt naar $TAG"',
     '  else',
     '    echo "WARNING bijwerken naar $TAG mislukt; nacht draait op de huidige versie"',
@@ -1718,17 +1718,10 @@ function installeerAgent(paden: OrkestratorPaden): void {
   if (globaal !== undefined && minstensVersie(globaal, versie)) {
     ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
   } else {
-    run(
-      'npm',
-      [
-        'install',
-        '-g',
-        `https://codeload.github.com/${EIGENAAR}/${BACKLOG_REPO}/tar.gz/refs/tags/${tag}`,
-      ],
-      {
-        capture: true,
-      },
-    );
+    // Registry-install (#696), niet codeload: een codeload-tarball draagt de repo-tree
+    // zónder gebouwde dist (gitignored, #558) en draait geen `prepare` → kapotte bin. De
+    // npm-tarball draagt de dist via het `files`-veld. Zelfde model als release.yml (#714).
+    run('npm', ['install', '-g', `@gjvv13/factory@${versie}`], { capture: true });
     ok(`factory ${versie} globaal geïnstalleerd.`);
   }
   const prefix = uitvoerVan('npm', ['prefix', '-g'], cwd) ?? '/usr/local';

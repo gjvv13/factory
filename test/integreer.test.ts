@@ -7,7 +7,7 @@ import {
   heeftIntegreerAgent,
   integreer,
   minstensVersie,
-  tarballVanDep,
+  versieVanDep,
 } from '../src/commands/integreer.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, type ProcesAanroep, type UitkomstBepaler } from './helpers.js';
@@ -192,15 +192,15 @@ describe('integreer', () => {
   });
 });
 
-describe('tarballVanDep', () => {
-  it('leidt de codeload-tarball + kale versie af uit de git-dep', () => {
-    const { url, versie } = tarballVanDep('git+https://github.com/gjvv13/factory.git#v1.12.0');
-    expect(url).toBe('https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/v1.12.0');
-    expect(versie).toBe('1.12.0');
+describe('versieVanDep', () => {
+  it('leidt de kale versie af uit een registry-range (#696)', () => {
+    expect(versieVanDep('^1.15.160')).toBe('1.15.160');
+    expect(versieVanDep('~1.12.0')).toBe('1.12.0');
+    expect(versieVanDep('1.12.0')).toBe('1.12.0');
   });
 
-  it('faalt begrijpelijk op een dep zonder tag', () => {
-    expect(() => tarballVanDep('git+https://github.com/gjvv13/factory.git')).toThrow();
+  it('faalt begrijpelijk op een dep zonder versie', () => {
+    expect(() => versieVanDep('git+https://github.com/gjvv13/factory.git')).toThrow();
   });
 });
 
