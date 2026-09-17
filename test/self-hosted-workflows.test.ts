@@ -55,6 +55,19 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     expect(inhoud).toContain('--no-frozen-lockfile');
   });
 
+  it('de gefaalde-deploy-melding diagnosticeert faalklasse + actie (#670)', () => {
+    const inhoud = readFileSync('workflows/deploy.yml', 'utf8');
+    // Beide meldingsstappen (acc + prod) verrijken het bericht met oorzaak + actie.
+    expect(inhoud.split('oorzaak: $oorzaak; actie: $actie').length - 1).toBe(2);
+    // De diagnose leest de stap-uitkomsten als env-vars en valt terug op "onbekend"
+    // als geen stap als gefaald te identificeren is (job viel vóór de eerste stap om).
+    expect(inhoud).toContain('STAP_DEPLOY: ${{ steps.deploy.outcome }}');
+    expect(inhoud).toContain('STAP_ROOKTEST: ${{ steps.rooktest.outcome }}');
+    expect(inhoud).toContain('oorzaak="onbekend (geen stap geïdentificeerd)"');
+    // Prod heeft een extra secrets-diagnose (die stap bestaat alleen daar).
+    expect(inhoud).toContain('STAP_SECRETS: ${{ steps.secrets.outcome }}');
+  });
+
   it('de install-stap schrijft stderr buiten de tree, niet in de repo-root (#719)', () => {
     // Een `install_stderr.txt` in de root laat de werkmap "vuil", en `factory release`
     // (in `deploy acc/prod`) weigert dan op de clean-check (regressie #669, #719).
