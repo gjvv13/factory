@@ -83,6 +83,9 @@ jobs:
           # ingebouwde GITHUB_TOKEN komt daar niet bij. `factory afronden` (#185) gebruikt
           # deze PAT via board.ts; ontbreekt hij, dan slaat de board-stap zacht over.
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          # Publiceren naar de publieke npm-registry (#714). Ontbreekt het token, dan
+          # slaat de publish-stap zacht over — net als RELEASE_PAT/PROJECT_TOKEN.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           bump="${{ github.event.inputs.bump || 'patch' }}"
           # De volgende versie leiden we af van de NIEUWSTE git-tag, niet van de versie
@@ -120,6 +123,25 @@ jobs:
           git tag -a "$v" -m "Release $v"
           git push origin "$v"
           echo "tag=$v" >> "$GITHUB_OUTPUT"
+          # Publiceren naar de publieke npm-registry (#714), zodat apps/CI/mini/lokaal de
+          # factory als tarball installeren (`npm i -g @gjvv13/factory@<versie>`). Een
+          # git-install van deze pnpm-repo crasht in npm (#707); een tarball draagt de
+          # gebouwde dist (het `files`-veld) → geen prepare, geen build-poort. Staat vóór
+          # het RELEASE_PAT-afsplitspunt, zodat publiceren losstaat van de PR-kant. Zonder
+          # NPM_TOKEN: waarschuwen en overslaan (net als PROJECT_TOKEN/RELEASE_PAT), zodat
+          # de tag hoe dan ook vrijkomt. `npm publish` bouwt dist zelf via prepare/prepack.
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN niet gezet — $v niet naar npm gepubliceerd; consumenten kunnen deze versie niet uit de registry halen. Zie #714."
+          else
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > "$HOME/.npmrc"
+            if npm publish --access public 2>npm_publish_err.txt; then
+              echo "::notice::$v gepubliceerd naar npm (@gjvv13/factory)"
+            else
+              reden=$(tr -d '\r' < npm_publish_err.txt | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-200)
+              echo "::warning::kon $v niet naar npm publiceren: ${reden:-npm zei niets}. Zie #714."
+            fi
+            rm -f "$HOME/.npmrc" npm_publish_err.txt
+          fi
           # Factory-eigen backlog-items uit dit tagbereik naar Done (#185). De factory
           # draait geen `promote prod`, dus de release-tag ís haar Done-moment. Dit staat
           # vóór het RELEASE_PAT-afsplitspunt hieronder, zodat het ook gebeurt als er geen
@@ -144,9 +166,12 @@ jobs:
             # gh's eigen uitleg vasthouden. Een waarschuwing zonder reden kostte een
             # handmatige uitzoekronde toen het token de dispatch niet mocht (#244);
             # stdout gaat weg, stderr houden we. Zelfde les als #195 in board.ts.
+            # Alle apps draaien op registry-dep en gebruiken `bump-factory.yml` (model-bewust,
+            # #708). De eerdere naam-tolerante dispatch (probeer eerst een sync-only workflow)
+            # was een dode tak van de verlaten globale-CLI-aanpak (#695/T9) en is weg (#696).
             if fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
               --repo "gjvv13/$app" --ref main 2>&1 >/dev/null); then
-              echo "::notice::$app op de hoogte gebracht van $v"
+              echo "::notice::$app op de hoogte gebracht van $v (bump-factory)"
             else
               reden=$(printf '%s' "$fout" | tr -d '\r' | grep -v '^[[:space:]]*$' | head -1 | cut -c1-200)
               echo "::warning::kon $app niet op de hoogte brengen van $v: ${reden:-gh zei niets}; de dagelijkse cron pikt het op."
@@ -203,7 +228,7 @@ jobs:
               const r = require('child_process')
                 .execSync('npm root -g', { encoding: 'utf8' }).trim();
               const v = JSON.parse(require('fs')
-                .readFileSync(r + '/factory/package.json', 'utf8')).version;
+                .readFileSync(r + '/@gjvv13/factory/package.json', 'utf8')).version;
               console.log(v);
             } catch {}
           " 2>/dev/null || true)
@@ -221,15 +246,16 @@ jobs:
               exit 0
             fi
           fi
-          # Git-install i.p.v. een codeload-tarball (#558): dist/ staat niet meer in
-          # git, dus de gebouwde CLI moet bij install ontstaan. npm draait het
-          # `prepare`-script bij een git-install (en bij git-deps), maar NIET bij een
-          # tarball-install — een tarball wordt als een kant-en-klaar pakket behandeld.
-          # De git-install kloont de tag, installeert de devDeps, en bouwt dist/ via prepare.
-          if npm install -g "git+https://github.com/gjvv13/factory.git#$TAG"; then
-            echo "factory bijgewerkt naar $TAG"
+          # Registry-install i.p.v. git-install (#707/#714): een git-install van deze
+          # pnpm-repo crasht in npm's git-dep-preparatie (`edgesOut`), en de oude
+          # git-install faalde hier bovendien stil op EEXIST. De npm-tarball draagt de
+          # gebouwde dist (het `files`-veld), dus geen prepare bij de install en geen
+          # build-poort. Vereist dat de release naar npm is gepubliceerd (zie de
+          # publish-stap in de release-job); is die versie er nog niet, dan waarschuwt npm.
+          if npm install -g "@gjvv13/factory@$versie"; then
+            echo "factory bijgewerkt naar $versie"
           else
-            echo "::warning::kon de globale factory niet bijwerken naar $TAG; de nacht pikt het op."
+            echo "::warning::kon de globale factory niet bijwerken naar $versie uit de registry; staat @gjvv13/factory@$versie al op npm? De nacht pikt het anders op."
           fi
       # De LaunchAgent-plists herladen zodat een code-fix aan bouwNachtScript de
       # daadwerkelijk draaiende nacht bereikt zonder handwerk (#632). Soft-fail:

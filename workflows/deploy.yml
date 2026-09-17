@@ -88,9 +88,13 @@ jobs:
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          if pnpm install --frozen-lockfile 2>install_stderr.txt; then cat install_stderr.txt >&2; exit 0; fi
-          cat install_stderr.txt >&2
-          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
+          # stderr naar $RUNNER_TEMP, buiten de repo-tree: een bestand in de root laat de
+          # werkmap "vuil" en `factory release` (in `deploy acc/prod`) weigert dan op de
+          # clean-check (git status --porcelain telt untracked mee) (#719, regressie #669).
+          err="${RUNNER_TEMP:-/tmp}/install_stderr.txt"
+          if pnpm install --frozen-lockfile 2>"$err"; then cat "$err" >&2; exit 0; fi
+          cat "$err" >&2
+          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' "$err"; then
             echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
             pnpm install --no-frozen-lockfile
             exit $?
@@ -217,9 +221,13 @@ jobs:
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
         run: |
-          if pnpm install --frozen-lockfile 2>install_stderr.txt; then cat install_stderr.txt >&2; exit 0; fi
-          cat install_stderr.txt >&2
-          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' install_stderr.txt; then
+          # stderr naar $RUNNER_TEMP, buiten de repo-tree: een bestand in de root laat de
+          # werkmap "vuil" en `factory release` (in `deploy acc/prod`) weigert dan op de
+          # clean-check (git status --porcelain telt untracked mee) (#719, regressie #669).
+          err="${RUNNER_TEMP:-/tmp}/install_stderr.txt"
+          if pnpm install --frozen-lockfile 2>"$err"; then cat "$err" >&2; exit 0; fi
+          cat "$err" >&2
+          if grep -qE 'ERR_PNPM_OUTDATED_LOCKFILE|ERR_PNPM_FROZEN_LOCKFILE' "$err"; then
             echo "::warning::lockfile-drift gedetecteerd — remediëren met pnpm install --no-frozen-lockfile (#669)."
             pnpm install --no-frozen-lockfile
             exit $?

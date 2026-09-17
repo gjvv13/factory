@@ -55,6 +55,15 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     expect(inhoud).toContain('--no-frozen-lockfile');
   });
 
+  it('de install-stap schrijft stderr buiten de tree, niet in de repo-root (#719)', () => {
+    // Een `install_stderr.txt` in de root laat de werkmap "vuil", en `factory release`
+    // (in `deploy acc/prod`) weigert dan op de clean-check (regressie #669, #719).
+    const inhoud = readFileSync('workflows/deploy.yml', 'utf8');
+    expect(inhoud).toContain('"${RUNNER_TEMP:-/tmp}/install_stderr.txt"');
+    // Geen kaal root-pad meer: `2>install_stderr.txt` mag nergens staan.
+    expect(inhoud).not.toContain('2>install_stderr.txt');
+  });
+
   it('de rerun-waakhond bewaakt ook de bump, niet alleen de deploy (#270)', () => {
     // Alle vijftien de action-download-mislukkingen van de week tot 2026-08-21 zaten in
     // `bump-factory`, en juist die had geen vangnet — de deploy had het al sinds #122.
