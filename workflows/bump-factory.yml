@@ -142,7 +142,19 @@ jobs:
           # is nodig omdat pnpm in CI standaard frozen is: we hebben net de factory-pin
           # in package.json opgehoogd, dus de lockfile loopt bewust achter en moet juist
           # hier meebewegen (anders faalt de install met ERR_PNPM_OUTDATED_LOCKFILE).
-          pnpm install --no-frozen-lockfile
+          # Bounded retry: dezelfde DNS-blip-bescherming als deploy.yml (#99, #668).
+          install_gelukt=false
+          for poging in 1 2 3; do
+            if [ "$poging" -gt 1 ]; then
+              echo "::warning::pnpm install faalde (poging $((poging - 1))/3) — opnieuw over $(((poging - 1) * 5))s…"
+              sleep $(((poging - 1) * 5))
+            fi
+            if pnpm install --no-frozen-lockfile; then install_gelukt=true; break; fi
+          done
+          if [ "$install_gelukt" = false ]; then
+            echo "::error::pnpm install bleef falen na 3 pogingen"
+            exit 1
+          fi
           pnpm exec factory sync
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
