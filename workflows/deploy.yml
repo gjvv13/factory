@@ -51,6 +51,7 @@ jobs:
       migratie: ${{ steps.migratie.outputs.nieuw }}
     steps:
       - uses: actions/checkout@v7
+        id: checkout
         with:
           ref: main
           fetch-depth: 0
@@ -61,6 +62,7 @@ jobs:
       # in de week tot 2026-08-21, allemaal in `Set up job` waar geen retry mogelijk is
       # (#270, restpunt van #99).
       - name: Node en pnpm van de runner
+        id: node
         run: |
           verwacht=$(tr -d ' \n' < .nvmrc)
           huidig=$(node -p "process.versions.node.split('.')[0]")
@@ -87,6 +89,7 @@ jobs:
       # ERR_PNPM_FROZEN_LOCKFILE) remediëren we met --no-frozen-lockfile in plaats van
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
+        id: install
         run: |
           # stderr naar $RUNNER_TEMP, buiten de repo-tree: een bestand in de root laat de
           # werkmap "vuil" en `factory release` (in `deploy acc/prod`) weigert dan op de
@@ -107,17 +110,20 @@ jobs:
           echo "::error::pnpm install bleef falen na 3 pogingen"
           exit 1
       - name: Git-identiteit voor de release-commit
+        id: git-id
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       # release: verify + versie-bump + tag + push. promote acc: verse uitrol met
       # herladen env en zichtbare config. Acc heeft geen secrets nodig.
-      - run: pnpm exec factory deploy acc
+      - id: deploy
+        run: pnpm exec factory deploy acc
       # Rooktest acc: één read-only aanroep door de kern (#121). /health zegt "ok" ook
       # als het brein eruit ligt; dit bewijst dat de app echt antwoordt. Faalt hij, dan
       # wordt de job rood en meldt de gefaalde-deploy-stap dat. No-op zonder een rooktest
       # in factory.json. Acc eerst: de logische plek om een kapotte kern als eerste te zien.
-      - run: pnpm exec factory rooktest acc
+      - id: rooktest
+        run: pnpm exec factory rooktest acc
       # Bepaalt na de release of prod via de goedkeurings-poort moet. Het bereik
       # loopt vanaf de tag die prod daadwerkelijk draait (via /health), niet vanaf
       # de vorige release-tag — zo kan een opgestapelde migratie niet meeliftend op
@@ -140,8 +146,34 @@ jobs:
           NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
           NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
           OMGEVING: acc
+          # Stap-uitkomsten als env-vars: GitHub-expressies zijn niet beschikbaar in het
+          # run-blok zelf, dus de diagnose (#670) leest ze hier.
+          STAP_NODE: ${{ steps.node.outcome }}
+          STAP_INSTALL: ${{ steps.install.outcome }}
+          STAP_DEPLOY: ${{ steps.deploy.outcome }}
+          STAP_ROOKTEST: ${{ steps.rooktest.outcome }}
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Diagnose (#670): welke stap faalde, en wat is de actie? Best-effort — een lege
+          # outcome (de job viel al vóór de eerste stap om, action-download #122) valt op de
+          # onbekend-tak, die `deploy-rerun.yml` al automatisch herstart. De diagnose mag de
+          # melding nooit blokkeren; ze zet alleen twee tekstvariabelen.
+          if [ "$STAP_NODE" = failure ]; then
+            oorzaak="node-versie-drift op de runner (.nvmrc vraagt een andere node)"
+            actie="geen — installeer de juiste node op de mini"
+          elif [ "$STAP_INSTALL" = failure ]; then
+            oorzaak="pnpm install (na retries gefaald, vermoedelijk DNS-blip)"
+            actie="deploy-rerun herstart de run bij een action-download-fout; anders handmatig"
+          elif [ "$STAP_DEPLOY" = failure ]; then
+            oorzaak="release of promote mislukt"
+            actie="promote rolt bij een versie-mismatch zelf terug; anders: bekijk de log"
+          elif [ "$STAP_ROOKTEST" = failure ]; then
+            oorzaak="rooktest faalde — de kern antwoordt niet zoals verwacht"
+            actie="geen automatische terugrol — \`factory terugrol $OMGEVING\` staat klaar"
+          else
+            oorzaak="onbekend (geen stap geïdentificeerd)"
+            actie="bekijk de run-log"
+          fi
           # De melding draagt (acceptatie #112) app, run-id, draaiende versie en beoogde
           # tag. Beoogde tag = de versie in package.json van deze checkout (de release die
           # had moeten draaien); draaiende versie = wat /health nú op de omgeving meldt —
@@ -165,7 +197,7 @@ jobs:
           # /health meldt een kale versie; geef 'm net als de tag een v-prefix, maar laat
           # de "kon-niet-bepalen"-woorden (onbekend/onbereikbaar) met rust.
           case "$draaiend" in onbekend | onbereikbaar) ;; *) draaiend="v$draaiend" ;; esac
-          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — draait nog $draaiend, beoogde tag $beoogd is niet uitgerold. Run: $run_url"
+          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — oorzaak: $oorzaak; actie: $actie. Draait nog $draaiend, beoogde tag $beoogd niet uitgerold. Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then
             echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
             exit 0
@@ -184,6 +216,7 @@ jobs:
     runs-on: [self-hosted, mini]
     steps:
       - uses: actions/checkout@v7
+        id: checkout
         with:
           ref: main
           fetch-depth: 0
@@ -194,6 +227,7 @@ jobs:
       # in de week tot 2026-08-21, allemaal in `Set up job` waar geen retry mogelijk is
       # (#270, restpunt van #99).
       - name: Node en pnpm van de runner
+        id: node
         run: |
           verwacht=$(tr -d ' \n' < .nvmrc)
           huidig=$(node -p "process.versions.node.split('.')[0]")
@@ -220,6 +254,7 @@ jobs:
       # ERR_PNPM_FROZEN_LOCKFILE) remediëren we met --no-frozen-lockfile in plaats van
       # blind te herhalen (#669).
       - name: Dependencies installeren (met DNS-retry en lockfile-drift-zelfherstel)
+        id: install
         run: |
           # stderr naar $RUNNER_TEMP, buiten de repo-tree: een bestand in de root laat de
           # werkmap "vuil" en `factory release` (in `deploy acc/prod`) weigert dan op de
@@ -245,6 +280,7 @@ jobs:
       # waarde met quotes/JSON (bijv. USERS=[{...}]) zou de shell-string anders breken
       # en de weggeschreven waarde corrupt raken.
       - name: Prod-secrets materialiseren
+        id: secrets
         env:
           PROD_SECRETS_ENV: ${{ secrets.PROD_SECRETS_ENV }}
         run: printf '%s' "$PROD_SECRETS_ENV" > environments/prod.secrets.env
@@ -256,13 +292,15 @@ jobs:
       # ingebouwde GITHUB_TOKEN kan dat niet: het is repo-gebonden, terwijl het board
       # onder een persoonlijk account hangt en de backlog in een ánder repo staat.
       # Zonder dit secret waarschuwt de stap en blijft de deploy groen.
-      - run: pnpm exec factory deploy prod
+      - id: deploy
+        run: pnpm exec factory deploy prod
         env:
           PROJECT_TOKEN: ${{ secrets.PROJECT_TOKEN }}
       # Rooktest prod: bewijst dat de kern echt antwoordt na de uitrol (#121). Faalt hij,
       # dan wordt de prod-job rood (+ melding hieronder); terugrollen is bewust handmatig
       # (`factory terugrol prod`), niet automatisch. No-op zonder rooktest in factory.json.
-      - run: pnpm exec factory rooktest prod
+      - id: rooktest
+        run: pnpm exec factory rooktest prod
       # Zie de toelichting bij de acc-job: meldt een gefaalde prod-deploy aan de
       # assistent zodat prod niet stil op de oude versie achterblijft (#112).
       - name: Melden bij een gefaalde deploy
@@ -271,8 +309,35 @@ jobs:
           NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
           NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
           OMGEVING: prod
+          # Stap-uitkomsten voor de diagnose (#670). Prod heeft een extra `secrets`-stap.
+          STAP_NODE: ${{ steps.node.outcome }}
+          STAP_INSTALL: ${{ steps.install.outcome }}
+          STAP_SECRETS: ${{ steps.secrets.outcome }}
+          STAP_DEPLOY: ${{ steps.deploy.outcome }}
+          STAP_ROOKTEST: ${{ steps.rooktest.outcome }}
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Diagnose (#670): welke stap faalde, en wat is de actie? Best-effort — een lege
+          # outcome valt op de onbekend-tak. Zet alleen tekstvariabelen, blokkeert nooit.
+          if [ "$STAP_NODE" = failure ]; then
+            oorzaak="node-versie-drift op de runner (.nvmrc vraagt een andere node)"
+            actie="geen — installeer de juiste node op de mini"
+          elif [ "$STAP_INSTALL" = failure ]; then
+            oorzaak="pnpm install (na retries gefaald, vermoedelijk DNS-blip)"
+            actie="deploy-rerun herstart de run bij een action-download-fout; anders handmatig"
+          elif [ "$STAP_SECRETS" = failure ]; then
+            oorzaak="prod-secrets materialiseren mislukt (PROD_SECRETS_ENV)"
+            actie="geen — controleer het repo-secret PROD_SECRETS_ENV"
+          elif [ "$STAP_DEPLOY" = failure ]; then
+            oorzaak="release of promote mislukt"
+            actie="promote rolt bij een versie-mismatch zelf terug; anders: bekijk de log"
+          elif [ "$STAP_ROOKTEST" = failure ]; then
+            oorzaak="rooktest faalde — de kern antwoordt niet zoals verwacht"
+            actie="geen automatische terugrol — \`factory terugrol $OMGEVING\` staat klaar"
+          else
+            oorzaak="onbekend (geen stap geïdentificeerd)"
+            actie="bekijk de run-log"
+          fi
           # Zie de acc-job: de melding draagt app, run-id, draaiende versie (uit /health op
           # de prod-poort) en beoogde tag (uit package.json). Beide defensief.
           beoogd=onbekend
@@ -291,7 +356,7 @@ jobs:
           # /health meldt een kale versie; geef 'm net als de tag een v-prefix, maar laat
           # de "kon-niet-bepalen"-woorden (onbekend/onbereikbaar) met rust.
           case "$draaiend" in onbekend | onbereikbaar) ;; *) draaiend="v$draaiend" ;; esac
-          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — draait nog $draaiend, beoogde tag $beoogd is niet uitgerold. Run: $run_url"
+          bericht="⚠ ${{ github.repository }}: deploy ($OMGEVING) mislukt — oorzaak: $oorzaak; actie: $actie. Draait nog $draaiend, beoogde tag $beoogd niet uitgerold. Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then
             echo "::warning::$bericht — geen melding verstuurd (DEPLOY_NOTIFY_URL niet gezet)."
             exit 0
