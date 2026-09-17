@@ -268,13 +268,12 @@ export function nieuw(naam: string | undefined, opties: NieuwOpties = {}): void 
     '{{PORT_DEV}}': String(poorten.dev),
     '{{PORT_ACC}}': String(poorten.acc),
     '{{PORT_PROD}}': String(poorten.prod),
-    // Expliciet git+https en niet de github:-verkorting: die laatste zet pnpm
-    // in de lockfile om naar een ssh-URL, en dan heeft een CI-runner een
-    // sleutel nodig om de factory te kunnen ophalen.
-    '{{FACTORY_DEP}}':
-      opties.link === true
-        ? 'link:../factory'
-        : `git+https://github.com/gjvv13/factory.git#v${factoryVersie()}`,
+    // Registry-dep (#695): de factory komt uit npmjs (`@gjvv13/factory`), niet als
+    // git-install. Een registry-tarball draagt de gebouwde dist (het `files`-veld) en
+    // draait geen `prepare` → geen pnpm-build-poort (#665) en geen npm-arborist-crash
+    // op een git-install van deze pnpm-workspace (#707). `--link` blijft een lokale
+    // koppeling voor het ontwikkelen aan de factory zelf.
+    '{{FACTORY_DEP}}': opties.link === true ? 'link:../factory' : `^${factoryVersie()}`,
   });
 
   writeFileSync(

@@ -32,6 +32,7 @@ import { sluitOuder } from './commands/sluit-ouder.js';
 import { release } from './commands/release.js';
 import { rooktest } from './commands/rooktest.js';
 import { sync } from './commands/sync.js';
+import { selfUpdate } from './commands/self-update.js';
 import { werkplek } from './commands/werkplek.js';
 import { terugrol } from './commands/terugrol.js';
 import { verify } from './commands/verify.js';
@@ -56,6 +57,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory backup <acc|prod> [aantal] [--offsite=<dir>]  consistente SQLite-backup + rotatie (standaard 7 generaties)
   factory nieuw <naam> [--link]          nieuwe applicatie uit het skeleton
   factory sync [--check]                 slash commands en git hook gelijkzetten (--check: alleen signaleren)
+  factory self-update                    de nieuwste factory globaal installeren uit de npm-registry
   factory werkplek <issue> [--op]        eigen worktree voor een slice, naast de repo (--op: opruimen)
   factory orkestreer <--dry|--eenmalig|--reeks <n|lijst>|--nacht>  onbemande werker op de wachtrij 'Klaar voor technische refinement'
   factory orkestreer <--installeer|--verwijder>  de LaunchAgent die --nacht elke nacht draait
@@ -262,6 +264,9 @@ export async function main(argumenten: string[]): Promise<void> {
       prioriteit(positioneel[0], positioneel[1]);
       return;
     }
+    case 'self-update':
+      selfUpdate();
+      return;
     case 'brief':
       brief();
       return;
