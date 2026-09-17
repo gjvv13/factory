@@ -2,3 +2,8 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   '@scarf/scarf': false
+# pnpm's supply-chain-leeftijdspoort staat uit: hij muteert `pnpm-workspace.yaml` bij
+# install (voegt per verse versie een exclude toe), waardoor de tree vuil wordt en
+# `factory release`/`promote` op de git-clean-check afbreken. Onze eigen factory-CLI
+# wordt bovendien frequent gereleased en is gecureerd; de poort levert hier weinig op.
+minimumReleaseAge: 0

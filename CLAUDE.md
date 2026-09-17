@@ -33,6 +33,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
 | `factory prioriteit <issue> [getal]`                  | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                  |
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
+| `factory self-update`                                 | De nieuwste factory globaal installeren uit de npm-registry (`npm i -g @gjvv13/factory@latest`)           |
 | `factory brief`                                       | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                               |
 | `factory consolideer <--dry\|--voer-uit>`             | Geheugenconsolidatie: voorstel genereren of doorvoeren (#372)                                             |
 | `factory consolideer <--installeer\|--verwijder>`     | De LaunchAgent die `--dry` elke maandag om 09:00 draait                                                   |
@@ -106,7 +107,7 @@ Technisch refinen → Klaar voor Bouwen → Bouwen → Uitrollen → Done) per f
 ## Een applicatie koppelen
 
 Een applicatie heeft twee dingen: een `factory.json` met naam, poorten en paden,
-en de factory als devDependency op een tag.
+en de factory als **registry-devDependency** (`@gjvv13/factory` uit npmjs).
 
 ```json
 {
@@ -171,32 +172,42 @@ gecombineerde dekking: hoog genoeg om regressies te vangen, met lucht voor een
 legitieme dip.
 
 ```json
-"devDependencies": { "@gjvv13/factory": "git+https://github.com/gjvv13/factory.git#v1.0.4" }
+"devDependencies": { "@gjvv13/factory": "^1.15.160" }
 ```
 
-Schrijf de koppeling als `git+https://…` en niet als de verkorting
-`github:gjvv13/factory`. pnpm zet die verkorting in de lockfile om naar een
-ssh-URL, en een CI-runner heeft geen sleutel: dan kan de build de factory niet
-ophalen. Deze repo is daarom publiek — er staat geen enkel geheim in, alleen de
-pipeline en een generiek skelet.
+De factory komt uit de **publieke npm-registry** (`@gjvv13/factory` op npmjs.org), niet
+als git-install (ADR 012). Een registry-tarball draagt de gebouwde `dist` via het
+`files`-veld en draait bij de consument **geen `prepare`** — dus geen pnpm-build-poort
+(#665) en geen npm-arborist-crash op een git-install van deze pnpm-workspace (#707).
+Installeren vergt **nul auth** (publiek pakket). De dep moet blíjven: de gedeelde presets
+(`@gjvv13/factory/prettier|eslint|tsconfig.base.json|vitest-*`) worden via node-resolutie
+geïmporteerd en breken zonder de dep; `pnpm exec factory` blijft werken via
+`node_modules/.bin`. In `pnpm-workspace.yaml` hoort **`minimumReleaseAge: 0`**: anders
+muteert pnpm 11.18 dat bestand bij install (een exclude per verse versie) → vuile tree →
+`factory release`/`promote` breken op de git-clean-check. De overige build-curatie
+(`better-sqlite3`, `esbuild`, `@matrix-org/*`, `@scarf/scarf: false`) blijft ongemoeid;
+géén `dangerouslyAllowAllBuilds`. Deze repo is publiek — er staat geen enkel geheim in,
+alleen de pipeline en een generiek skelet.
 
 Een verbetering aan de pipeline bereikt een applicatie **automatisch** (#132): een
 merge naar factory-`main` triggert `release.yml`, die de volgende versie afleidt van de
 **nieuwste git-tag** (niet van `package.json` op main, dat kan achterlopen), de tag
-meteen zet (buiten de ruleset om — dit is wat de apps oppikken) en main's `package.json`
-via een **auto-merge-PR** bijwerkt. Die PR wordt met een PAT (`RELEASE_PAT`) aangemaakt,
-niet met `github.token`: een GITHUB_TOKEN-PR triggert `ci.yml` niet, dus `verify`
-verschijnt nooit en de auto-merge zou blijven hangen (#163). Zonder de PAT slaat de
-PR-stap over — de tag komt hoe dan ook vrij, alleen loopt main's `package.json` dan
-achter. Elke app draait een `bump-factory.yml` die de nieuwste tag oppikt,
-`factory sync` doet (CLI én workflows, skills, hook komen mee) en via de gewone pijplijn
-naar prod rolt. Slash commands en de git hook moeten fysiek in de app-repo staan;
-`factory sync` doet dat, en de auto-bump draait 'm voor je.
+meteen zet, de factory naar npmjs **publiceert** (`npm publish`, token-gated op
+`NPM_TOKEN`) en main's `package.json` via een **auto-merge-PR** bijwerkt. Die PR wordt
+met een PAT (`RELEASE_PAT`) aangemaakt, niet met `github.token`: een GITHUB_TOKEN-PR
+triggert `ci.yml` niet, dus `verify` verschijnt nooit en de auto-merge zou blijven hangen
+(#163). Zonder de PAT slaat de PR-stap over — de tag komt hoe dan ook vrij. Elke app
+draait een **model-bewuste** `bump-factory.yml` (#708) die de nieuwste registry-versie
+oppikt (`npm view`; voor een nog-niet-gemigreerde app de git-tag), `factory sync` doet
+(workflows, skills, hook komen mee) en via de gewone pijplijn naar prod rolt. Dependabot
+alléén volstaat niet — dat draait geen `factory sync`. Slash commands en de git hook
+moeten fysiek in de app-repo staan; `factory sync` doet dat, en de auto-bump draait 'm
+voor je.
 
-**Eenmalige bootstrap.** Het auto-bump-bestand moet de eerste keer met de hand in een
-app landen: bump de factory-dep, `pnpm install`, `factory sync`, en lever in. Vanaf dan
-gaat het vanzelf. Wil je een app tijdelijk bevriezen op een factory-versie, verwijder
-dan zijn `bump-factory.yml` (of zet 'm in `syncNegeer`).
+**Nieuwe app.** `factory nieuw` zet de registry-dep, `minimumReleaseAge: 0` en de
+workflows meteen goed — geen handmatige bootstrap nodig. Wil je een app tijdelijk
+bevriezen op een factory-versie, verwijder dan zijn `bump-factory.yml`. Lokaal je eigen
+globale factory bijwerken: `factory self-update` (= `npm i -g @gjvv13/factory@latest`).
 
 ## Auto-deploy naar acc en prod
 
@@ -461,16 +472,20 @@ factory nieuw proefapp --link  # test de generator met een lokale koppeling
 ```
 
 Met `--link` krijgt de nieuwe applicatie `link:../factory` in plaats van de
-git-tag, zodat je wijzigingen direct doorwerken zonder te releasen.
+registry-versie, zodat je wijzigingen direct doorwerken zonder te releasen.
 
 `dist/` staat **niet** in versiebeheer (#558): het `prepare`-script
-(`tsc -p tsconfig.build.json`) bouwt de CLI bij elke `pnpm install`. Dat geldt
-lokaal, in CI en in de release, én bij de applicaties die de factory als
-git-dependency binnenhalen — npm/pnpm draaien `prepare` bij een git-install, dus
-het pakket is na install direct bruikbaar zonder gecommitte build-output. Let op:
-een _tarball_-install draait `prepare` niet; daarom installeert de globale
-factory in `release.yml` via een git-install (`npm install -g "git+https://…#<tag>"`),
-niet via een codeload-tarball.
+(`tsc -p tsconfig.build.json`) bouwt de CLI bij elke `pnpm install` — lokaal en in CI —
+en bij `npm pack`/`npm publish`, zodat de **gepubliceerde tarball** de gebouwde `dist`
+via het `files`-veld draagt. De applicaties halen de factory als **registry-tarball**
+binnen (ADR 012): die draait bij de consument géén `prepare`, maar hoeft dat ook niet —
+`dist` zit er al in. Dat ontwijkt precies de twee dode paden van de oude git-dep: de
+pnpm-build-poort (#665) en de npm-arborist-crash op een git-install van deze
+pnpm-workspace (#707). De globale factory op de mini installeert daarom óók uit de
+registry (`release.yml` `globale-bin`: `npm install -g "@gjvv13/factory@<versie>"`), niet
+via een git-install. Een consumer-rooktest (`test/integration/consumer-rooktest.test.ts`,
+#711) draait de gepakte bin en maakt de poort rood als `dist` of de `bin` het pakket niet
+haalt.
 
 ### Bewuste versie-pins
 

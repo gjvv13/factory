@@ -36,3 +36,4 @@ Er is bewust geen CLI-commando: de handeling is een bestand kopiëren en invulle
 | [009](009-fastlane-nachtbouw.md)                            | Fastlane-baan: nachtbouw merget laag-risico werk op groen       |
 | [010](010-externe-plugin-adoptie-beleid.md)                 | Externe plugins: vertrouwenslat voor adoptie (ook onbemand)     |
 | [011](011-spike-github-claude.md)                           | GitHub @claude: aanvullen (attended), niet de factory vervangen |
+| [012](012-registry-dep.md)                                  | Factory als registry-devDependency i.p.v. git-dep               |

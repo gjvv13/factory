@@ -82,6 +82,15 @@ describe('nieuw', () => {
     expect(pakket).toContain('"name": "proefapp"');
     expect(pakket).not.toContain('{{APP_NAAM}}');
     expect(pakket).not.toContain('{{FACTORY_DEP}}');
+    // Registry-dep (#695/#710): een nieuwe app haalt de factory uit de npm-registry
+    // (`^<versie>`), niet meer als git-install. Zo geen build-poort/arborist-crash.
+    const pakketJson = JSON.parse(pakket) as { devDependencies: Record<string, string> };
+    expect(pakketJson.devDependencies['@gjvv13/factory']).toMatch(/^\^\d+\.\d+\.\d+/);
+
+    // Bij de registry-dep hoort `minimumReleaseAge: 0` in de workspace (#710): anders
+    // muteert pnpm het bestand bij install → vuile tree → release/promote breekt.
+    const workspace = readFileSync(path.join(appDir, 'pnpm-workspace.yaml'), 'utf8');
+    expect(workspace).toContain('minimumReleaseAge: 0');
 
     // De README uit het skeleton wordt meegekopieerd en zijn placeholders ingevuld.
     const readme = readFileSync(path.join(appDir, 'README.md'), 'utf8');
