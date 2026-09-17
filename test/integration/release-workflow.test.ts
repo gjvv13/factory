@@ -16,14 +16,11 @@ describe('release.yml — de apps op de hoogte brengen', () => {
     expect(lus).toContain('gh workflow run bump-factory.yml');
   });
 
-  it('is naam-tolerant: probeert factory-sync.yml eerst, valt terug op bump-factory.yml (#695/#707)', () => {
-    // Een naar het globale-CLI-model gemigreerde app heeft `factory-sync.yml` i.p.v.
-    // `bump-factory.yml`; niet-gemigreerde apps houden bump-factory. De lus moet beide
-    // kennen, met factory-sync als eerste poging.
-    expect(lus).toContain('gh workflow run factory-sync.yml');
-    expect(lus.indexOf('gh workflow run factory-sync.yml')).toBeLessThan(
-      lus.indexOf('gh workflow run bump-factory.yml'),
-    );
+  it('dispatcht direct bump-factory.yml, zonder dode factory-sync.yml-tak (#695/#696)', () => {
+    // Alle apps draaien op registry-dep en gebruiken `bump-factory.yml` (model-bewust,
+    // #708). De eerdere naam-tolerante dispatch (probeer factory-sync.yml eerst) was een
+    // dode tak van de verlaten globale-CLI-aanpak (T9) en is verwijderd.
+    expect(lus).not.toContain('factory-sync.yml');
   });
 
   it('houdt gh’s stderr vast in plaats van hem weg te gooien', () => {

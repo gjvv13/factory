@@ -1826,11 +1826,10 @@ function installeerBouwAgent(paden: OrkestratorPaden): void {
   if (globaal !== undefined && minstensVersie(globaal, versie)) {
     ok(`factory ${globaal} staat al globaal (≥ ${versie}); install overgeslagen.`);
   } else {
-    run(
-      'npm',
-      ['install', '-g', `https://codeload.github.com/${EIGENAAR}/factory/tar.gz/refs/tags/${tag}`],
-      { capture: true },
-    );
+    // Registry-install (#696), niet codeload: een codeload-tarball draagt de repo-tree
+    // zónder gebouwde dist (gitignored, #558) en draait geen `prepare` → kapotte bin. De
+    // npm-tarball draagt de dist via het `files`-veld. Zelfde model als release.yml (#714).
+    run('npm', ['install', '-g', `@gjvv13/factory@${versie}`], { capture: true });
     ok(`factory ${versie} globaal geïnstalleerd.`);
   }
   const prefix = uitvoerVan('npm', ['prefix', '-g'], cwd) ?? '/usr/local';

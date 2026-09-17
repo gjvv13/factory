@@ -2533,10 +2533,10 @@ describe('orkestreer --installeer en --verwijder', () => {
     await orkestreer({ installeer: true, paden });
 
     // De tag is de bron van waarheid over de laatste release, niet main's package.json.
+    // Registry-install (#696): @gjvv13/factory@<versie>, niet een codeload-tarball (die
+    // draagt geen gebouwde dist → kapotte bin).
     const install = aanroepen.find((a) => a.commando === 'npm' && a.argumenten[0] === 'install');
-    expect(install?.argumenten[2]).toBe(
-      'https://codeload.github.com/gjvv13/factory/tar.gz/refs/tags/v1.15.13',
-    );
+    expect(install?.argumenten[2]).toBe('@gjvv13/factory@1.15.13');
     // De bin komt uit de globale prefix en dus niet uit deze werkkopie in ~/Documents.
     // In de plist staat hij in het shellscript dat via /bin/sh -c draait.
     expect(readFileSync(paden.agentPad, 'utf8')).toContain('/opt/homebrew/bin/factory');
