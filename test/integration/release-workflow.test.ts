@@ -69,6 +69,42 @@ describe('release.yml — publiceren naar npm (#714)', () => {
   });
 });
 
+// Na een release ruimt release.yml achterhaalde (superseded) release-PR's automatisch
+// op, zodat een oudere `release/v<lager>`-PR niet als CONFLICTING blijft hangen (#671).
+describe("release.yml — achterhaalde release-PR's opruimen (#671)", () => {
+  const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
+  // Isoleer de opruim-logica: van de eigen kop-comment tot de app-dispatch eronder.
+  const stap = workflow.slice(
+    workflow.indexOf('Achterhaalde release-PR'),
+    workflow.indexOf('De apps vertellen'),
+  );
+
+  it('haalt open release/v*-PR’s op en sluit ze met branch-opruiming', () => {
+    expect(stap).toContain('gh pr list --repo gjvv13/factory --state open');
+    expect(stap).toContain('startswith("release/v")');
+    expect(stap).toContain('gh pr close');
+    expect(stap).toContain('--delete-branch');
+  });
+
+  it('sluit alleen strikt lagere versies (numerieke vergelijking, exit 0 = lager)', () => {
+    expect(stap).toContain('process.exit((a[i]||0)<(b[i]||0)?0:1)');
+  });
+
+  it('geeft de gesloten PR een comment met de achterhalende versie', () => {
+    expect(stap).toContain('--comment "Achterhaald: $v is al getagd.');
+  });
+
+  it('is soft-fail: een opruimfout blokkeert de release niet', () => {
+    expect(stap).toMatch(/\|\| echo "::warning::/);
+  });
+
+  it('draait met de ingebouwde GITHUB_TOKEN, niet met RELEASE_PAT', () => {
+    // De step-env zet GH_TOKEN op github.token; de opruim-aanroepen zijn niet met
+    // RELEASE_PAT geprefixt (zoals de app-dispatch en `gh pr create` dat wél zijn).
+    expect(stap).not.toContain('GH_TOKEN="$RELEASE_PAT"');
+  });
+});
+
 // Een lege taglijst hoort een fout te zijn, geen stille terugval op v0.0.0 (#263).
 // De oude code deed `laatste="${laatste:-v0.0.0}"`, waardoor een lege git-fetch (of een
 // verse repo) eruitzag als een geldige nulversie.

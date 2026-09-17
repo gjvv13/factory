@@ -150,6 +150,31 @@ jobs:
           # en meldt de job hieronder het (#195).
           node dist/cli.js afronden "$laatste" "$v" \
             || echo "::warning::kon het board niet bijwerken voor $v (zie #185); de tag $v staat er wel."
+          # Achterhaalde release-PR's opruimen (#671). Nu $v getagd is, is elke nog-open
+          # `release/v<lager>`-PR per definitie achterhaald: sluiten met branch-opruiming en
+          # een uitleg-comment. Draait met de ingebouwde GITHUB_TOKEN (de step-env zet
+          # GH_TOKEN daarop; pull-requests + contents write volstaan, RELEASE_PAT is niet
+          # nodig in hetzelfde repo). Soft-fail — een opruimfout mag de release nooit
+          # blokkeren (`factory opruimen` is de terugval). Staat vóór het RELEASE_PAT-
+          # afsplitspunt, zodat het ook opruimt als er geen nieuwe release-PR komt. De
+          # zojuist te openen `release/$v`-PR bestaat hier nog niet, dus die raakt het niet.
+          if openReleasePrs=$(gh pr list --repo gjvv13/factory --state open \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("release/v")) | "\(.number) \(.headRefName)"'); then
+            printf '%s\n' "$openReleasePrs" | while read -r nr ref; do
+              [ -z "$nr" ] && continue
+              prVersie="${ref#release/v}"
+              # Strikt lager dan $nieuw (kale versie) → achterhaald. Zelfde numerieke
+              # vergelijking per onderdeel als de bump-berekening hierboven; exit 0 = lager.
+              if node -e "const a=process.argv[1].replace(/^v/,'').split('.').map(Number),b=process.argv[2].replace(/^v/,'').split('.').map(Number);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))process.exit((a[i]||0)<(b[i]||0)?0:1)}process.exit(1)" "$prVersie" "$nieuw"; then
+                gh pr close "$nr" --repo gjvv13/factory --delete-branch \
+                  --comment "Achterhaald: $v is al getagd." \
+                  || echo "::warning::kon de achterhaalde release-PR #$nr niet sluiten; $v staat er wel."
+              fi
+            done
+          else
+            echo "::warning::kon de open release-PR's niet ophalen voor opruiming (#671); $v staat er wel."
+          fi
           # De apps vertellen dat er een nieuwe tag is, in plaats van ze elk half uur laten
           # vragen (#236). `bump-factory.yml` heeft `workflow_dispatch` al, dus hier is geen
           # nieuwe trigger nodig. Het ingebouwde GITHUB_TOKEN komt niet bij een ánder repo;
