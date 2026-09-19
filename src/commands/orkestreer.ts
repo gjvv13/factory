@@ -1618,11 +1618,15 @@ const FACTORY_REMOTE = `https://github.com/${EIGENAAR}/${BACKLOG_REPO}.git`;
  * - **`git ls-remote` in plaats van `git -C`.** De vorige versie deed een `git -C` naar
  *   de factory-repo onder `~/Documents`, die macOS TCC blokkeert voor
  *   achtergrondprocessen (#332). `ls-remote` heeft geen lokale repo nodig.
- * - **`exec` als laatste regel.** Zo draait `--nacht` als hetzelfde PID en krijgt
+ * - **`exec` als het commando werkt.** Zo draait `--nacht` als hetzelfde PID en krijgt
  *   launchd de exitcode; zonder `exec` zou de shell na het kind afsluiten en zou een
- *   afgebroken nacht als een schoon exit terugkomen.
+ *   afgebroken nacht als een schoon exit terugkomen. De exec staat achter een
+ *   commando-check (`"$bin" help`): een geslaagde install die tóch geen werkend commando
+ *   achterlaat (dist-loze tarball, geen bin-symlink) hoort niet stil te sterven maar
+ *   luid te falen (#741).
  * - **Geen `set -e`.** Het bijwerken mag falen zonder de hele nacht te stoppen; de
- *   if/else handelt dat af, en `exec` draait altijd.
+ *   if/else handelt dat af, en de nacht draait alsnog zolang er een werkend commando
+ *   staat (op de huidige versie als de update faalde).
  *
  * Het script vermijdt `&` in de tekst: die is XML-speciaal en zou in de plist als
  * `&amp;` moeten, wat de leesbaarheid van de bron en het log kapotmaakt. Vandaar
@@ -1644,7 +1648,21 @@ export function bouwNachtScript(opzet: OrkestreerPlistOpzet): string {
     'else',
     '  echo "WARNING kon de nieuwste tag niet ophalen; nacht draait op de huidige versie"',
     'fi',
-    `exec ${opzet.nachtCommando}`,
+    // Een geslaagde `npm install` bewijst niet dat er een werkend commando staat: een
+    // dist-loze tarball legt geen bin-symlink, en dan sterft de `exec` hieronder stil —
+    // de LaunchAgent meldt "bijgewerkt naar $TAG" en houdt er dan mee op, drie nachten
+    // lang onopgemerkt (#741). Toets daarom het commando zélf vóór de exec: draait het,
+    // dan starten we de nacht (op de nieuwe versie, of bij een mislukte update op de
+    // huidige — `draaiNacht` meldt de mismatch); draait het niet, dan is dat een luide,
+    // niet-nul fout in plaats van een geruisloze dood. Zelfde les als #263/#632: niet op
+    // de exit-code van de installer vertrouwen maar op of het commando echt werkt.
+    // Geen `&` in de tekst (XML-speciaal in de plist, zie de docstring): `2>/dev/null`.
+    `if "${opzet.bin}" help >/dev/null 2>/dev/null; then`,
+    `  exec ${opzet.nachtCommando}`,
+    'else',
+    `  echo "::error::factory-commando werkt niet na update naar $TAG (${opzet.bin}); nacht overgeslagen"`,
+    '  exit 1',
+    'fi',
   ].join('\n');
 }
 
