@@ -2167,13 +2167,28 @@ describe('de LaunchAgent van de orkestrator', () => {
     expect(installIndex).toBeGreaterThan(-1);
     expect(execIndex).toBeGreaterThan(installIndex);
 
-    // Faalt het bijwerken, dan draait de nacht alsnog: de exec is onvoorwaardelijk.
+    // Faalt het bijwerken, dan draait de nacht alsnog zolang er een werkend commando is.
     expect(script).toContain('WARNING bijwerken naar');
     expect(script).toContain('nacht draait op de huidige versie');
-    // De exec staat buiten elke if/fi, dus hij draait altijd.
-    const regels = script.split('\n');
-    const execRegel = regels[regels.length - 1];
-    expect(execRegel).toMatch(/^exec /);
+    // De exec zit achter de commando-check (#741) en draait het --nacht-commando.
+    const checkIndex = script.indexOf('" help >/dev/null');
+    expect(checkIndex).toBeGreaterThan(installIndex);
+    expect(execIndex).toBeGreaterThan(checkIndex);
+    const execRegel = script.split('\n').find((r) => r.trimStart().startsWith('exec '));
+    expect(execRegel).toContain('orkestreer --nacht');
+  });
+
+  it('toetst het commando vóór de exec en faalt luid als het ontbreekt (#741)', () => {
+    const script = bouwNachtScript(opzet);
+
+    // Een geslaagde `npm install` bewijst geen werkende bin (dist-loze tarball → geen
+    // symlink); daarom draait de check de bin zélf vóór de exec.
+    expect(script).toContain('"/usr/local/bin/factory" help >/dev/null 2>/dev/null');
+    // Geen werkend commando is een luide, niet-nul fout — geen stille dood.
+    expect(script).toContain('::error::factory-commando werkt niet na update naar $TAG');
+    expect(script).toContain('exit 1');
+    // Geen `&` in het script: dat zou in de plist als `&amp;` moeten (XML-speciaal).
+    expect(script).not.toContain('&');
   });
 
   it('haalt tags op via git ls-remote zonder een lokale repo te raken (#332)', () => {
@@ -2250,9 +2265,8 @@ describe('de bouw-LaunchAgent (#343)', () => {
     expect(installIndex).toBeGreaterThan(-1);
     expect(execIndex).toBeGreaterThan(installIndex);
 
-    // De exec draait het bouw-nacht-commando.
-    const regels = script.split('\n');
-    const execRegel = regels[regels.length - 1];
+    // De exec (achter de commando-check, #741) draait het bouw-nacht-commando.
+    const execRegel = script.split('\n').find((r) => r.trimStart().startsWith('exec '));
     expect(execRegel).toContain('orkestreer --soort bouw --nacht');
   });
 
