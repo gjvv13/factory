@@ -117,9 +117,40 @@ export function bouwWerkplek(
   return path.join(wortel, `${app}-wt`, String(issue));
 }
 
-/** De branch die de werker zou maken; `-1` zoals #128 hem herkent. */
-export function bouwBranch(issue: number): string {
-  return `slice/${String(issue)}-1`;
+/** De branch die de werker maakt: `slice/<issue>-<slice>` (#128 herkent de koppeling). */
+export function bouwBranch(issue: number, slice = 1): string {
+  return `slice/${String(issue)}-${String(slice)}`;
+}
+
+/** Begrenst `volgendeSlice` tegen een oneindige lus bij een onverwachte board-staat. */
+const MAX_SLICES = 20;
+
+/**
+ * Het slice-nummer dat de werker moet bouwen: het eerste dat nog niet gemergd is.
+ *
+ * Normaal 1. Maar een niet-gesplitst multi-slice-issue blijft ná het mergen van slice
+ * `-1` op Klaar voor Bouwen staan; zonder deze check herbouwt de werker `-1` en levert
+ * een duplicaat-PR van al-gemergd werk op (#659). PR-state is de bron van waarheid (zoals
+ * `opruimen` sinds #633): een `slice/<issue>-<m>` met een MERGED PR is af, dus we pakken
+ * de eerstvolgende. Een branch zonder PR (nog niet gebouwd) is niet MERGED → daar stopt de
+ * telling. Zo blijft een gewoon enkel-slice-issue gewoon `-1`.
+ */
+export function volgendeSlice(app: string, issue: number): number {
+  for (let m = 1; m <= MAX_SLICES; m++) {
+    const staat = uitvoerVan('gh', [
+      'pr',
+      'view',
+      `slice/${String(issue)}-${String(m)}`,
+      '--repo',
+      `${EIGENAAR}/${app}`,
+      '--json',
+      'state',
+      '--jq',
+      '.state',
+    ]);
+    if (staat !== 'MERGED') return m;
+  }
+  return MAX_SLICES;
 }
 
 /**
@@ -416,6 +447,9 @@ export async function orkestreerBouw(opties: BouwOpties = {}): Promise<void> {
     const bronRegels = bronApps
       .map((app) => `  bron:     ${app} → ${path.join(bronWortel, app)}`)
       .join('\n');
+    // Dry blijft netwerkvrij (geen gh-aanroep): toon de basis-branch. Bij de echte bouw
+    // resolvet `volgendeSlice` het slice-nummer (#659); in een preview is dat de moeite
+    // van een board/PR-lezing niet waard.
     process.stdout.write(
       `\nZou nu bouwen: #${String(eerste.issue)} (${eerste.app}) — ${eerste.titel}\n` +
         `  werkplek: ${werkplekPad}\n` +
@@ -593,6 +627,7 @@ export function bouwPrompt(
   factoryMap: string,
   bronMappen: readonly string[] = [],
   apps: readonly string[] = [],
+  slice = 1,
 ): string {
   const sjabloon = readFileSync(path.join(templatesDir, 'werker-bouw.md'), 'utf8');
   const bronBlok =
@@ -603,7 +638,7 @@ export function bouwPrompt(
     '{{ISSUE}}': String(item.issue),
     '{{TITEL}}': item.titel,
     '{{APP}}': item.app,
-    '{{BRANCH}}': bouwBranch(item.issue),
+    '{{BRANCH}}': bouwBranch(item.issue, slice),
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
     '{{BRON_MAPPEN}}': bronBlok,
@@ -663,6 +698,11 @@ export async function bouwAf(
   zorgVoorEscalatieLabel(cwd);
   zetKolom(item.issue, GECLAIMD_KOLOM, cwd);
 
+  // Welke slice bouwen we? Normaal -1; een niet-gesplitst multi-slice-issue waarvan -1 al
+  // gemergd is, bouwt de volgende ongebouwde slice i.p.v. -1 te herbouwen (#659). Eén keer
+  // bepaald en overal doorgegeven (werkplek, prompt, PR-comment), zodat ze niet uiteenlopen.
+  const slice = volgendeSlice(item.app, item.issue);
+
   // Valt de run om, dan hoort het item terug in de rij: geclaimd blijven staan zonder
   // dat er iemand aan werkt is precies hoe een item onvindbaar wordt (de les van #153).
   const terug = (): void => {
@@ -707,10 +747,10 @@ export async function bouwAf(
     // `inleveren` ruimt de werkplek achteraf op de manier die hij al kent.
     // Elke slice vertrekt van `main` (#558): geen stacking meer op de vorige slice,
     // dus geen basis-branch. Dat houdt de bouw-nacht conflictvrij en squash-merge-vriendelijk.
-    werkplek(String(item.issue), { cwd: spiegel });
+    werkplek(String(item.issue), { cwd: spiegel, slice });
 
     uitkomst = await draaiBouwer({
-      prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps),
+      prompt: bouwPrompt(item, werkmap, factoryMap, bronMappen, apps, slice),
       werkmap,
       sessie: randomUUID(),
       extraMappen: [factoryMap, ...bronMappen],
@@ -807,6 +847,7 @@ export async function bouwAf(
     opsMelding,
     reeks,
     baan,
+    slice,
   );
 
   // leverIn mislukte na een voltooide bouw (#630): de bouw-kosten komen mee in het
@@ -855,6 +896,7 @@ function verwerkBouw(
   opsMelding?: OpsMeldingConfig,
   reeks?: ReeksContext,
   baan?: BouwBaan,
+  slice = 1,
 ): VerwerkSignaal {
   const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
@@ -1002,7 +1044,7 @@ function verwerkBouw(
 
   // Na een geslaagd inleveren: bevindingen als PR-comment via `gh api` (#184).
   if (reviewComment !== undefined) {
-    if (!plaatsPrComment(item, reviewComment)) {
+    if (!plaatsPrComment(item, reviewComment, slice)) {
       // Kon de PR niet vinden of de comment niet plaatsen; val terug op het issue.
       waarschuwing(`Kon review-comment niet op de PR plaatsen; het staat op het issue.`);
       plaatsComment(item.issue, reviewComment, cwd);
@@ -1013,7 +1055,7 @@ function verwerkBouw(
   const gateReden = inleverResultaat.reviewReden;
   if (gateReden === 'geen-verdict' || gateReden === 'niet-beschikbaar') {
     const gateMelding = `⚠ Review-gate kon niet draaien: ${gateReden === 'niet-beschikbaar' ? 'claude niet beschikbaar' : 'geen bruikbaar verdict'}.`;
-    if (!plaatsPrComment(item, gateMelding)) {
+    if (!plaatsPrComment(item, gateMelding, slice)) {
       plaatsComment(item.issue, gateMelding, cwd);
     }
   }
@@ -1384,8 +1426,8 @@ function maakReviewComment(reviewUitkomst: ReviewUitkomst | undefined): string |
  * Geeft `true` terug als het lukt, `false` als de PR niet gevonden of het comment
  * niet geplaatst kan worden — de aanroeper valt dan terug op het issue.
  */
-function plaatsPrComment(item: Bouwitem, tekst: string): boolean {
-  const branch = bouwBranch(item.issue);
+function plaatsPrComment(item: Bouwitem, tekst: string, slice = 1): boolean {
+  const branch = bouwBranch(item.issue, slice);
   const repo = `${EIGENAAR}/${item.app}`;
   const nummer = uitvoerVan('gh', [
     'pr',
@@ -1559,6 +1601,9 @@ export async function werkBouwAntwoordAf(
         inleveren,
         logWeigeringen,
         opsMeldingVan(instellingen),
+        undefined,
+        undefined,
+        volgendeSlice(app, issue),
       );
       return { bouw: uitkomst, review: reviewUitkomst };
     },

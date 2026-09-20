@@ -195,13 +195,49 @@ describe('promote', () => {
     expect(aanroepen.some((a) => a.argumenten.includes('build'))).toBe(true);
   });
 
+  it('remedieert lockfile-drift ook in het terugrol-pad (#755)', async () => {
+    process.chdir(maakApp());
+    let installNr = 0;
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer((a) => {
+      if (a.argumenten[0] === 'describe') return { stdout: 'v0.3.0' };
+      if (a.argumenten.includes('install')) {
+        installNr += 1;
+        // 1 = vooruit (ok), 2 = terugrol frozen (drift), 3 = terugrol retry (ok).
+        if (installNr === 2)
+          return { code: 1, stderr: 'ERR_PNPM_OUTDATED_LOCKFILE Cannot install' };
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+    // Nieuwe versie niet gezond → terugrol; na de terugrol weer gezond.
+    vi.spyOn(shell, 'wachtOpGezond')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce('{"status":"ok"}');
+
+    // Vóór #755 gooide de rollback-install hard op de drift; nu wordt hij geremedieerd en
+    // bereikt de terugrol zijn normale eindmelding.
+    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(
+      /draait weer op v0\.3\.0/i,
+    );
+
+    const installs = aanroepen.filter((a) => a.argumenten.includes('install'));
+    // vooruit(1, frozen) + terugrol frozen(1) + terugrol retry zonder frozen(1) = 3.
+    expect(installs).toHaveLength(3);
+    expect(installs[2]?.argumenten).not.toContain('--frozen-lockfile');
+  });
+
   it('breekt af als de nieuwe versie vooraf niet gezond wordt, zonder de omgeving aan te raken', async () => {
     process.chdir(maakApp());
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
     stelUitvoerderIn(uitvoerder);
     vi.spyOn(shell, 'isGezondNaStart').mockResolvedValue(false);
 
-    await expect(promote('prod', 'v1.0.0', { ja: true })).rejects.toThrow(/niet gezond/i);
+    const fout = (await promote('prod', 'v1.0.0', { ja: true }).catch((e: unknown) => e)) as Error;
+    expect(fout.message).toMatch(/niet gezond/i);
+    // #756: de migratie draaide wél (die zit vóór de pre-swap-controle), dus de melding zegt
+    // dat eerlijk — geen misleidend "niet aangeraakt".
+    expect(fout.message).toMatch(/migratie is al toegepast/i);
+    expect(aanroepen.some((a) => a.argumenten.includes('migrate'))).toBe(true);
     // De pre-swap health zit vóór de swap: pm2 wordt niet aangeraakt.
     expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);
     // De definitieve (post-swap) health draait dan ook niet.
@@ -215,7 +251,12 @@ describe('promote', () => {
     vi.spyOn(shell, 'isInteractief').mockReturnValue(true);
     const bevestigSpy = vi.spyOn(shell, 'bevestig').mockResolvedValue(false);
 
-    await expect(promote('prod', 'v1.0.0')).rejects.toThrow(/afgebroken/i);
+    const fout = (await promote('prod', 'v1.0.0').catch((e: unknown) => e)) as Error;
+    expect(fout.message).toMatch(/afgebroken/i);
+    // #756: de bevestiging staat ná de migratie, dus de DB is bij "nee" al gemigreerd; de
+    // melding zegt dat eerlijk in plaats van "niet omgezet" zonder meer.
+    expect(fout.message).toMatch(/migratie is al toegepast/i);
+    expect(aanroepen.some((a) => a.argumenten.includes('migrate'))).toBe(true);
     expect(bevestigSpy).toHaveBeenCalled();
     // Bij nee is er niets omgezet: pm2 is niet aangeraakt.
     expect(aanroepen.some((a) => a.commando === 'pm2')).toBe(false);

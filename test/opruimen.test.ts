@@ -34,6 +34,8 @@ interface GitOmgeving {
   readonly rebaseSlaagt?: ReadonlySet<string>;
   /** Map van branchnamen naar hun PR-state ('MERGED' | 'CLOSED' | 'OPEN'). */
   readonly prStaat?: ReadonlyMap<string, string>;
+  /** Branch-namen waarvan `git branch -D` faalt (bv. een gelockte branch). */
+  readonly deleteFaalt?: ReadonlySet<string>;
 }
 
 /** Bouwt een uitkomstbepaler die een complete git-omgeving nabootst. */
@@ -127,7 +129,11 @@ function maakGitOmgeving(config: GitOmgeving = {}): UitkomstBepaler {
         }
         return { stdout: (config.lokaal ?? ['main']).join('\n') };
       }
-      // branch -d: deletion, slaagt altijd in de test
+      // branch -d/-D: deletion. Slaagt tenzij expliciet uitgezet via deleteFaalt.
+      const teVerwijderen = argumenten[argumenten.length - 1] ?? '';
+      if (config.deleteFaalt?.has(teVerwijderen) === true) {
+        return { code: 1, stderr: `error: branch '${teVerwijderen}' not fully merged` };
+      }
       return {};
     }
 
@@ -181,7 +187,7 @@ function maakGitOmgeving(config: GitOmgeving = {}): UitkomstBepaler {
 /** Filtert de opgenomen aanroepen op lokale branch-verwijderingen. */
 function lokaleVerwijderingen(aanroepen: readonly ProcesAanroep[]): string[] {
   return aanroepen
-    .filter((a) => a.commando === 'git' && a.argumenten[0] === 'branch' && a.argumenten[1] === '-d')
+    .filter((a) => a.commando === 'git' && a.argumenten[0] === 'branch' && a.argumenten[1] === '-D')
     .map((a) => a.argumenten[2] ?? '');
 }
 
@@ -386,6 +392,50 @@ describe('opruimen', () => {
     opruimen();
 
     expect(remoteVerwijderingen(aanroepen)).toEqual([]);
+  });
+
+  it('verwijdert een squash-gemergde slice-branch via -D op basis van de PR-state (#658)', () => {
+    // Een squash-merge maakt de branch-tip nooit een ancestor van main, dus `git branch -d`
+    // zou weigeren ("not fully merged"). De PR-state (MERGED) is de bron van waarheid → -D.
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      maakGitOmgeving({
+        lokaal: ['main', 'slice/700-1'],
+        prStaat: new Map([['slice/700-1', 'MERGED']]),
+        // bewust NIET in `gemerged`: de tip is geen ancestor (squash-merge).
+      }),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    opruimen();
+
+    expect(lokaleVerwijderingen(aanroepen)).toEqual(['slice/700-1']);
+  });
+
+  it('laat één mislukte branch-verwijdering de rest niet afbreken (#658)', () => {
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(
+      maakGitOmgeving({
+        lokaal: ['main', 'slice/700-1', 'slice/701-1'],
+        remote: ['old-feature'],
+        gemerged: new Set(['old-feature']),
+        prStaat: new Map([
+          ['slice/700-1', 'MERGED'],
+          ['slice/701-1', 'MERGED'],
+        ]),
+        deleteFaalt: new Set(['slice/700-1']),
+      }),
+    );
+    stelUitvoerderIn(uitvoerder);
+
+    opruimen();
+
+    // De mislukte delete is geprobeerd, maar de tweede lokale én de remote-delete lopen door.
+    expect(lokaleVerwijderingen(aanroepen)).toContain('slice/700-1');
+    expect(lokaleVerwijderingen(aanroepen)).toContain('slice/701-1');
+    expect(remoteVerwijderingen(aanroepen)).toEqual(['old-feature']);
+    // De mislukte branch verschijnt als aparte waarschuwing.
+    expect(uitvoer.some((s) => s.includes('slice/700-1') && s.includes('niet verwijderd'))).toBe(
+      true,
+    );
   });
 
   it('telt geprunede remote-refs uit de fetch-uitvoer', () => {

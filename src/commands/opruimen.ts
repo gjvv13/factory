@@ -277,12 +277,33 @@ export function opruimen(opties: OpruimOpties = {}): void {
     return;
   }
 
+  // `-D` (force), niet `-d`: de categorisatie hierboven (PR-state voor slice-branches,
+  // isGemerged voor de rest) is de bron van waarheid over "mag weg". `-d` doet zijn eigen
+  // ancestry-check over en weigert een squash-gemergde slice-branch ("not fully merged"),
+  // óók als de PR MERGED is — dat liet de opruimstap elke nacht stranden (#658).
+  // Beide lussen zijn `toleranter`: één mislukte delete mag de rest (lokaal én remote)
+  // niet afbreken; mislukkingen worden per branch als waarschuwing gerapporteerd.
+  const lokaalMislukt: string[] = [];
   for (const branch of lokaalVerwijderen) {
-    run('git', ['branch', '-d', branch], { cwd });
+    const res = run('git', ['branch', '-D', branch], { cwd, capture: true, toleranter: true });
+    if (res.code !== 0) lokaalMislukt.push(branch);
   }
 
+  const remoteMislukt: string[] = [];
   for (const branch of remoteVerwijderen) {
-    run('git', ['push', 'origin', '--delete', branch], { cwd });
+    const res = run('git', ['push', 'origin', '--delete', branch], {
+      cwd,
+      capture: true,
+      toleranter: true,
+    });
+    if (res.code !== 0) remoteMislukt.push(branch);
+  }
+
+  for (const branch of lokaalMislukt) {
+    waarschuwing(`lokale branch ${branch} kon niet verwijderd worden — overgeslagen.`);
+  }
+  for (const branch of remoteMislukt) {
+    waarschuwing(`remote branch origin/${branch} kon niet verwijderd worden — overgeslagen.`);
   }
 
   const ietsGedaan =

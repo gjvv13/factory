@@ -100,6 +100,50 @@ describe('integreer', () => {
     expect(ghArgs(aanroepen).some((a) => a[1] === 'comment')).toBe(false);
   });
 
+  it('lege check-rollup → wachten, niet mergen (#753)', () => {
+    // CI nog niet geregistreerd (race met inleveren): rollup is []. Een blocklist zou
+    // dan direct mergen; de allowlist wacht.
+    const status = { mergeable: 'MERGEABLE', statusCheckRollup: [] };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, status));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer();
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'merge')).toBe(false);
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'comment')).toBe(false);
+  });
+
+  it('COMPLETED met een niet-groene conclusion → kick-back, geen merge (#753)', () => {
+    // STARTUP_FAILURE staat niet in de oude blocklist, maar is geen groene conclusion.
+    const status = {
+      mergeable: 'MERGEABLE',
+      statusCheckRollup: [{ status: 'COMPLETED', conclusion: 'STARTUP_FAILURE' }],
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, status));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer();
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'comment')).toBe(true);
+    expect(ghArgs(aanroepen)).toContainEqual(['pr', 'edit', '7', '--remove-label', 'wachtrij']);
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'merge')).toBe(false);
+  });
+
+  it('meerdere checks: één niet-groen → kick-back, geen merge (#753)', () => {
+    // Allowlist: élke check moet groen zijn. Eén NEUTRAL + één FAILURE → niet mergen.
+    const status = {
+      mergeable: 'MERGEABLE',
+      statusCheckRollup: [
+        { status: 'COMPLETED', conclusion: 'NEUTRAL' },
+        { status: 'COMPLETED', conclusion: 'FAILURE' },
+      ],
+    };
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, status));
+    stelUitvoerderIn(uitvoerder);
+
+    integreer();
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'merge')).toBe(false);
+    expect(ghArgs(aanroepen).some((a) => a[1] === 'comment')).toBe(true);
+  });
+
   it('een bezet slot: de run wordt overgeslagen', () => {
     writeFileSync(LOCK, String(process.pid)); // vers slot
     const { uitvoerder, aanroepen } = maakUitvoerderOpnemer(metPr(7, GROEN));

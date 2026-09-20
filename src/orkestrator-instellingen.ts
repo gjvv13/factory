@@ -314,7 +314,11 @@ export function zorgVoorEnvBestand(paden: OrkestratorPaden): void {
       'FACTORY_BOUW_DAGMAXIMUM=2\n' +
       'FACTORY_FASTLANE_CAP=4\n' +
       'FACTORY_BUDGET_USD=5\n' +
-      'FACTORY_WERKER_EFFORT=medium\n',
+      'FACTORY_WERKER_EFFORT=medium\n' +
+      '# Nacht-/opruim-waarschuwingen naar de ops-room (zelfde endpoint als deploy.yml,\n' +
+      '# #760). Zonder deze twee blijft een gefaalde opruimstap alleen in dit log staan.\n' +
+      '# DEPLOY_NOTIFY_URL=http://127.0.0.1:3000/admin/deploy-melding\n' +
+      '# DEPLOY_NOTIFY_TOKEN=\n',
     { mode: 0o600 },
   );
 }

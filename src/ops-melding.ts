@@ -26,6 +26,12 @@ export function meldOps(tekst: string, url: string | undefined, token?: string):
   }
 
   const args = [
+    // -f/--fail: curl geeft exit 0 bij een HTTP-foutstatus (401/403 bij een fout/ontbrekend
+    // token, 404 bij een verkeerd pad, 5xx). Zonder deze vlag vangt `result.code !== 0`
+    // alleen transport-/DNS-fouten en verdwijnt een afgewezen melding geruisloos — precies
+    // de anti-stilte-garantie die dit hoort te borgen (#754, verwant #112). Met -f wordt een
+    // HTTP-fout een non-nul exit en dus een zichtbare waarschuwing.
+    '-f',
     '-s',
     '-X',
     'POST',
