@@ -111,3 +111,13 @@ describe('voegToolToe', () => {
     }
   });
 });
+
+describe('leesAgentGrenzen', () => {
+  it('faalt luid en duidelijk bij een ontbrekende definitie, niet stil-open (#749)', () => {
+    // Een ontbrekend bestand betekent bijna altijd dat `agents/` niet in de gepubliceerde
+    // tarball zit. De fout moet dat aanwijzen — en nooit stil een lege grens teruggeven,
+    // want lege disallowedTools zou de push/gh-grens van de werker open zetten.
+    expect(() => leesAgentGrenzen('bestaat-echt-niet-9f3a')).toThrow(/Agent-definitie ontbreekt/);
+    expect(() => leesAgentGrenzen('bestaat-echt-niet-9f3a')).toThrow(/files/);
+  });
+});

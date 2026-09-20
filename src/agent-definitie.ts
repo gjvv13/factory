@@ -31,7 +31,25 @@ function stripQuotes(waarde: string): string {
  * `key:`- en `  - "waarde"`-patronen.
  */
 export function leesAgentGrenzen(naam: string, basisDir: string = agentsDir): AgentGrenzen {
-  const inhoud = readFileSync(path.join(basisDir, `${naam}.md`), 'utf8');
+  const pad = path.join(basisDir, `${naam}.md`);
+  let inhoud: string;
+  try {
+    inhoud = readFileSync(pad, 'utf8');
+  } catch (fout) {
+    // Luid en duidelijk falen, nooit stil terugvallen op lege grenzen: lege
+    // disallowedTools zou de push/gh-grens van de werker open zetten. Een ontbrekend
+    // bestand betekent bijna altijd dat de agent-definities niet in het gepubliceerde
+    // pakket zitten — `agents` moet in package.json "files" staan zodat de tarball ze
+    // meedraagt (#616/#749; anders crasht elke werker-run vanuit een global/app-install).
+    if ((fout as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `Agent-definitie ontbreekt: ${pad}. Draait de factory uit een geïnstalleerd pakket, ` +
+          `controleer dat "agents" in package.json "files" staat (de tarball moet ze meedragen).`,
+        { cause: fout },
+      );
+    }
+    throw fout;
+  }
   const match = /^---\n([\s\S]*?)\n---/.exec(inhoud);
   if (match?.[1] === undefined) throw new Error(`Geen frontmatter in agents/${naam}.md`);
   const frontmatter = match[1];

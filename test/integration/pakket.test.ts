@@ -55,4 +55,15 @@ describe('het gepakte factory-pakket', () => {
     expect(bestanden).toContain('skeleton/.prettierignore');
     expect(bestanden).toContain('skeleton/.nvmrc');
   });
+
+  it('draagt de agent-definities mee, zodat de werker vanuit een install niet crasht (#749)', () => {
+    // `leesAgentGrenzen` leest `agents/<naam>.md` uit de pakketmap bij élke werker-run.
+    // Ontbreken ze in de tarball, dan crasht de orkestrator vanuit de global/app-install
+    // op ENOENT (#548-regressie, gevonden in #616). De hele set moet mee.
+    for (const agent of ['bouwer', 'reviewer', 'refiner', 'accepteerder']) {
+      expect(bestanden, `agents/${agent}.md ontbreekt in de gepakte tarball`).toContain(
+        `agents/${agent}.md`,
+      );
+    }
+  });
 });
