@@ -12,7 +12,20 @@ export function heeftNieuweMigratie(repoDir: string, sinds: string): boolean {
     ['diff', '--name-only', '--diff-filter=A', sinds, 'HEAD', '--', 'migrations'],
     repoDir,
   );
-  return uit !== undefined && uit.trim() !== '';
+  // `undefined` betekent dat `git diff` non-zero eindigde — vrijwel altijd een
+  // niet-resolvebare `sinds`-ref (een niet-getagde hotfix-build waarvan /health wél een
+  // versie meldt). Niet stil `false` teruggeven: dan laat de migratie-gate een
+  // opgestapelde migratie door en rolt prod automatisch uit — precies de bypass die #455
+  // dichtzette. De poort faalt dus **dicht** (#758): conservatief `true`, met een
+  // waarschuwing, zodat een handmatige prod-promote wordt afgedwongen.
+  if (uit === undefined) {
+    process.stderr.write(
+      `waarschuwing: kon het migratiebereik niet bepalen (git diff faalde voor '${sinds}'); ` +
+        'ga voor de zekerheid uit van een nieuwe migratie.\n',
+    );
+    return true;
+  }
+  return uit.trim() !== '';
 }
 
 /** De versie uit een /health-JSON-body, of undefined als die er niet (geldig) in staat. */

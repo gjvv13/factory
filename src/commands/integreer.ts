@@ -117,6 +117,14 @@ function wachtrij(repoDir: string, repoArg: readonly string[]): WachtrijItem[] {
 
 type Uitkomst = 'gemerged' | 'kickback' | 'wacht';
 
+/**
+ * De enige check-conclusions die als "groen" tellen bij de merge-poort. Allowlist
+ * i.p.v. blocklist (#753): we mergen alléén op een conclusion die we expliciet als
+ * geslaagd erkennen, zodat een onbekende of nieuwe status (STARTUP_FAILURE, STALE, …)
+ * of een lege rollup nooit per ongeluk door de poort glipt.
+ */
+const GROENE_CONCLUSIES: ReadonlySet<string> = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
+
 interface PrStatus {
   readonly mergeable: string;
   readonly checks: readonly { readonly status?: string; readonly conclusion?: string }[];
@@ -169,29 +177,39 @@ function kickBack(
 
 /**
  * Beoordeelt de oudste PR via de bestaande CI-poort. Groen + mergeable → serieel
- * mergen. Rood of een merge-conflict → kick-back (uit de rij, met uitleg). Poort nog
- * bezig → wachten tot de volgende run (we lopen niet vooruit op de FIFO-volgorde).
+ * mergen. Niet-groen of een merge-conflict → kick-back (uit de rij, met uitleg). Poort
+ * nog bezig of nog niet geregistreerd → wachten tot de volgende run (we lopen niet
+ * vooruit op de FIFO-volgorde).
+ *
+ * De poort is een **allowlist** (#753): mergen mag alléén als élke check groen is (een
+ * conclusion in {@link GROENE_CONCLUSIES}), niet "geen enkele check faalde". Dat laatste
+ * merget óók op een lege rollup (CI nog niet geregistreerd) of op een onbekende
+ * conclusion — precies de gaten die de CLAUDE.md-garantie "toetst elke PR via de
+ * CI-poort" zouden ondergraven.
  */
 function verwerkOudste(repoDir: string, nummer: number, repoArg: readonly string[]): Uitkomst {
   const { mergeable, checks } = statusVan(repoDir, nummer, repoArg);
-  const gefaald = checks.some(
-    (c) =>
-      c.conclusion === 'FAILURE' ||
-      c.conclusion === 'CANCELLED' ||
-      c.conclusion === 'TIMED_OUT' ||
-      c.conclusion === 'ACTION_REQUIRED',
-  );
-  const draaitNog = checks.some((c) => c.status !== 'COMPLETED');
 
-  if (gefaald) {
-    kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is rood', repoArg);
+  // Poort draait nog: minstens één check is niet COMPLETED. Wachten tot de volgende run.
+  if (checks.some((c) => c.status !== 'COMPLETED')) {
+    return 'wacht';
+  }
+  // Lege rollup is geen groen vinkje maar een niet-gedraaide poort: de reële race is dat
+  // `inleveren` net branch+PR+label pushte en de check op het kijkmoment nog niet
+  // geregistreerd is. Wachten, niet mergen.
+  if (checks.length === 0) {
+    return 'wacht';
+  }
+  // Allowlist: élke voltooide check moet een groene conclusion dragen.
+  if (!checks.every((c) => GROENE_CONCLUSIES.has(c.conclusion ?? ''))) {
+    kickBack(repoDir, nummer, 'de kwaliteitspoort (CI) is niet groen', repoArg);
     return 'kickback';
   }
   if (mergeable === 'CONFLICTING') {
     kickBack(repoDir, nummer, 'merge-conflict met main', repoArg);
     return 'kickback';
   }
-  if (draaitNog || mergeable === 'UNKNOWN') {
+  if (mergeable === 'UNKNOWN') {
     return 'wacht';
   }
 

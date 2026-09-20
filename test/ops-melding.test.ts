@@ -60,6 +60,19 @@ describe('meldOps (#606)', () => {
     expect(curl?.argumenten).toContain('https://ops.example.com/notify');
   });
 
+  it('stuurt curl -f/--fail zodat een HTTP-foutstatus een non-nul exit geeft (#754)', () => {
+    vanStdout();
+    const { uitvoerder, aanroepen } = maakUitvoerderOpnemer();
+    stelUitvoerderIn(uitvoerder);
+
+    meldOps('tekst', 'https://ops.example.com/notify', 'token');
+
+    // Zonder -f geeft curl exit 0 bij 401/403/404/5xx en verdwijnt een afgewezen melding
+    // geruisloos. Met -f wordt dat een non-nul exit → een zichtbare waarschuwing.
+    const curl = aanroepen.find((a) => a.commando === 'curl');
+    expect(curl?.argumenten).toContain('-f');
+  });
+
   it('met falende curl (exit ≠ 0) → waarschuwing, geen throw', () => {
     const uit = vanStdout();
     const { uitvoerder } = maakUitvoerderOpnemer(({ commando }) =>

@@ -46,6 +46,35 @@ function omgevingsVariabelen(
 }
 
 /**
+ * Installeert de afhankelijkheden met `--frozen-lockfile` en remedieert lockfile-drift
+ * (#669): eindigt de frozen install op een `ERR_PNPM_*_LOCKFILE`, dan herhalen we zonder
+ * `--frozen-lockfile` met een waarschuwing. Elke andere fout is hard.
+ *
+ * Gedeeld door het vooruit- én het terugrol-pad (#755): eerst deed alleen het vooruitpad
+ * deze remediatie en gooide de rollback-install hard bij dezelfde drift-klasse — waardoor
+ * een herstelbare terugrol prod plat liet liggen ("Terugrollen lukte niet"). `wat` benoemt
+ * het pad in de meldingen ('uitrol' of 'terugrollen').
+ */
+function installeerMetDriftHerstel(werkmap: string, wat: string): void {
+  const poging = installeer(['--frozen-lockfile', '--prod=false'], {
+    cwd: werkmap,
+    capture: true,
+    toleranter: true,
+  });
+  if (poging.code === 0) return;
+  if (isLockfileDrift(poging.stderr)) {
+    waarschuwing(
+      `lockfile-drift gedetecteerd (${wat}) — herhaalt zonder --frozen-lockfile (#669).`,
+    );
+    installeer(['--prod=false'], { cwd: werkmap, capture: true });
+  } else {
+    throw new GebruikersFout(
+      `pnpm install --frozen-lockfile faalde (${wat}) met code ${String(poging.code)}`,
+    );
+  }
+}
+
+/**
  * Zet een release-tag neer op acc of prod en herstart die omgeving.
  * De omgevingen zijn losse clones die altijd op een tag staan, nooit op een
  * branch, zodat werk in de repo een draaiende omgeving niet raakt.
@@ -146,31 +175,19 @@ export async function promote(
   const { commando, basisArgumenten } = pakketbeheerder();
 
   kop('Afhankelijkheden installeren');
-  {
-    // Playbook: lockfile-drift — probeer eerst met --frozen-lockfile; bij een
-    // lockfile-drift (ERR_PNPM_OUTDATED_LOCKFILE of ERR_PNPM_FROZEN_LOCKFILE)
-    // remediëren we met een gewone install en een waarschuwing (#669).
-    const poging = installeer(['--frozen-lockfile', '--prod=false'], {
-      cwd: werkmap,
-      capture: true,
-      toleranter: true,
-    });
-    if (poging.code !== 0) {
-      if (isLockfileDrift(poging.stderr)) {
-        waarschuwing('lockfile-drift gedetecteerd — herhaalt zonder --frozen-lockfile (#669).');
-        installeer(['--prod=false'], { cwd: werkmap, capture: true });
-      } else {
-        throw new GebruikersFout(
-          `pnpm install --frozen-lockfile faalde met code ${String(poging.code)}`,
-        );
-      }
-    }
-  }
+  installeerMetDriftHerstel(werkmap, 'uitrol');
 
   kop('Bouwen');
   run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
 
   kop('Database migreren');
+  // Bewuste volgorde: migrate → pre-swap-controle → bevestiging (#756). De migratie is
+  // forward-only en de nieuwe versie heeft het opgeschoven schema nodig om op de
+  // tijdelijke poort gezond op te komen, dus migreren kan niet ná de pre-swap-controle.
+  // Gevolg: faalt de pre-swap-controle of antwoordt de operator "nee", dan is de DB al
+  // gemigreerd terwijl de oude code nog draait. De afbreek-meldingen hieronder zeggen dat
+  // eerlijk; de terugweg is `factory terugrol <omgeving>` (zet de vorige tag terug —
+  // migraties draaien niet automatisch terug).
   run(commando, [...basisArgumenten, 'run', 'migrate'], {
     cwd: werkmap,
     env: omgevingsVariabelen(repoDir, werkmap, omgeving),
@@ -205,13 +222,18 @@ export async function promote(
   );
   if (!voorafGezond) {
     throw new GebruikersFout(
-      `De nieuwe versie werd niet gezond op een tijdelijke poort; ${omgeving} is niet aangeraakt.`,
+      `De nieuwe versie werd niet gezond op een tijdelijke poort; ${omgeving} draait nog op de ` +
+        'oude versie. Let op: de DB-migratie is al toegepast — de oude code draait dus tegen het ' +
+        'nieuwe schema.',
     );
   }
   ok('nieuwe versie komt gezond op');
 
   if (vraagtBevestiging && !(await bevestig(`Prod omzetten naar ${tag}?`))) {
-    throw new GebruikersFout('Afgebroken: prod is niet omgezet.');
+    throw new GebruikersFout(
+      'Afgebroken: prod is niet omgezet (draait nog de oude versie). Let op: de DB-migratie is al ' +
+        'toegepast — de oude code draait dus tegen het nieuwe schema.',
+    );
   }
 
   kop('Omgeving herstarten');
@@ -271,7 +293,10 @@ export async function promote(
     ],
     werkmap,
   );
-  installeer(['--frozen-lockfile', '--prod=false'], { cwd: werkmap, capture: true });
+  // Zelfde drift-remediatie als het vooruitpad (#755): de vorige tag kan óók lockfile-drift
+  // dragen, en dan mag de terugrol daar niet hard op breken — anders blijft prod plat om
+  // precies de fout die een gewone install had gered.
+  installeerMetDriftHerstel(werkmap, 'terugrollen');
   run(commando, [...basisArgumenten, 'run', 'build'], { cwd: werkmap, capture: true });
   herstartOmgeving(ecosystem, pm2Naam);
 

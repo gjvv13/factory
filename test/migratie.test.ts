@@ -44,11 +44,17 @@ describe('heeftNieuweMigratie', () => {
     expect(heeftNieuweMigratie('/repo', 'v0.16.1')).toBe(false);
   });
 
-  it('is onwaar als het git-commando faalt', () => {
+  it('faalt dicht: git-fout (niet-resolvebare ref) → waar, met waarschuwing (#758)', () => {
+    // Non-zero git diff = vrijwel altijd een niet-resolvebare `sinds`-ref. Stil `false`
+    // zou de migratie-gate open laten (#455-bypass); conservatief `true` sluit hem veilig.
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
     const bepaal: UitkomstBepaler = ({ argumenten }) =>
       argumenten[0] === 'diff' ? { code: 1 } : {};
     stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
-    expect(heeftNieuweMigratie('/repo', 'v0.16.1')).toBe(false);
+
+    expect(heeftNieuweMigratie('/repo', 'v0.16.1')).toBe(true);
+    expect(stderrSpy.mock.calls.map((c) => String(c[0])).join('')).toContain('waarschuwing');
+    stderrSpy.mockRestore();
   });
 
   it('vergelijkt tegen de meegegeven tag met alleen toegevoegde bestanden', () => {
@@ -151,6 +157,31 @@ describe('toonMigratieStatus', () => {
     await toonMigratieStatus('/fake-app');
 
     expect(uitvoer.trim()).toBe('nee');
+  });
+
+  it('faalt dicht als /health een versie meldt waarvan de tag niet resolvet (#758)', async () => {
+    // De #758-bypass: prod draait een niet-getagde hotfix-build, /health meldt die versie
+    // → prodTag is *defined* (geen terugval), maar `git diff v<hotfix> HEAD` faalt. Stil
+    // `nee` zou een opgestapelde migratie automatisch doorlaten; de gate hoort `ja` te geven.
+    const bepaal: UitkomstBepaler = ({ argumenten }) =>
+      argumenten[0] === 'diff' ? { code: 1 } : {};
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve('{"status":"ok","version":"0.10.99-hotfix"}'),
+      }),
+    );
+    const appConfig = await import('../src/app-config.js');
+    vi.spyOn(appConfig, 'zoekAppDir').mockReturnValue('/fake-app');
+    vi.spyOn(appConfig, 'leesAppConfig').mockReturnValue(fakeConfig());
+
+    await toonMigratieStatus('/fake-app');
+
+    expect(uitvoer.trim()).toBe('ja');
+    expect(foutenUitvoer).toContain('waarschuwing');
   });
 
   it('valt terug op vorige-tag-logica als /health onbereikbaar is', async () => {
