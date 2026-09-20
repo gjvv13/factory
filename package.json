@@ -50,6 +50,7 @@
     "workflows",
     "skills",
     "claude-hooks",
+    "agents",
     ".claude",
     "dependabot.yml"
   ],
