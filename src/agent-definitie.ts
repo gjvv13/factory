@@ -30,8 +30,8 @@ function stripQuotes(waarde: string): string {
  * het model eruit. Geen YAML-parser nodig: het frontmatter bevat alleen eenvoudige
  * `key:`- en `  - "waarde"`-patronen.
  */
-export function leesAgentGrenzen(naam: string): AgentGrenzen {
-  const inhoud = readFileSync(path.join(agentsDir, `${naam}.md`), 'utf8');
+export function leesAgentGrenzen(naam: string, basisDir: string = agentsDir): AgentGrenzen {
+  const inhoud = readFileSync(path.join(basisDir, `${naam}.md`), 'utf8');
   const match = /^---\n([\s\S]*?)\n---/.exec(inhoud);
   if (match?.[1] === undefined) throw new Error(`Geen frontmatter in agents/${naam}.md`);
   const frontmatter = match[1];
@@ -67,13 +67,13 @@ export function leesAgentGrenzen(naam: string): AgentGrenzen {
  * Een dubbele toevoeging is een no-op: als het patroon er al staat, wordt het bestand
  * niet aangeraakt. Gooit bij een onbekend agent-bestand of ontbrekend frontmatter.
  */
-export function voegToolToe(agent: string, patroon: string): void {
-  const bestandsPad = path.join(agentsDir, `${agent}.md`);
+export function voegToolToe(agent: string, patroon: string, basisDir: string = agentsDir): void {
+  const bestandsPad = path.join(basisDir, `${agent}.md`);
   const inhoud = readFileSync(bestandsPad, 'utf8');
 
   // Controleer of het patroon al in de allowedTools staat. `leesAgentGrenzen` gooit
   // hier al als het frontmatter ontbreekt, dus vanaf hier is het frontmatter er zeker.
-  const bestaand = leesAgentGrenzen(agent);
+  const bestaand = leesAgentGrenzen(agent, basisDir);
   if (bestaand.allowedTools.includes(patroon)) {
     return;
   }

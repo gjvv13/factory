@@ -629,6 +629,19 @@ export function werkerArgumenten(opdracht: WerkerOpdracht): string[] {
   // grens en het model borgen we daarom expliciet uit de definitie (#547): zo is de
   // agent-def de enige bron van waarheid én blijft de grens hard.
   const grenzen = leesAgentGrenzen(opdracht.agent);
+  // Een werker draait nooit zonder expliciete grenzen. Een lege lijst — door
+  // frontmatter-drift in de parse of een niet-gepakte definitie — mag de vlag niet
+  // stil weglaten: dan verdwijnt de push/gh-verbodslijst geruisloos en draait de werker
+  // open. Weiger luid i.p.v. fail-open (#757). Alle werker-agents dragen bewust beide
+  // lijsten; een lege is dus altijd een fout, geen geldige toestand.
+  if (grenzen.allowedTools.length === 0 || grenzen.disallowedTools.length === 0) {
+    throw new Error(
+      `Agent ${opdracht.agent} levert lege tool-grenzen (allowedTools: ` +
+        `${String(grenzen.allowedTools.length)}, disallowedTools: ${String(grenzen.disallowedTools.length)}). ` +
+        `Een werker mag nooit zonder expliciete grenzen draaien — controleer het frontmatter ` +
+        `van agents/${opdracht.agent}.md (parse-drift of een niet-gepakte definitie).`,
+    );
+  }
   return [
     // Hervatten of beginnen: `--resume` neemt de sessie-id van de bestaande sessie,
     // `--session-id` kent hem toe aan een nieuwe.
@@ -641,10 +654,10 @@ export function werkerArgumenten(opdracht: WerkerOpdracht): string[] {
     '--agent',
     opdracht.agent,
     ...(grenzen.model === undefined ? [] : ['--model', grenzen.model]),
-    ...(grenzen.allowedTools.length === 0 ? [] : ['--allowedTools', ...grenzen.allowedTools]),
-    ...(grenzen.disallowedTools.length === 0
-      ? []
-      : ['--disallowedTools', ...grenzen.disallowedTools]),
+    '--allowedTools',
+    ...grenzen.allowedTools,
+    '--disallowedTools',
+    ...grenzen.disallowedTools,
     ...(opdracht.effort === undefined ? [] : ['--effort', opdracht.effort]),
     '--max-budget-usd',
     String(opdracht.budgetUsd),

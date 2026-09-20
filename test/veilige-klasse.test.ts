@@ -24,15 +24,20 @@ describe('VEILIGE_KLASSE', () => {
 });
 
 describe('isVeilig', () => {
-  it('herkent bekende labels als veilig', () => {
+  it('herkent bekende neveneffect-vrije labels als veilig', () => {
     expect(isVeilig('diff')).toBe(true);
     expect(isVeilig('sort')).toBe(true);
     expect(isVeilig('jq')).toBe(true);
-    expect(isVeilig('find')).toBe(true);
-    expect(isVeilig('awk')).toBe(true);
-    expect(isVeilig('sed')).toBe(true);
-    expect(isVeilig('tee')).toBe(true);
-    expect(isVeilig('xargs')).toBe(true);
+    expect(isVeilig('stat')).toBe(true);
+    expect(isVeilig('printenv')).toBe(true);
+  });
+
+  it('weigert verba die met vijandige argumenten willekeurige exec of schrijven toelaten (#751)', () => {
+    // Deze stonden ooit in de klasse maar zijn geen neveneffect-vrije verba: via de
+    // auto-groei zouden ze een sluiproute naar netwerk/push/gh/schrijven openen.
+    for (const label of ['env', 'awk', 'sed', 'find', 'xargs', 'tee']) {
+      expect(isVeilig(label), `${label} hoort niet in de veilige klasse`).toBe(false);
+    }
   });
 
   it('weigert rm', () => {

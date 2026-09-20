@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { leesAgentFrontmatter } from './agent-definitie.js';
+import { agentsDir } from '../src/paths.js';
 import { herstelAsyncUitvoerder, stelAsyncUitvoerderIn } from '../src/shell.js';
 import {
   AGENT_ACCEPTEERDER,
@@ -82,6 +83,26 @@ describe('werkerArgumenten', () => {
     // De verbodslijst uit de definitie staat écht op de aanroep.
     for (const verbod of def.disallowedTools) {
       expect(args).toContain(verbod);
+    }
+  });
+
+  it('weigert luid bij lege tool-grenzen i.p.v. de vlag stil weg te laten (#757)', () => {
+    // Frontmatter-drift (of een niet-gepakte definitie) kan een lijst leeg laten parsen.
+    // De oude code liet dan de vlag weg → de push/gh-grens verdween geruisloos. Nu is dat
+    // een harde fout. Fixture: een agent met lege lijsten in de echte agents-map.
+    const agentPad = path.join(agentsDir, 'test-757-leeg.md');
+    writeFileSync(
+      agentPad,
+      ['---', 'name: test-757-leeg', 'allowedTools:', 'disallowedTools:', '---', '', 'Leeg.'].join(
+        '\n',
+      ),
+    );
+    try {
+      expect(() => werkerArgumenten({ ...OPDRACHT, agent: 'test-757-leeg' })).toThrow(
+        /lege tool-grenzen/,
+      );
+    } finally {
+      rmSync(agentPad, { force: true });
     }
   });
 
