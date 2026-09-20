@@ -188,6 +188,8 @@ describe('orkestrator-instellingen', () => {
       expect(readFileSync(paden.envPad, 'utf8')).toContain(TOKEN_SLEUTEL);
       // Het skelet noemt het bouw-dagmaximum zodat je weet dat de knop bestaat (#343).
       expect(readFileSync(paden.envPad, 'utf8')).toContain('FACTORY_BOUW_DAGMAXIMUM');
+      // En de ops-melding-knop staat als vindbare placeholder in het skelet (#760).
+      expect(readFileSync(paden.envPad, 'utf8')).toContain('# DEPLOY_NOTIFY_URL=');
 
       writeFileSync(paden.envPad, `${TOKEN_SLEUTEL}=sk-blijft-staan\n`, { mode: 0o600 });
       zorgVoorEnvBestand(paden);
