@@ -1175,16 +1175,22 @@ export function verwerkAutoGroei(
   const veilig = groei.filter((g) => isVeilig(g.label));
   if (veilig.length === 0) return [];
 
-  // Voeg de patronen toe aan de agent-definitie.
+  // De patronen worden toegevoegd aan de agent-definitie in de factory-SPIEGEL — dezelfde
+  // map waar de commit ze pakt. Ze in de pakketmap (`agentsDir`) editen zou de commit in de
+  // spiegel niets laten stagen (PR landt nooit), én de mutatie zou bij de eerstvolgende
+  // self-update/bump overschreven worden (#752).
   const agent = opties?.agent ?? AGENT_BOUWER;
-  for (const g of veilig) {
-    voegToolToe(agent, g.patroon);
-  }
 
-  if (opties?.skipGit !== true) {
-    // PR aanmaken in de factory-spiegel.
+  if (opties?.skipGit === true) {
+    // Testpad: geen git/gh, maar wél de edit op de spiegel-agents — dezelfde locatie als
+    // waar de commit hem zou pakken, zodat de test edit==commit-locatie kan borgen.
+    const spiegelAgents = path.join(factorySpiegelPad, 'agents');
+    for (const g of veilig) voegToolToe(agent, g.patroon, spiegelAgents);
+  } else {
+    // maakAutoGroeiPr edit de spiegel ná het aanmaken van de branch (anders wist de
+    // checkout de edit) en commit hetzelfde bestand.
     try {
-      maakAutoGroeiPr(veilig, factorySpiegelPad);
+      maakAutoGroeiPr(veilig, agent, factorySpiegelPad);
     } catch (fout) {
       waarschuwing(
         `auto-groei PR kon niet aangemaakt worden: ${fout instanceof Error ? fout.message : String(fout)}`,
@@ -1213,12 +1219,18 @@ export function verwerkAutoGroei(
  * De spiegel staat op `origin/main`. De stappen:
  * 1. `git checkout main && git pull` — zodat de spiegel schoon is.
  * 2. `git checkout -b auto-groei/<datum>-<labels>`
- * 3. `git add agents/bouwer.md && git commit`
- * 4. `git push origin <branch>`
- * 5. `gh pr create` met auto-merge via de merge-queue.
- * 6. `git checkout main` — spiegel herstellen.
+ * 3. de patronen toevoegen aan `agents/<agent>.md` IN de spiegel (ná de branch, anders
+ *    wist de checkout de edit) — zodat de commit ze daadwerkelijk pakt (#752).
+ * 4. `git add agents/<agent>.md && git commit`
+ * 5. `git push origin <branch>`
+ * 6. `gh pr create` met auto-merge via de merge-queue.
+ * 7. `git checkout main` — spiegel herstellen.
  */
-function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: string): void {
+function maakAutoGroeiPr(
+  groei: readonly VerwerkteGroei[],
+  agent: string,
+  factorySpiegelPad: string,
+): void {
   const labels = groei.map((g) => g.label).join('-');
   const datum = kalenderdag(new Date(Date.now()));
   const branch = `auto-groei/${datum}-${labels}`;
@@ -1245,8 +1257,13 @@ function maakAutoGroeiPr(groei: readonly VerwerkteGroei[], factorySpiegelPad: st
     return;
   }
 
+  // Nu de branch bestaat: de patronen toevoegen aan de agent-definitie IN de spiegel,
+  // zodat de commit hieronder ze echt pakt (edit- = commit-locatie, #752).
+  const spiegelAgents = path.join(factorySpiegelPad, 'agents');
+  for (const g of groei) voegToolToe(agent, g.patroon, spiegelAgents);
+
   // Commit.
-  run('git', ['add', 'agents/bouwer.md'], { cwd: factorySpiegelPad, capture: true });
+  run('git', ['add', `agents/${agent}.md`], { cwd: factorySpiegelPad, capture: true });
   run('git', ['commit', '-m', commitBericht], { cwd: factorySpiegelPad, capture: true });
 
   // Push.

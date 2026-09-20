@@ -9,6 +9,15 @@
  * **Bewust niet in de lijst:** `rm` (kan buiten de worktree wissen — het patroon kan
  * geen padbeperking uitdrukken), `git -C` (kan gecombineerd worden met `push`),
  * `chmod`/`chown` (rechtenwijziging), `curl`/`wget` (netwerk), alles met `gh`/`git push`.
+ *
+ * **Ook bewust níét (verwijderd na #751):** verba die met vijandige argumenten alsnog
+ * willekeurige commando's draaien of buiten de worktree schrijven — die zouden via de
+ * auto-groei (#543) een sluiproute openen naar precies de klassen die "nooit" mogen
+ * groeien (netwerk/`git push`/`gh`):
+ * - `env` (`env git push`, `env curl …`, `env gh …`), `awk` (`awk 'BEGIN{system(...)}'`),
+ *   `sed` (GNU `s///e` voert uit), `find` (`-exec <cmd>`), `xargs` (`xargs sh -c …`) —
+ *   allemaal willekeurige exec;
+ * - `tee` — schrijft naar een willekeurig bestand buiten de worktree.
  */
 export const VEILIGE_KLASSE: readonly string[] = [
   'Bash(diff:*)',
@@ -16,10 +25,6 @@ export const VEILIGE_KLASSE: readonly string[] = [
   'Bash(uniq:*)',
   'Bash(cut:*)',
   'Bash(tr:*)',
-  'Bash(tee:*)',
-  'Bash(awk:*)',
-  'Bash(sed:*)',
-  'Bash(find:*)',
   'Bash(stat:*)',
   'Bash(file:*)',
   'Bash(basename:*)',
@@ -29,13 +34,11 @@ export const VEILIGE_KLASSE: readonly string[] = [
   'Bash(pwd:*)',
   'Bash(date:*)',
   'Bash(jq:*)',
-  'Bash(env:*)',
   'Bash(printenv:*)',
   'Bash(test:*)',
   'Bash([:*)',
   'Bash(true:*)',
   'Bash(false:*)',
-  'Bash(xargs:*)',
 ];
 
 /**
