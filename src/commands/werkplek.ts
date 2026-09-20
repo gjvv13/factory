@@ -67,9 +67,13 @@ export function werkplekVanSessie(cwd: string): string | undefined {
   return gitDir === gedeeldeDir ? undefined : top;
 }
 
-/** De branch die bij een issue hoort; `-1` blijft staan zodat #128 de koppeling herkent. */
-export function branchVan(issue: number): string {
-  return `slice/${String(issue)}-1`;
+/**
+ * De branch die bij een issue hoort: `slice/<issue>-<slice>` (default slice 1, zodat #128
+ * de koppeling herkent). Het slice-nummer is meestal 1; een niet-gesplitst multi-slice-
+ * issue waarvan `-1` al gemergd is, bouwt de volgende ongebouwde slice (#659).
+ */
+export function branchVan(issue: number, slice = 1): string {
+  return `slice/${String(issue)}-${String(slice)}`;
 }
 
 /** Of de branch lokaal al bestaat. `worktree remove` laat hem namelijk staan. */
@@ -118,6 +122,12 @@ export interface WerkplekOpties {
    * branch van het vorige item in dezelfde app, zodat de PR's conflictvrij stapelen.
    */
   readonly basis?: string;
+  /**
+   * Het slice-nummer in de branchnaam (`slice/<issue>-<slice>`); default 1. Een
+   * niet-gesplitst multi-slice-issue bouwt zo de volgende ongebouwde slice i.p.v. een
+   * al-gemergde `-1` te herbouwen (#659).
+   */
+  readonly slice?: number;
 }
 
 /**
@@ -131,7 +141,7 @@ export function werkplek(issueArgument: string | undefined, opties: WerkplekOpti
   }
   const repoDir = opties.cwd ?? process.cwd();
   const pad = werkplekPad(repoWortelVan(repoDir), issue);
-  const branch = branchVan(issue);
+  const branch = branchVan(issue, opties.slice);
 
   if (opties.op === true) {
     // Vanuit de hoofdkloon opruimen, niet vanuit `repoDir`: sta je zélf in de werkplek,

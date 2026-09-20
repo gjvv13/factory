@@ -7,6 +7,7 @@ import {
   beschrijfBouw,
   bouwAf,
   bouwBranch,
+  volgendeSlice,
   bouwPrompt,
   bouwWachtrij,
   bouwWerkplek,
@@ -632,6 +633,8 @@ describe('de vorm van een bouwplan', () => {
     // zijn, want de spiegel wordt vóór elke run hard teruggezet op origin/main.
     expect(bouwWerkplek('beheer', 149, '/w')).toBe('/w/beheer-wt/149');
     expect(bouwBranch(149)).toBe('slice/149-1');
+    // Met een slice-nummer (#659): de volgende ongebouwde slice.
+    expect(bouwBranch(149, 2)).toBe('slice/149-2');
   });
 
   it('houdt refinen de default en weigert een onbekende soort', () => {
@@ -640,6 +643,46 @@ describe('de vorm van een bouwplan', () => {
     expect(leesSoort('bouw')).toBe('bouw');
     // Stil terugvallen op refinen zou een bouwopdracht in een refinement veranderen.
     expect(() => leesSoort('bouwen')).toThrow(/Onbekende --soort/);
+  });
+});
+
+describe('volgendeSlice (#659)', () => {
+  afterEach(() => {
+    herstelUitvoerder();
+  });
+
+  /** Stubt `gh pr view slice/<issue>-<m>` met een map van branch → PR-state. */
+  function stubPrState(staten: Record<string, string>): void {
+    const { uitvoerder } = maakUitvoerderOpnemer(({ commando, argumenten }) => {
+      if (commando === 'gh' && argumenten[0] === 'pr' && argumenten[1] === 'view') {
+        const branch = argumenten[2] ?? '';
+        const staat = staten[branch];
+        // Geen PR voor die branch → gh faalt (undefined uitvoer), net als in productie.
+        return staat === undefined ? { code: 1, stdout: '' } : { stdout: staat };
+      }
+      return {};
+    });
+    stelUitvoerderIn(uitvoerder);
+  }
+
+  it('geeft 1 voor een gewoon issue zonder gebouwde slice', () => {
+    stubPrState({});
+    expect(volgendeSlice('factory', 700)).toBe(1);
+  });
+
+  it('geeft 1 als slice -1 nog een open PR heeft (niet gemergd → niet overslaan)', () => {
+    stubPrState({ 'slice/700-1': 'OPEN' });
+    expect(volgendeSlice('factory', 700)).toBe(1);
+  });
+
+  it('slaat een gemergde slice -1 over en bouwt -2 (#659)', () => {
+    stubPrState({ 'slice/700-1': 'MERGED' });
+    expect(volgendeSlice('factory', 700)).toBe(2);
+  });
+
+  it('slaat meerdere gemergde slices over', () => {
+    stubPrState({ 'slice/700-1': 'MERGED', 'slice/700-2': 'MERGED' });
+    expect(volgendeSlice('factory', 700)).toBe(3);
   });
 });
 
