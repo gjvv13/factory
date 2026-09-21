@@ -1,0 +1,137 @@
+name: sync-on-factory-bump
+
+# Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
+# hier op met `factory sync`.
+#
+# Deel van C (#743): Dependabot bezit de factory-bump; deze workflow heelt de PR zodat de
+# bestaande sync-poort (`ci.yml` → `factory sync --check`) groen wordt. Dependabot bumpt
+# alleen `package.json` + de lockfile; de gesyncte bestanden (workflows, skills, slash
+# commands, git-hook) komen niet mee. Draait op een Dependabot-PR die de
+# `@gjvv13/factory`-dep wijzigt, draait `factory sync` en commit het verschil terug op de
+# PR-branch. Zo draagt de PR versie + sync, wordt `sync --check` groen en kan
+# `dependabot-auto-merge.yml` (#399) 'm mergen. Daarmee is de bump-bron irrelevant en kan
+# de zelfgebouwde `bump-factory.yml` verdwijnen.
+#
+# VEILIGHEID — bewust `pull_request` en niet `pull_request_target`. `dependabot-auto-merge`
+# mag `pull_request_target` gebruiken omdat het geen PR-code uitcheckt (alleen metadata).
+# Deze workflow draait wél PR-code (`pnpm install` voert lifecycle-scripts uit, `factory
+# sync` draait de nieuwe factory), dus een write-token aan die code geven zou een
+# supply-chain-gat zijn. Vandaar `pull_request`: de ingebouwde GITHUB_TOKEN is dan
+# read-only, en we pushen met `PROJECT_TOKEN` dat **alléén in de push-stap** in de omgeving
+# staat — niet tijdens install/sync. De PR-branch is van Dependabot in dezelfde repo (geen
+# fork), en pnpm draait alleen de gecureerde build-scripts (geen dangerouslyAllowAllBuilds).
+#
+# SECRET (eenmalig per app): een door Dependabot getriggerde `pull_request` leest secrets
+# uit de **Dependabot**-secretstore, niet de Actions-store. Zet `PROJECT_TOKEN` (classic PAT
+# met `repo` + `workflow`) daarom óók als Dependabot-secret (Settings → Secrets and
+# variables → Dependabot). Ontbreekt het, dan stopt de push-stap met een duidelijke melding
+# en blijft de PR rood op `sync --check` — hij mergt dan niet stil op een niet-gesyncte staat.
+
+on:
+  pull_request:
+    paths:
+      - package.json
+
+# Read-only: we pushen niet met deze token maar met PROJECT_TOKEN (zie boven).
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-on-factory-bump-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    # Alleen Dependabot-PR's: de sync-commit hoort bij een dep-bump, niet bij handwerk.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: [self-hosted, mini]
+    steps:
+      # Read-only checkout van de PR-branch met de ingebouwde token; de push gebeurt
+      # verderop met PROJECT_TOKEN via een expliciete remote-URL.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Alleen doorgaan als de @gjvv13/factory-dep wijzigt
+        id: bump
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          lees() { node -p "const d=require('./package.json').devDependencies||{};d['@gjvv13/factory']||d.factory||''" 2>/dev/null; }
+          nieuw=$(lees)
+          oud=$(git show "origin/$BASE_REF:package.json" 2>/dev/null \
+            | node -p "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const d=JSON.parse(s).devDependencies||{};process.stdout.write(d['@gjvv13/factory']||d.factory||'')}catch{process.stdout.write('')}})" 2>/dev/null)
+          if [ "$nieuw" = "$oud" ]; then
+            echo "@gjvv13/factory ongewijzigd ($nieuw) — geen sync nodig."
+            echo "doorgaan=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::@gjvv13/factory: $oud → $nieuw — sync draaien."
+            echo "doorgaan=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Node en pnpm van de runner (mini): node staat er al (runner-`.env` zet NVM_BIN),
+      # pnpm komt uit corepack. Geen setup-node/pnpm-action: die werden elke run van
+      # codeload gehaald en liepen daar op stuk (#270). Node-drift wordt geremedieerd i.p.v.
+      # de run rood te maken (#669).
+      - name: Node en pnpm van de runner
+        if: steps.bump.outputs.doorgaan == 'true'
+        run: |
+          verwacht=$(tr -d ' \n' < .nvmrc)
+          huidig=$(node -p "process.versions.node.split('.')[0]")
+          if [ "$huidig" != "$verwacht" ]; then
+            echo "::warning::runner draait node $huidig, .nvmrc vraagt $verwacht — wordt geremedieerd."
+            . "$HOME/.nvm/nvm.sh"
+            if ! nvm install "$verwacht"; then
+              echo "::error::nvm install $verwacht mislukte."
+              exit 1
+            fi
+            nvm use "$verwacht"
+            echo "$(dirname "$(command -v node)")" >> "$GITHUB_PATH"
+          fi
+          corepack enable pnpm
+          echo "node $(node --version), pnpm $(pnpm --version)"
+
+      - name: Installeren en syncen
+        if: steps.bump.outputs.doorgaan == 'true'
+        run: |
+          # Dependabot heeft package.json + lockfile al bijgewerkt, dus --frozen-lockfile
+          # klopt. Bounded retry: dezelfde DNS-blip-bescherming als deploy/bump (#99, #668).
+          install_gelukt=false
+          for poging in 1 2 3; do
+            if [ "$poging" -gt 1 ]; then
+              echo "::warning::pnpm install faalde (poging $((poging - 1))/3) — opnieuw over $(((poging - 1) * 5))s…"
+              sleep $(((poging - 1) * 5))
+            fi
+            if pnpm install --frozen-lockfile; then install_gelukt=true; break; fi
+          done
+          if [ "$install_gelukt" = false ]; then
+            echo "::error::pnpm install bleef falen na 3 pogingen"
+            exit 1
+          fi
+          pnpm exec factory sync
+
+      - name: Sync-verschil terugcommitten op de PR-branch
+        if: steps.bump.outputs.doorgaan == 'true'
+        env:
+          # PROJECT_TOKEN staat alléén hier in de omgeving — niet tijdens install/sync, dat
+          # PR-code draait. Uit de Dependabot-secretstore (zie de kop van dit bestand).
+          PUSH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
+        run: |
+          if git diff --quiet; then
+            echo "geen sync-verschil — de gesyncte bestanden waren al bij."
+            exit 0
+          fi
+          if [ -z "$PUSH_TOKEN" ]; then
+            echo "::error::sync leverde een verschil op maar er is geen PROJECT_TOKEN (Dependabot-secret) om het te pushen. De PR blijft rood op sync --check tot dit gezet is. Zie de kop van sync-on-factory-bump.yml."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "sync: gesyncte factory-bestanden bij de bump (#743)"
+          host="${SERVER#https://}"
+          git push "https://x-access-token:${PUSH_TOKEN}@${host}/${REPO}" "HEAD:${HEAD_REF}"
