@@ -4,7 +4,7 @@ name: release
 # merge; de factory deed dat niet, want ze is gereedschap en geen draaiende app — er
 # was alleen een handmatige `factory release`. Deze workflow zet bij elke merge naar
 # main een nieuwe versie, zodat een pijplijn-verbetering vanzelf vrijkomt. De apps
-# pikken die tag daarna zelf op via `bump-factory.yml`.
+# pikken die versie daarna zelf op via Dependabot (#743).
 #
 # main is beschermd door de ruleset "main merge queue" (wijzigingen alleen via een PR
 # met een groene `verify`). Daarom pusht deze release NIET direct: hij zet de tag meteen
@@ -48,7 +48,6 @@ jobs:
     outputs:
       bord_overgeslagen: ${{ steps.bump.outputs.bord_overgeslagen }}
       tag: ${{ steps.bump.outputs.tag }}
-      dispatch_mislukt: ${{ steps.bump.outputs.dispatch_mislukt }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -175,37 +174,12 @@ jobs:
           else
             echo "::warning::kon de open release-PR's niet ophalen voor opruiming (#671); $v staat er wel."
           fi
-          # De apps vertellen dat er een nieuwe tag is, in plaats van ze elk half uur laten
-          # vragen (#236). `bump-factory.yml` heeft `workflow_dispatch` al, dus hier is geen
-          # nieuwe trigger nodig. Het ingebouwde GITHUB_TOKEN komt niet bij een ánder repo;
-          # dit vraagt een PAT. Mislukt een dispatch, dan is dat geen reden om de release
-          # rood te maken — de tag staat er, en de dagelijkse cron in de app is het vangnet.
-          # Wel luid: een waarschuwing per app en één melding in de ops-room.
-          mislukt=""
-          for app in assistant beheer boodschappen apple backlog; do
-            if [ -z "$RELEASE_PAT" ]; then
-              echo "::warning::geen RELEASE_PAT in deze workflow — $app niet op de hoogte gebracht van $v; de dagelijkse cron pikt het op."
-              mislukt="$mislukt $app"
-              continue
-            fi
-            # gh's eigen uitleg vasthouden. Een waarschuwing zonder reden kostte een
-            # handmatige uitzoekronde toen het token de dispatch niet mocht (#244);
-            # stdout gaat weg, stderr houden we. Zelfde les als #195 in board.ts.
-            # Alle apps draaien op registry-dep en gebruiken `bump-factory.yml` (model-bewust,
-            # #708). De eerdere naam-tolerante dispatch (probeer eerst een sync-only workflow)
-            # was een dode tak van de verlaten globale-CLI-aanpak (#695/T9) en is weg (#696).
-            if fout=$(GH_TOKEN="$RELEASE_PAT" gh workflow run bump-factory.yml \
-              --repo "gjvv13/$app" --ref main 2>&1 >/dev/null); then
-              echo "::notice::$app op de hoogte gebracht van $v (bump-factory)"
-            else
-              reden=$(printf '%s' "$fout" | tr -d '\r' | grep -v '^[[:space:]]*$' | head -1 | cut -c1-200)
-              echo "::warning::kon $app niet op de hoogte brengen van $v: ${reden:-gh zei niets}; de dagelijkse cron pikt het op."
-              mislukt="$mislukt $app"
-            fi
-          done
-          if [ -n "$mislukt" ]; then
-            echo "dispatch_mislukt=${mislukt# }" >> "$GITHUB_OUTPUT"
-          fi
+          # De apps pikken een nieuwe factory-versie nu zelf op via Dependabot (#743): sinds
+          # factory publiek op de registry staat (#714) bumpt Dependabot de @gjvv13/factory-dep,
+          # en `sync-on-factory-bump.yml` heelt die PR zodat de gesyncte bestanden meekomen.
+          # De oude release→bump-factory-dispatch (#236) is daarmee vervallen; `bump-factory.yml`
+          # is geretireerd. Geen expliciete trigger meer nodig — Dependabot draait op zijn eigen
+          # schema en is de bron.
           # De PR bumpt main's package.json mee, zodat main gelijk blijft lopen met de
           # tags. Hij merget alleen vanzelf als hij met een PAT wordt aangemaakt (zie de
           # env-comment). Zonder RELEASE_PAT slaan we de PR bewust over — dan zou hij toch
@@ -310,7 +284,7 @@ jobs:
   # Het bewijs dat de job zelf loopt is een echte release (acceptatiecriterium van #195).
   melding:
     needs: release
-    if: ${{ needs.release.outputs.bord_overgeslagen != '' || needs.release.outputs.dispatch_mislukt != '' }}
+    if: ${{ needs.release.outputs.bord_overgeslagen != '' }}
     runs-on: [self-hosted, mini]
     steps:
       - name: Melden wat er niet gelukt is
@@ -318,16 +292,12 @@ jobs:
           NOTIFY_URL: ${{ vars.DEPLOY_NOTIFY_URL }}
           NOTIFY_TOKEN: ${{ secrets.DEPLOY_NOTIFY_TOKEN }}
           OVERGESLAGEN: ${{ needs.release.outputs.bord_overgeslagen }}
-          DISPATCH_MISLUKT: ${{ needs.release.outputs.dispatch_mislukt }}
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           bericht="⚠ factory-release $TAG:"
           if [ -n "$OVERGESLAGEN" ]; then
             bericht="$bericht het board is niet bijgewerkt (niet naar Done gezet: $OVERGESLAGEN; kijk eerst naar PROJECT_TOKEN — classic PAT, scope project)."
-          fi
-          if [ -n "$DISPATCH_MISLUKT" ]; then
-            bericht="$bericht deze apps zijn niet op de hoogte gebracht:$DISPATCH_MISLUKT (de dagelijkse cron pikt het op; kijk naar RELEASE_PAT)."
           fi
           bericht="$bericht Run: $run_url"
           if [ -z "$NOTIFY_URL" ]; then

@@ -19,7 +19,7 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     return jobs.filter((job) => job.includes('[self-hosted, mini]')).join('\n');
   }
 
-  for (const bestand of ['workflows/bump-factory.yml', 'workflows/deploy.yml']) {
+  for (const bestand of ['workflows/sync-on-factory-bump.yml', 'workflows/deploy.yml']) {
     it(`${bestand} gebruikt node en pnpm van de runner`, () => {
       const mini = miniJobs(bestand);
       expect(mini).not.toContain('uses: actions/setup-node');
@@ -40,8 +40,8 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     });
   }
 
-  it('bump-factory.yml wrapt pnpm install in een retry-loop (#668)', () => {
-    const inhoud = readFileSync('workflows/bump-factory.yml', 'utf8');
+  it('sync-on-factory-bump.yml wrapt pnpm install in een retry-loop (#668)', () => {
+    const inhoud = readFileSync('workflows/sync-on-factory-bump.yml', 'utf8');
     // Bounded retry: 3 pogingen met oplopende backoff, dezelfde bescherming als deploy.yml.
     expect(inhoud).toContain('::warning::');
     expect(inhoud).toContain('::error::pnpm install bleef falen na 3 pogingen');
@@ -77,16 +77,39 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     expect(inhoud).not.toContain('2>install_stderr.txt');
   });
 
-  it('de rerun-waakhond bewaakt ook de bump, niet alleen de deploy (#270)', () => {
-    // Alle vijftien de action-download-mislukkingen van de week tot 2026-08-21 zaten in
-    // `bump-factory`, en juist die had geen vangnet — de deploy had het al sinds #122.
+  it('de rerun-waakhond bewaakt ook sync-on-factory-bump, niet alleen de deploy (#270/#743)', () => {
+    // De action-download-blip die bump-factory trof kan ook sync-on-factory-bump raken:
+    // beide draaien op de mini en checken uit. bump-factory is geretireerd (#743).
     const inhoud = readFileSync('workflows/deploy-rerun.yml', 'utf8');
-    expect(inhoud).toContain('workflows: [deploy, bump-factory]');
+    expect(inhoud).toContain('workflows: [deploy, sync-on-factory-bump]');
   });
 
   it('ci.yml houdt de actions, want die draait op ubuntu-latest', () => {
     const inhoud = readFileSync('workflows/ci.yml', 'utf8');
     expect(inhoud).toContain('ubuntu-latest');
     expect(inhoud).toContain('uses: actions/setup-node');
+  });
+});
+
+// De factory-bump-PR moet ná een groene poort landen op een manier die `deploy.yml`
+// triggert. Een merge door het ingebouwde GITHUB_TOKEN doet dat niet (#743), dus
+// `sync-on-factory-bump` merget met de PAT en de generieke auto-merge laat de factory-dep
+// met rust.
+describe('de factory-bump landt zó dat deploy triggert (#743)', () => {
+  it('sync-on-factory-bump merget met de PAT, niet het ingebouwde token', () => {
+    const inhoud = readFileSync('workflows/sync-on-factory-bump.yml', 'utf8');
+    expect(inhoud).toContain('gh pr merge --auto --squash');
+    // De auto-merge-stap draait onder PROJECT_TOKEN (PAT) — anders triggert de merge
+    // deploy.yml niet.
+    expect(inhoud).toContain('GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}');
+    // En alleen voor een veilige (niet-major) bump.
+    expect(inhoud).toContain("steps.bump.outputs.veilig == 'true'");
+  });
+
+  it('dependabot-auto-merge sluit de factory-dep uit (die doet sync-on-factory-bump)', () => {
+    const inhoud = readFileSync('workflows/dependabot-auto-merge.yml', 'utf8');
+    expect(inhoud).toContain(
+      "!contains(steps.metadata.outputs.dependency-names, '@gjvv13/factory')",
+    );
   });
 });

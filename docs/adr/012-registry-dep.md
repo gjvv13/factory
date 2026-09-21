@@ -36,10 +36,12 @@ install → vuile tree → `factory release`/`promote` breken op de git-clean-ch
 overige build-curatie (`better-sqlite3`, `esbuild`, `@matrix-org/*`, `@scarf/scarf: false`)
 blijft ongemoeid.
 
-`bump-factory.yml` blijft bestaan maar werd **model-bewust** (#708): een git-dep bumpt naar
-de nieuwste git-tag, een registry-dep naar de nieuwste `npm view`-versie — dependabot
-alléén volstaat niet, want dat draait geen `factory sync` (workflows/skills/hooks moeten
-bij elke release mee). Installeren vergt **nul auth** (publiek pakket); publiceren vergt
+De bump liep aanvankelijk via de zelfgebouwde `bump-factory.yml` (model-bewust, #708),
+omdat dependabot een git-dep niet kon bumpen én geen `factory sync` draait. Nu factory
+publiek op de registry staat is de bump **naar Dependabot** verhuisd en is `bump-factory.yml`
+geretireerd (#743): Dependabot bumpt de `@gjvv13/factory`-dep, en `sync-on-factory-bump.yml`
+heelt die PR met `factory sync` zodat de gesyncte bestanden (workflows/skills/hooks) alsnog
+meekomen vóór de PR merget. Installeren vergt **nul auth** (publiek pakket); publiceren vergt
 één `NPM_TOKEN` op één plek (de release-workflow). Een consumer-rooktest (#711) borgt het
 consume-pad: pakt de factory en draait de gebundelde bin, zodat een kapotte `bin` of
 ontbrekende `dist` de poort — en dus de release — rood maakt.
