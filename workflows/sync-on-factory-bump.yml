@@ -68,6 +68,15 @@ jobs:
           else
             echo "::notice::@gjvv13/factory: $oud → $nieuw — sync draaien."
             echo "doorgaan=true" >> "$GITHUB_OUTPUT"
+            # Alleen patch/minor auto-mergen (zelfde beleid als dependabot-auto-merge):
+            # gelijke major = veilig. Een major-bump laat je met de hand landen.
+            strip() { printf '%s' "$1" | sed 's/^[~^]//'; }
+            if [ "$(strip "$oud" | cut -d. -f1)" = "$(strip "$nieuw" | cut -d. -f1)" ]; then
+              echo "veilig=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::major-bump ($oud → $nieuw) — niet auto-mergen, landt met de hand."
+              echo "veilig=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       # Node en pnpm van de runner (mini): node staat er al (runner-`.env` zet NVM_BIN),
@@ -135,3 +144,22 @@ jobs:
           git commit -m "sync: gesyncte factory-bestanden bij de bump (#743)"
           host="${SERVER#https://}"
           git push "https://x-access-token:${PUSH_TOKEN}@${host}/${REPO}" "HEAD:${HEAD_REF}"
+
+      - name: Auto-merge inschakelen met de PAT (zodat de merge deploy triggert, #743)
+        if: steps.bump.outputs.doorgaan == 'true' && steps.bump.outputs.veilig == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          # Bewust met PROJECT_TOKEN (PAT), niet het ingebouwde GITHUB_TOKEN: een merge door
+          # GITHUB_TOKEN triggert `deploy.yml` niet (GitHub start geen workflow op een
+          # GITHUB_TOKEN-push), en dan bereikt de nieuwe factory prod niet. Daarom sluit de
+          # generieke `dependabot-auto-merge` de factory-dep uit en doet deze workflow de
+          # merge. Auto-merge landt pas ná een groene poort (incl. `sync --check`), dus na het
+          # helen hierboven.
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::geen PROJECT_TOKEN (Dependabot-secret) — auto-merge niet ingeschakeld; zet 'm zodat de bump kan landen (#743)."
+            exit 0
+          fi
+          gh pr merge --auto --squash "$PR_URL" \
+            || echo "::warning::kon auto-merge niet inschakelen op de factory-bump-PR."

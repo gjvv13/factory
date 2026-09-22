@@ -3,8 +3,8 @@ name: deploy-rerun
 # Dit bestand wordt beheerd door de factory. Wijzig het daar en haal het
 # hier op met `factory sync`.
 #
-# Vangnet voor #122. Bewaakt inmiddels ook `bump-factory`, ondanks de naam: die volgt
-# het bestand, en een rename zou in vijf repo's een wees achterlaten.
+# Vangnet voor #122. Bewaakt inmiddels ook `sync-on-factory-bump`, ondanks de naam: die
+# volgt het bestand, en een rename zou in vijf repo's een wees achterlaten.
 #
 # De runner haalt externe actions op vóór er een factory-shellstap draait — sinds #270
 # op de mini alleen nog `actions/checkout`; `setup-node` en `pnpm/action-setup` zijn
@@ -14,7 +14,7 @@ name: deploy-rerun
 # deploy blijft prod stil op de oude versie (#112), bij een bump haalt de app de
 # nieuwe factory-tag niet.
 #
-# Deze workflow draait ná een afgeronde `deploy`- of `bump-factory`-run. Faalde die op
+# Deze workflow draait ná een afgeronde `deploy`- of `sync-on-factory-bump`-run. Faalde die op
 # de action-download-signatuur, dan start hij de gefaalde jobs eenmalig opnieuw. Alleen
 # bij de eerste poging (run_attempt == 1), zodat een echte bouwfout na één rerun
 # alsnog rood blijft en niet in een lus opnieuw draait. Draait op een GitHub-hosted
@@ -23,10 +23,10 @@ name: deploy-rerun
 
 on:
   workflow_run:
-    # Ook `bump-factory`: alle vijftien de action-download-mislukkingen in de week tot
-    # 2026-08-21 zaten in díe workflow, en die had geen vangnet (#270). De deploy had
-    # het al sinds #122.
-    workflows: [deploy, bump-factory]
+    # Ook `sync-on-factory-bump`: die draait óók op de mini en checkt uit, dus kan op
+    # dezelfde action-download-blip stuklopen die bump-factory trof (#270). bump-factory
+    # zelf is geretireerd (#743); de deploy had dit vangnet al sinds #122.
+    workflows: [deploy, sync-on-factory-bump]
     types: [completed]
 
 permissions:

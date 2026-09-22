@@ -32,10 +32,15 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # De factory-dep (@gjvv13/factory) wordt hier bewust NIET gemerged (#743):
+      # `sync-on-factory-bump.yml` doet dat met een PAT, zodat de merge `deploy.yml`
+      # triggert. Een merge door dít GITHUB_TOKEN zou dat niet doen — dan bereikt de
+      # nieuwe factory prod niet. Alle andere deps blijven hier.
       - name: Auto-merge voor patch en minor
         if: >-
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          ( steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ) &&
+          !contains(steps.metadata.outputs.dependency-names, '@gjvv13/factory')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

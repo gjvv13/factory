@@ -13,9 +13,8 @@ updates:
         update-types:
           - minor
           - patch
-    # De factory-dep is een git-tag, geen npm-versie; Dependabot kan hem niet
-    # bumpen en produceert dagelijks een rode version-update-run (#617).
-    ignore:
-      - dependency-name: '@gjvv13/factory'
-      - dependency-name: factory
+    # De factory-dep (`@gjvv13/factory`) wordt bewust NIET meer genegeerd (#743): sinds
+    # factory publiek op de registry staat (#714) bumpt Dependabot hem gewoon, en
+    # `sync-on-factory-bump.yml` heelt die PR zodat de gesyncte bestanden meekomen. Dat
+    # verving de zelfgebouwde `bump-factory.yml` (geretireerd).
     open-pull-requests-limit: 5

@@ -196,18 +196,21 @@ meteen zet, de factory naar npmjs **publiceert** (`npm publish`, token-gated op
 `NPM_TOKEN`) en main's `package.json` via een **auto-merge-PR** bijwerkt. Die PR wordt
 met een PAT (`RELEASE_PAT`) aangemaakt, niet met `github.token`: een GITHUB_TOKEN-PR
 triggert `ci.yml` niet, dus `verify` verschijnt nooit en de auto-merge zou blijven hangen
-(#163). Zonder de PAT slaat de PR-stap over — de tag komt hoe dan ook vrij. Elke app
-draait een **model-bewuste** `bump-factory.yml` (#708) die de nieuwste registry-versie
-oppikt (`npm view`; voor een nog-niet-gemigreerde app de git-tag), `factory sync` doet
-(workflows, skills, hook komen mee) en via de gewone pijplijn naar prod rolt. Dependabot
-alléén volstaat niet — dat draait geen `factory sync`. Slash commands en de git hook
-moeten fysiek in de app-repo staan; `factory sync` doet dat, en de auto-bump draait 'm
-voor je.
+(#163). Zonder de PAT slaat de PR-stap over — de tag komt hoe dan ook vrij. Elke app pikt
+een nieuwe factory-versie op via **Dependabot** (#743): sinds factory publiek op de
+registry staat (#714) bumpt Dependabot de `@gjvv13/factory`-dep gewoon. Dependabot bumpt
+alleen `package.json`; de gesyncte bestanden (workflows, skills, git-hook) komen niet vanzelf
+mee — daarvoor **heelt** `sync-on-factory-bump.yml` de bump-PR: op een Dependabot-PR die de
+factory-dep wijzigt draait die `factory sync` en commit het verschil terug op de PR-branch,
+zodat de bestaande sync-poort (`ci.yml` → `factory sync --check`) groen wordt en
+`dependabot-auto-merge.yml` de PR merget. Dat verving de zelfgebouwde `bump-factory.yml`
+(geretireerd, #743) en de release→app-dispatch: de bump-bron is nu irrelevant.
 
 **Nieuwe app.** `factory nieuw` zet de registry-dep, `minimumReleaseAge: 0` en de
 workflows meteen goed — geen handmatige bootstrap nodig. Wil je een app tijdelijk
-bevriezen op een factory-versie, verwijder dan zijn `bump-factory.yml`. Lokaal je eigen
-globale factory bijwerken: `factory self-update` (= `npm i -g @gjvv13/factory@latest`).
+bevriezen op een factory-versie, laat Dependabot de `@gjvv13/factory`-dep dan negeren
+(voeg 'm toe aan `ignore` in `.github/dependabot.yml`). Lokaal je eigen globale factory
+bijwerken: `factory self-update` (= `npm i -g @gjvv13/factory@latest`).
 
 ## Auto-deploy naar acc en prod
 

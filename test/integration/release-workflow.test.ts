@@ -2,36 +2,20 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// De dispatch-lus in release.yml is shell, geen TypeScript, dus hij valt buiten de
-// gewone tests. Wat hier bewaakt wordt is precies de fout die #244 opleverde: de lus
-// gooide gh's stderr weg, dus een gefaalde dispatch meldde zich zonder reden.
-describe('release.yml — de apps op de hoogte brengen', () => {
+// De apps worden bij een release niet meer expliciet gedispatcht: sinds #743 pikt
+// Dependabot een nieuwe factory-versie zelf op (de dispatch-lus én `bump-factory.yml`
+// zijn geretireerd). release.yml mag dus geen bump-factory meer aanroepen.
+describe('release.yml — geen bump-factory-dispatch meer (#743)', () => {
   const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
-  const lus = workflow.slice(
-    workflow.indexOf('for app in assistant'),
-    workflow.indexOf('dispatch_mislukt='),
-  );
 
-  it('bevat de dispatch-lus', () => {
-    expect(lus).toContain('gh workflow run bump-factory.yml');
+  it('dispatcht geen bump-factory meer', () => {
+    expect(workflow).not.toContain('gh workflow run bump-factory.yml');
+    expect(workflow).not.toContain('for app in assistant');
+    expect(workflow).not.toContain('dispatch_mislukt');
   });
 
-  it('dispatcht direct bump-factory.yml, zonder dode factory-sync.yml-tak (#695/#696)', () => {
-    // Alle apps draaien op registry-dep en gebruiken `bump-factory.yml` (model-bewust,
-    // #708). De eerdere naam-tolerante dispatch (probeer factory-sync.yml eerst) was een
-    // dode tak van de verlaten globale-CLI-aanpak (T9) en is verwijderd.
-    expect(lus).not.toContain('factory-sync.yml');
-  });
-
-  it('houdt gh’s stderr vast in plaats van hem weg te gooien', () => {
-    expect(lus).not.toContain('>/dev/null 2>&1');
-    expect(lus).toContain('2>&1 >/dev/null');
-    expect(lus).toMatch(/kon \$app niet op de hoogte brengen van \$v: \$\{reden/);
-  });
-
-  it('waarschuwt ook als RELEASE_PAT helemaal niet gezet is', () => {
-    const zonderToken = lus.slice(lus.indexOf('-z "$RELEASE_PAT"'), lus.indexOf('continue'));
-    expect(zonderToken).toContain('::warning::');
+  it('noemt Dependabot als de nieuwe bump-bron', () => {
+    expect(workflow).toContain('Dependabot');
   });
 });
 
@@ -76,7 +60,7 @@ describe("release.yml — achterhaalde release-PR's opruimen (#671)", () => {
   // Isoleer de opruim-logica: van de eigen kop-comment tot de app-dispatch eronder.
   const stap = workflow.slice(
     workflow.indexOf('Achterhaalde release-PR'),
-    workflow.indexOf('De apps vertellen'),
+    workflow.indexOf('De apps pikken'),
   );
 
   it('haalt open release/v*-PR’s op en sluit ze met branch-opruiming', () => {
