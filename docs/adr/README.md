@@ -39,3 +39,4 @@ Er is bewust geen CLI-commando: de handeling is een bestand kopiëren en invulle
 | [012](012-registry-dep.md)                                  | Factory als registry-devDependency i.p.v. git-dep                |
 | [013](013-golf-dispatchen.md)                               | `factory golf`: bouw-klare items serieel over de apps dispatchen |
 | [014](014-bug-fastlane-functioneel.md)                      | Bugs uitgezonderd van functioneel-eerst                          |
+| [015](015-autonome-bug-fastlane.md)                         | Autonome bug-fastlane landt op de schone gate (#573)             |
