@@ -1,0 +1,21 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "gate-review-mismatch",
+  "num_turns": 3,
+  "total_cost_usd": 0.06,
+  "permission_denials": [],
+  "result": "zie verdict",
+  "structured_output": {
+    "findings": [
+      {
+        "file": "src/commands/promote.ts",
+        "line": 42,
+        "severity": "high",
+        "finding": "Missing timeout on health check."
+      }
+    ],
+    "verdict": "One issue found."
+  }
+}
