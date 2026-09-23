@@ -22,6 +22,20 @@
       "soort": "refine",
       "titel": "Boodschappen · Een product van de lijst afvinken via natuurlijke taal",
       "body": "# Een product van de lijst afvinken via natuurlijke taal\n\n## Samenvatting\n\nEen gezinslid kan in gewone taal zeggen dat een product gehaald is (\"melk heb ik\"), en dat product wordt op de boodschappenlijst afgevinkt.\n\n## Functionele besluiten (BINDEND — met gebruiker)\n\n1. **Afvinken, niet verwijderen.** Een afgevinkt product blijft zichtbaar als gehaald, zodat je de lijst achteraf nog kunt nalopen; het verdwijnt niet.\n2. **Fuzzy matchen op de lijst.** \"melk\" matcht \"halfvolle melk\" als dat het enige melk-item is; bij meerdere kandidaten vraagt de assistent welke.\n3. **Niets op de lijst = melden.** Staat het genoemde product er niet op, dan zegt de assistent dat, in plaats van stil niets te doen.\n\n## Gedrag\n\n- Vrije tekst → intentie `product-afvinken` met veld `product`.\n- Eén kandidaat: afvinken en bevestigen. Meerdere: navragen. Geen: melden.\n- Een afgevinkt product is terug te zetten op niet-gehaald.\n\n## Wat het expliciet niet doet\n\n- Geen hoeveelheden bijhouden (2 pakken melk) — later idee.\n- Geen afvinken van een product op de lijst van een andere winkel in dezelfde beurt.\n"
+    },
+    {
+      "issue": 828,
+      "app": "beheer",
+      "soort": "bouw",
+      "titel": "Beheer · /health toont de app-versie naast de status",
+      "body": "# /health toont de app-versie naast de status\n\n## Samenvatting\n\nHet health-overzicht van de beheerconsole toont per app niet alleen of hij \"ok\" is, maar ook welke versie er draait, zodat een achtergebleven uitrol meteen opvalt.\n\n## Slice — versie in het overzicht\n\nBreid de bestaande `/health`-aggregatie uit met het `version`-veld dat elke app al in haar eigen `/health` teruggeeft, en toon dat in de tabel naast de status.\n\n## Acceptatiecriteria\n\n- [ ] De health-aggregatie leest het `version`-veld uit het antwoord van elke app en neemt het op in het per-app-resultaat.\n- [ ] Een app die geen `version` teruggeeft toont \"onbekend\", niet een lege cel of een crash.\n- [ ] Een onbereikbare app toont \"onbekend\" voor zowel status als versie, en blokkeert de rij van de andere apps niet.\n- [ ] De versie verschijnt in de overzichtstabel naast de statuskolom.\n\n## Wat het expliciet niet doet\n\n- Geen historie van eerdere versies.\n- Geen vergelijking met de laatst uitgerolde tag (later idee).\n"
+    },
+    {
+      "issue": 776,
+      "app": "assistant",
+      "soort": "bouw",
+      "titel": "Assistant · Onbekende intentie geeft een vriendelijke uitleg terug",
+      "body": "# Onbekende intentie geeft een vriendelijke uitleg terug\n\n## Samenvatting\n\nAls de assistent een bericht niet naar een bekende intentie kan herleiden, antwoordt hij met een korte, vriendelijke uitleg van wat hij wél kan, in plaats van stil te blijven of een technische fout te tonen.\n\n## Slice — vangnet-antwoord bij onbekende intentie\n\nVoeg in de intentie-router een vangnet toe: valt een bericht buiten alle bekende intenties, dan produceert de kern een vast uitleg-antwoord. Het antwoord gaat via hetzelfde kanaal terug als het inkomende bericht.\n\n## Acceptatiecriteria\n\n- [ ] Een bericht dat op geen enkele bekende intentie matcht levert het vangnet-antwoord op, niet een lege respons.\n- [ ] Het vangnet-antwoord noemt minstens twee dingen die de assistent wél kan.\n- [ ] Een bericht dat wél op een intentie matcht raakt het vangnet niet en gedraagt zich ongewijzigd.\n- [ ] Het antwoord komt terug in het kanaal waarin het bericht binnenkwam.\n\n## Wat het expliciet niet doet\n\n- Geen leren van onbekende berichten (geen opslag voor latere analyse).\n- Geen suggesties op maat van de berichtinhoud — het uitleg-antwoord is vast.\n"
     }
   ]
 }

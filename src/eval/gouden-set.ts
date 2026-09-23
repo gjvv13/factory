@@ -26,12 +26,16 @@ export const STANDAARD_JUDGE_EFFORT = 'medium';
 /** Het standaardpad van de gouden set, in de factory-repo zelf (dev-tooling). */
 export const GOUDEN_SET_PAD = path.join(factoryPakketDir, 'eval', 'gouden-set.json');
 
+/** De taaksoort van een gouden-set-item: refine (slice 1) of bouw (slice 2). */
+export const EVAL_SOORTEN = ['refine', 'bouw'] as const;
+export type EvalSoort = (typeof EVAL_SOORTEN)[number];
+
 const goudenItemSchema = z.object({
   issue: z.number().int().positive(),
   app: z.string().min(1),
-  // Slice 1 evalueert alleen refine; `bouw` volgt in slice 2. Een `bouw`-item nu al
-  // in de set zou de refine-eval laten struikelen, dus we weigeren het expliciet.
-  soort: z.literal('refine'),
+  // Sinds slice 2 (#361) evalueert de eval beide taaksoorten. Een bouw-item wordt per
+  // item onderscheiden op `soort`, zodat `eval.ts` de juiste rubriek en werker kiest.
+  soort: z.enum(EVAL_SOORTEN),
   titel: z.string().min(1),
   body: z.string().min(1),
 });
@@ -89,4 +93,9 @@ export function leesGoudenSet(pad: string = GOUDEN_SET_PAD): GoudenSet {
 /** De unieke apps in de gouden set, in de volgorde waarin ze het eerst voorkomen. */
 export function appsVan(set: GoudenSet): string[] {
   return [...new Set(set.items.map((item) => item.app))];
+}
+
+/** De items van één taaksoort, in oorspronkelijke volgorde (#361, slice 2). */
+export function itemsVanSoort(set: GoudenSet, soort: EvalSoort): GoudenItem[] {
+  return set.items.filter((item) => item.soort === soort);
 }

@@ -3,12 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  bouwJudgeBouwPrompt,
   bouwJudgePrompt,
   draaiJudge,
   judgeArgumenten,
+  judgePrompt,
   parseJudgeRespons,
 } from '../src/eval/judge.js';
-import { normaliseerScore } from '../src/eval/rubriek.js';
+import { BOUW_RUBRIEK, normaliseerScore } from '../src/eval/rubriek.js';
 import {
   GebruikersFout,
   herstelAsyncUitvoerder,
@@ -92,6 +94,63 @@ describe('de judge-prompt', () => {
   });
 });
 
+describe('de bouw-judge-prompt', () => {
+  it('vult de bouw-rubriek, de issue-body, de werker-output en de diff in', () => {
+    const prompt = bouwJudgeBouwPrompt('DE-ISSUE-BODY', 'DE-WERKER-OUTPUT', 'DE-DIFF');
+    expect(prompt).toContain('DE-ISSUE-BODY');
+    expect(prompt).toContain('DE-WERKER-OUTPUT');
+    expect(prompt).toContain('DE-DIFF');
+    expect(prompt).toContain('Criteriadekking');
+    expect(prompt).toContain('Geen verzonnen imports');
+    expect(prompt).not.toContain('{{RUBRIEK}}');
+    expect(prompt).not.toContain('{{DIFF}}');
+  });
+
+  it('kiest bij soort "bouw" de bouw-prompt met de diff', () => {
+    const prompt = judgePrompt({
+      issueBody: 'b',
+      werkerOutput: 'o',
+      diff: 'EEN-DIFF-REGEL',
+      soort: 'bouw',
+      model: 'm',
+      effort: 'medium',
+      budgetUsd: 1,
+    });
+    expect(prompt).toContain('EEN-DIFF-REGEL');
+    expect(prompt).toContain('Criteriadekking');
+  });
+
+  it('kiest zonder soort de refine-prompt (geen bouw-criteria)', () => {
+    const prompt = judgePrompt({
+      issueBody: 'b',
+      werkerOutput: 'o',
+      model: 'm',
+      effort: 'medium',
+      budgetUsd: 1,
+    });
+    expect(prompt).toContain('Templatestructuur');
+    expect(prompt).not.toContain('Criteriadekking');
+  });
+
+  it('meldt een lege diff in plaats van hem leeg te laten', () => {
+    const prompt = bouwJudgeBouwPrompt('b', 'o', '');
+    expect(prompt).toContain('geen diff');
+  });
+});
+
+describe('de bouw-judge-respons-parser', () => {
+  it('leest de vijf bouw-scores in rubriek-volgorde', () => {
+    const { scores } = parseJudgeRespons(fixture('judge-respons-bouw.json'), BOUW_RUBRIEK);
+    expect(scores).toEqual([2, 2, 1, 2, 2]);
+    expect(normaliseerScore(scores, BOUW_RUBRIEK)).toBe(9);
+  });
+
+  it('weigert een bouw-respons met een ontbrekend criterium', () => {
+    const respons = { criteria: [{ nummer: 1, score: 2, toelichting: 'x' }] };
+    expect(() => parseJudgeRespons(respons, BOUW_RUBRIEK)).toThrow(/mist criterium/);
+  });
+});
+
 describe('de echte judge-run', () => {
   afterEach(() => {
     herstelUitvoerder();
@@ -120,6 +179,29 @@ describe('de echte judge-run', () => {
     expect(uitslag.scores).toEqual([2, 2, 1, 2, 2, 2, 1]);
     expect(uitslag.kosten).toBe(0.03);
     expect(opnemer.aanroepen[0]?.commando).toBe('claude');
+  });
+
+  it('scoort een bouw-run tegen de bouw-rubriek (vijf criteria)', async () => {
+    const envelop = {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: 'x',
+      total_cost_usd: 0.04,
+      structured_output: fixture('judge-respons-bouw.json'),
+    };
+    stelUitvoerderIn(() => ({ code: 0, stdout: JSON.stringify(envelop) }));
+    const uitslag = await draaiJudge({
+      issueBody: 'b',
+      werkerOutput: 'o',
+      diff: 'd',
+      soort: 'bouw',
+      model: 'm',
+      effort: 'medium',
+      budgetUsd: 5,
+    });
+    expect(uitslag.scores).toEqual([2, 2, 1, 2, 2]);
+    expect(uitslag.scores).toHaveLength(5);
   });
 
   it('faalt luid als de judge-run met een fout eindigt', async () => {
