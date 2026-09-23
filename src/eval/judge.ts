@@ -3,7 +3,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { templatesDir } from '../paths.js';
 import { GebruikersFout, runAsync } from '../shell.js';
-import { formatRubriek, REFINE_RUBRIEK, type RubriekCriterium } from './rubriek.js';
+import { BOUW_RUBRIEK, formatRubriek, REFINE_RUBRIEK, type RubriekCriterium } from './rubriek.js';
+import type { EvalSoort } from './gouden-set.js';
 
 /**
  * De LLM-judge (#361, slice 1): een aparte `claude`-aanroep die de werker-output tegen
@@ -20,6 +21,8 @@ import { formatRubriek, REFINE_RUBRIEK, type RubriekCriterium } from './rubriek.
 
 /** Het pad van de judge-prompt voor refine-output. */
 export const JUDGE_TEMPLATE_PAD = path.join(templatesDir, 'eval-judge-refine.md');
+/** Het pad van de judge-prompt voor bouw-output (#361, slice 2). */
+export const JUDGE_BOUW_TEMPLATE_PAD = path.join(templatesDir, 'eval-judge-bouw.md');
 
 const judgeCriteriumSchema = z.object({
   nummer: z.number().int().min(1),
@@ -43,11 +46,11 @@ export const JUDGE_JSON_SCHEMA = {
   properties: {
     criteria: {
       type: 'array',
-      description: 'exact één item per rubriekcriterium (nummers 1–7), elk met een score',
+      description: 'exact één item per rubriekcriterium, in rubriek-volgorde, elk met een score',
       items: {
         type: 'object',
         properties: {
-          nummer: { type: 'integer', description: 'het criteriumnummer uit de rubriek (1–7)' },
+          nummer: { type: 'integer', description: 'het criteriumnummer uit de rubriek' },
           score: { type: 'integer', description: 'de score voor dit criterium: 0, 1 of 2' },
           toelichting: { type: 'string', description: 'één zin die de score verantwoordt' },
         },
@@ -75,6 +78,31 @@ export function bouwJudgePrompt(
     '{{RUBRIEK}}': formatRubriek(rubriek),
     '{{ISSUE_BODY}}': issueBody,
     '{{WERKER_OUTPUT}}': werkerOutput,
+  };
+  return Object.entries(vervang).reduce(
+    (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
+    sjabloon,
+  );
+}
+
+/**
+ * Bouwt de judge-prompt voor een bouw-run (#361, slice 2): de bouw-rubriek, de bevroren
+ * issue-body, de werker-uitkomst (samenvatting + bewijs per criterium) én de diff uit de
+ * worktree. De diff is het extra bewijs dat een bouw-oordeel nodig heeft en een
+ * refine-oordeel niet: de judge toetst of het beweerde bewijs echt in de wijzigingen zit.
+ */
+export function bouwJudgeBouwPrompt(
+  issueBody: string,
+  werkerOutput: string,
+  diff: string,
+  sjabloon: string = readFileSync(JUDGE_BOUW_TEMPLATE_PAD, 'utf8'),
+  rubriek: readonly RubriekCriterium[] = BOUW_RUBRIEK,
+): string {
+  const vervang: Record<string, string> = {
+    '{{RUBRIEK}}': formatRubriek(rubriek),
+    '{{ISSUE_BODY}}': issueBody,
+    '{{WERKER_OUTPUT}}': werkerOutput,
+    '{{DIFF}}': diff === '' ? '(geen diff — de werker liet geen wijzigingen achter)' : diff,
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -140,6 +168,13 @@ export interface JudgeVerzoek {
   readonly model: string;
   readonly effort: string;
   readonly budgetUsd: number;
+  /**
+   * De taaksoort; bepaalt de rubriek en het judge-sjabloon (#361, slice 2). Afwezig of
+   * `'refine'` scoort tegen de refine-rubriek — zo blijven de slice-1-aanroepen werken.
+   */
+  readonly soort?: EvalSoort;
+  /** De diff uit de eval-worktree; alleen zinvol bij een bouw-oordeel. */
+  readonly diff?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly timeoutMs?: number;
 }
@@ -153,11 +188,27 @@ const envelopSchema = z.object({
   structured_output: z.unknown().optional(),
 });
 
+/**
+ * De prompt voor een judge-run, gekozen op taaksoort: de bouw-prompt (met de diff) bij
+ * `soort: 'bouw'`, anders de refine-prompt. Eén plek, zodat `judgeArgumenten` en een test
+ * dezelfde keuze zien.
+ */
+export function judgePrompt(verzoek: JudgeVerzoek): string {
+  return verzoek.soort === 'bouw'
+    ? bouwJudgeBouwPrompt(verzoek.issueBody, verzoek.werkerOutput, verzoek.diff ?? '')
+    : bouwJudgePrompt(verzoek.issueBody, verzoek.werkerOutput);
+}
+
+/** De rubriek waartegen een judge-oordeel geparsed wordt, gekozen op taaksoort. */
+function rubriekVoor(soort: EvalSoort | undefined): readonly RubriekCriterium[] {
+  return soort === 'bouw' ? BOUW_RUBRIEK : REFINE_RUBRIEK;
+}
+
 /** De `claude`-argumenten voor een judge-run. Apart zodat een test ze kan nalopen. */
 export function judgeArgumenten(verzoek: JudgeVerzoek): string[] {
   return [
     '-p',
-    bouwJudgePrompt(verzoek.issueBody, verzoek.werkerOutput),
+    judgePrompt(verzoek),
     '--output-format',
     'json',
     '--model',
@@ -210,7 +261,10 @@ export const draaiJudge: JudgeFn = async (verzoek) => {
   if (envelop.data.structured_output === undefined || envelop.data.structured_output === null) {
     throw new GebruikersFout('de judge gaf geen gestructureerd oordeel terug.');
   }
-  const { scores, toelichtingen } = parseJudgeRespons(envelop.data.structured_output);
+  const { scores, toelichtingen } = parseJudgeRespons(
+    envelop.data.structured_output,
+    rubriekVoor(verzoek.soort),
+  );
   return {
     scores,
     toelichtingen,

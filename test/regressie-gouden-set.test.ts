@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   appsVan,
   GOUDEN_SET_PAD,
+  itemsVanSoort,
   leesGoudenSet,
   parseGoudenSet,
   STANDAARD_JUDGE_EFFORT,
@@ -43,10 +44,30 @@ describe('de gouden set', () => {
     expect(() => parseGoudenSet({ items: [] }, 'test')).toThrow(GebruikersFout);
   });
 
-  it('weigert een bouw-item in slice 1 (alleen refine)', () => {
-    expect(() => parseGoudenSet({ items: [geldigItem({ soort: 'bouw' })] }, 'test')).toThrow(
+  it('accepteert sinds slice 2 een bouw-item', () => {
+    const set = parseGoudenSet({ items: [geldigItem({ soort: 'bouw' })] }, 'test');
+    expect(set.items[0]?.soort).toBe('bouw');
+  });
+
+  it('weigert een item met een onbekende soort', () => {
+    expect(() => parseGoudenSet({ items: [geldigItem({ soort: 'accepteer' })] }, 'test')).toThrow(
       GebruikersFout,
     );
+  });
+
+  it('filtert de items op soort', () => {
+    const set = parseGoudenSet(
+      {
+        items: [
+          geldigItem({ issue: 1, soort: 'refine' }),
+          geldigItem({ issue: 2, soort: 'bouw' }),
+          geldigItem({ issue: 3, soort: 'refine' }),
+        ],
+      },
+      'test',
+    );
+    expect(itemsVanSoort(set, 'refine').map((i) => i.issue)).toEqual([1, 3]);
+    expect(itemsVanSoort(set, 'bouw').map((i) => i.issue)).toEqual([2]);
   });
 
   it('weigert een item zonder bevroren body', () => {
@@ -88,11 +109,12 @@ describe('de gouden set', () => {
       expect(() => leesGoudenSet(pad)).toThrow(GebruikersFout);
     });
 
-    it('leest de meegeleverde gouden set met minstens drie refine-items', () => {
+    it('leest de meegeleverde gouden set met ≥3 refine- en ≥2 bouw-items', () => {
       const set = leesGoudenSet(GOUDEN_SET_PAD);
-      expect(set.items.length).toBeGreaterThanOrEqual(3);
-      // Slice 1 evalueert alleen refine; het schema laat niets anders toe.
-      expect([...new Set(set.items.map((item) => item.soort))]).toEqual(['refine']);
+      expect(itemsVanSoort(set, 'refine').length).toBeGreaterThanOrEqual(3);
+      expect(itemsVanSoort(set, 'bouw').length).toBeGreaterThanOrEqual(2);
+      // Sinds slice 2 (#361) staan beide soorten in de gouden set.
+      expect(new Set(set.items.map((item) => item.soort))).toEqual(new Set(['refine', 'bouw']));
     });
   });
 });

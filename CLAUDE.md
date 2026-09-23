@@ -14,38 +14,38 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 
 **Een CLI** (`factory`) die elke applicatie als devDependency binnenhaalt:
 
-| Commando                                              | Wat het doet                                                                                              |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `factory verify [--snel]`                             | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build                                          |
-| `factory werkplek <issue#> [--op]`                    | Eigen werkmap (git worktree) voor een slice, naast de repo; `--op` ruimt op                               |
-| `factory inleveren [--titel=<t>]`                     | Poort draaien, branch pushen, PR openen, in de queue zetten, werkplek opruimen                            |
-| `factory integreer`                                   | De factory-wachtrij afwerken (private apps zonder GitHub merge-queue)                                     |
-| `factory release [patch\|minor\|major]`               | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen                                  |
-| `factory promote <acc\|prod> [tag]`                   | Tag uitrollen, migreren, herstarten, gezondheid controleren                                               |
-| `factory deploy <acc\|prod>`                          | Uitrol-orchestratie voor de runner: `acc` = release + promote acc                                         |
-| `factory rooktest <acc\|prod>`                        | Eén aanroep zonder domein-mutatie door de kern na een uitrol (uit `factory.json`)                         |
-| `factory terugrol <acc\|prod>`                        | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)                                  |
-| `factory env <status\|start\|stop\|reload\|logs>`     | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers                                      |
-| `factory flag <omgeving> [naam] [on\|off]`            | Feature flags omzetten zonder deploy                                                                      |
-| `factory backup <acc\|prod> [aantal]`                 | Consistente SQLite-backup met rotatie, optioneel off-site                                                 |
-| `factory nieuw <naam>`                                | Nieuwe applicatie uit het skeleton, met een vrij poortblok                                                |
-| `factory splits <issue>`                              | Multi-slice-refinement opsplitsen in child-issues onder een epic (#378)                                   |
-| `factory board <issue> "<kolom>"`                     | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)               |
-| `factory prioriteit <issue> [getal]`                  | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                  |
-| `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
-| `factory self-update`                                 | De nieuwste factory globaal installeren uit de npm-registry (`npm i -g @gjvv13/factory@latest`)           |
-| `factory brief`                                       | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                               |
-| `factory eval [--dry\|--bijwerk]`                     | Regressienet (evals): gouden set door de werker + LLM-judge, tegen een basislijn (#361)                   |
-| `factory golf [--app <a>] [--issue <n>] [--dry]`      | Bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)                           |
-| `factory consolideer <--dry\|--voer-uit>`             | Geheugenconsolidatie: voorstel genereren of doorvoeren (#372)                                             |
-| `factory consolideer <--installeer\|--verwijder>`     | De LaunchAgent die `--dry` elke maandag om 09:00 draait                                                   |
-| `factory opruimen [--dry]`                            | Gemergede branches opruimen: lokaal en op de remote                                                       |
-| `factory orkestreer <--dry\|--eenmalig>`              | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                        |
-| `factory orkestreer --nacht`                          | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env` |
-| `factory orkestreer <--installeer\|--verwijder>`      | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                |
-| `factory orkestreer --soort bouw <--dry\|--eenmalig>` | Bouw-werker: wachtrij tonen, of één item bouwen en als PR zonder auto-merge inleveren (#182, #183)        |
-| `factory orkestreer --soort accepteer --dry`          | Accepteer-wachtrij (Uitrollen, nog niet geaccepteerd) en acc-preconditie tonen (#177)                     |
-| `factory orkestreer --issue <n>`                      | Deze run op dat item richten i.p.v. op de kop van de rij; werkt op alle soorten (#210)                    |
+| Commando                                                 | Wat het doet                                                                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `factory verify [--snel]`                                | Kwaliteitspoort: opmaak, lint, types, unit, contract, e2e, build                                                |
+| `factory werkplek <issue#> [--op]`                       | Eigen werkmap (git worktree) voor een slice, naast de repo; `--op` ruimt op                                     |
+| `factory inleveren [--titel=<t>]`                        | Poort draaien, branch pushen, PR openen, in de queue zetten, werkplek opruimen                                  |
+| `factory integreer`                                      | De factory-wachtrij afwerken (private apps zonder GitHub merge-queue)                                           |
+| `factory release [patch\|minor\|major]`                  | Verify (incl. dekkingspoort), versie verhogen, committen, taggen, pushen                                        |
+| `factory promote <acc\|prod> [tag]`                      | Tag uitrollen, migreren, herstarten, gezondheid controleren                                                     |
+| `factory deploy <acc\|prod>`                             | Uitrol-orchestratie voor de runner: `acc` = release + promote acc                                               |
+| `factory rooktest <acc\|prod>`                           | Eén aanroep zonder domein-mutatie door de kern na een uitrol (uit `factory.json`)                               |
+| `factory terugrol <acc\|prod>`                           | Promote de vorige tag terug naar de omgeving (de terugweg na een uitrol)                                        |
+| `factory env <status\|start\|stop\|reload\|logs>`        | Omgevingen bedienen via pm2; `reload` herlaadt de env-bestanden vers                                            |
+| `factory flag <omgeving> [naam] [on\|off]`               | Feature flags omzetten zonder deploy                                                                            |
+| `factory backup <acc\|prod> [aantal]`                    | Consistente SQLite-backup met rotatie, optioneel off-site                                                       |
+| `factory nieuw <naam>`                                   | Nieuwe applicatie uit het skeleton, met een vrij poortblok                                                      |
+| `factory splits <issue>`                                 | Multi-slice-refinement opsplitsen in child-issues onder een epic (#378)                                         |
+| `factory board <issue> "<kolom>"`                        | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)                     |
+| `factory prioriteit <issue> [getal]`                     | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                        |
+| `factory sync`                                           | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                                   |
+| `factory self-update`                                    | De nieuwste factory globaal installeren uit de npm-registry (`npm i -g @gjvv13/factory@latest`)                 |
+| `factory brief`                                          | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                                     |
+| `factory eval [--dry\|--bijwerk] [--soort refine\|bouw]` | Regressienet (evals): gouden set door de werker + LLM-judge, tegen een basislijn; zonder `--soort` beide (#361) |
+| `factory golf [--app <a>] [--issue <n>] [--dry]`         | Bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)                                 |
+| `factory consolideer <--dry\|--voer-uit>`                | Geheugenconsolidatie: voorstel genereren of doorvoeren (#372)                                                   |
+| `factory consolideer <--installeer\|--verwijder>`        | De LaunchAgent die `--dry` elke maandag om 09:00 draait                                                         |
+| `factory opruimen [--dry]`                               | Gemergede branches opruimen: lokaal en op de remote                                                             |
+| `factory orkestreer <--dry\|--eenmalig>`                 | Onbemande werker op de wachtrij _Klaar voor technische refinement_                                              |
+| `factory orkestreer --nacht`                             | Onbemand: werkers starten tot het dagmaximum, met token en budget uit `~/.config/factory/orkestrator.env`       |
+| `factory orkestreer <--installeer\|--verwijder>`         | De LaunchAgent die `--nacht` elke nacht om 04:00 draait, aan- of uitzetten                                      |
+| `factory orkestreer --soort bouw <--dry\|--eenmalig>`    | Bouw-werker: wachtrij tonen, of één item bouwen en als PR zonder auto-merge inleveren (#182, #183)              |
+| `factory orkestreer --soort accepteer --dry`             | Accepteer-wachtrij (Uitrollen, nog niet geaccepteerd) en acc-preconditie tonen (#177)                           |
+| `factory orkestreer --issue <n>`                         | Deze run op dat item richten i.p.v. op de kop van de rij; werkt op alle soorten (#210)                          |
 
 `verify` draait de scripts uit de `package.json` van de applicatie, in een vaste
 volgorde, en slaat over wat er niet is. Daardoor werkt dezelfde poort in deze

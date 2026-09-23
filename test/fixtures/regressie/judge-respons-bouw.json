@@ -1,0 +1,9 @@
+{
+  "criteria": [
+    { "nummer": 1, "score": 2, "toelichting": "elk acceptatiecriterium gedekt met bewijs" },
+    { "nummer": 2, "score": 2, "toelichting": "tests dekken de criteria aantoonbaar" },
+    { "nummer": 3, "score": 1, "toelichting": "laagindeling grotendeels juist" },
+    { "nummer": 4, "score": 2, "toelichting": "poort groen aangetoond" },
+    { "nummer": 5, "score": 2, "toelichting": "alle imports bestaan en worden gebruikt" }
+  ]
+}

@@ -80,6 +80,51 @@ export const REFINE_RUBRIEK: readonly RubriekCriterium[] = [
   },
 ];
 
+/**
+ * De bouw-rubriek: vijf criteria voor een bouw-uitwerking (#361, slice 2). Zelfde vorm
+ * als de refine-rubriek — elk 0–2, `nummer` loopt vast 1–5 — maar afgestemd op wat een
+ * bouw-run oplevert: het verdict met bewijs per acceptatiecriterium plus de diff uit de
+ * worktree. De judge scoort exact deze vijf op hun nummer; `judge.ts` giet ze in de
+ * bouw-judge-prompt en de parser dwingt dezelfde vijf af.
+ */
+export const BOUW_RUBRIEK: readonly RubriekCriterium[] = [
+  {
+    nummer: 1,
+    naam: 'Criteriadekking',
+    nul: 'criteria niet gedekt',
+    een: 'deels gedekt, bewijs mager',
+    twee: 'elk criterium gedekt met bewijs',
+  },
+  {
+    nummer: 2,
+    naam: 'Testdekking',
+    nul: 'geen tests of raken de criteria niet',
+    een: 'tests aanwezig, dekken niet elk criterium',
+    twee: 'tests dekken de criteria aantoonbaar',
+  },
+  {
+    nummer: 3,
+    naam: 'Laagindeling',
+    nul: 'verkeerde lagen',
+    een: 'grotendeels juist',
+    twee: 'code volgt de coding-guidelines-lagen',
+  },
+  {
+    nummer: 4,
+    naam: 'Verify-resultaat',
+    nul: 'poort niet gedraaid of rood',
+    een: 'poort draait, met waarschuwingen',
+    twee: 'poort groen aangetoond',
+  },
+  {
+    nummer: 5,
+    naam: 'Geen verzonnen imports',
+    nul: 'imports naar niet-bestaande code',
+    een: 'twijfelachtige of ongebruikte imports',
+    twee: 'alle imports bestaan en worden gebruikt',
+  },
+];
+
 /** De hoogst haalbare somscore: elk criterium telt maximaal 2 punten. */
 export function maxPunten(rubriek: readonly RubriekCriterium[] = REFINE_RUBRIEK): number {
   return rubriek.length * 2;
