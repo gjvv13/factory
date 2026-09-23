@@ -1,6 +1,7 @@
 allowBuilds:
   esbuild: true
 # nanoid <3.3.18 (transitief via vitest→vite→postcss, alleen dev) heeft een
-# high-advisory (GHSA-2v37-7h3g-55p8); forceer de patch-versie.
+# high-advisory (GHSA-2v37-7h3g-55p8); forceer de patch-versie. Boven begrensd op
+# <7 zodat de override niet stil een volgende major intrekt (#759, backfill #616).
 overrides:
-  nanoid: '>=3.3.18'
+  nanoid: '>=3.3.18 <7'
