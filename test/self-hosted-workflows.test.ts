@@ -22,7 +22,8 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
   for (const bestand of [
     'workflows/sync-on-factory-bump.yml',
     'workflows/deploy.yml',
-    'workflows/eval.yml',
+    // eval.yml is factory-eigen (niet gesynct, net als release.yml) maar draait óók op de mini.
+    '.github/workflows/eval.yml',
   ]) {
     it(`${bestand} gebruikt node en pnpm van de runner`, () => {
       const mini = miniJobs(bestand);

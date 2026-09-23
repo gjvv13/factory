@@ -1,10 +1,9 @@
 name: eval
 
-# Bewust een hand-onderhouden variant van de app-template `workflows/eval.yml`.
-# De factory synct zichzelf niet (geen factory.json), dus deze kopie draait het
-# regressienet voor de factory-repo zelf, waar de gouden set (`eval/gouden-set.json`)
-# woont. Wijzig je de template (nieuwe stap, paths of action-bump), werk dan dit
-# bestand met de hand bij — niets bewaakt de divergentie.
+# Factory-eigen workflow, niet gesynct naar de apps (net als release.yml en claude.yml):
+# de eval is dev-tooling voor de factory zelf, waar de gouden set (`eval/gouden-set.json`)
+# woont. Een app heeft geen gouden set en dus geen regressienet, dus dit hoort niet in de
+# gesyncte `workflows/`-set — dat zou elke app een no-op-workflow en sync-drift geven.
 #
 # Draait op de self-hosted runner op de mini: de eval roept `claude` lokaal aan (net als
 # ci.yml's agent-rooktest). De exitcode van `factory eval` bepaalt of de workflow faalt —
