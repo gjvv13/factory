@@ -6,6 +6,7 @@ escaleer je.
 
 - Issue: **#{{ISSUE}}** — {{TITEL}}
 - Applicatie: **{{APP}}**
+- Soort: **{{SOORT}}**
 - Kolom op het board: **{{KOLOM}}**
 - Bekende applicaties: {{BEKENDE_APPS}}
 
@@ -58,6 +59,21 @@ toetsen van de premisse en het uitwerken van de architectuur.
      `advies`). De frontier is de inhoud van de escalatie.
      Verzin nooit zelf functionele besluiten. Feiten zoek je op; besluiten zijn van de
      gebruiker.
+
+   **Uitzondering: een bug (`Soort: bug`).** Is dit item een `type:bug`, dan is de
+   frontier definitorisch leeg — het gewenste gedrag is "herstel wat kapot is", geen
+   productkeuze. Escaleer dan **niet** op ontbrekende functionele secties. Neem in
+   plaats daarvan in de uitgewerkte body exact deze sectie op, ongewijzigd:
+
+   ```markdown
+   ## Functionele besluiten
+
+   1. **Herstel het beschreven gedrag.** Herstel het in dit issue beschreven gedrag;
+      dit is een bugfix, geen productkeuze.
+   ```
+
+   Verzin geen verdere functionele besluiten en bouw geen frontier: één bugfix, één
+   vaste notitie. Alleen bij `Soort: feature` geldt de frontier-escalatie hierboven.
 
 4. Houd het kort. Een goede uitwerking is 120–180 regels. Langer betekent bijna altijd
    dat er beschrijving in staat die de code al geeft.

@@ -184,6 +184,9 @@ export function bouwEvalPrompt(
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
     '{{BEKENDE_APPS}}': apps.join(', '),
+    // De gouden refine-set bevat feature-refinements; de bug-uitzondering (#782) heeft
+    // geen frontier en dus geen eval-waarde. Render {{SOORT}} daarom als 'feature'.
+    '{{SOORT}}': 'feature',
   };
   const basis = Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
