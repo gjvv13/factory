@@ -14,6 +14,7 @@ import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
 import { opruimen } from './commands/opruimen.js';
 import { prioriteit } from './commands/prioriteit.js';
+import { triage } from './commands/triage.js';
 import {
   eigenVersie,
   orkestreer,
@@ -75,6 +76,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
   factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
   factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
+  factory triage <issue>                 een bug de autonome baan op zetten: type:bug + fastlane + auto-merge-ok + wachtrijkolom (#783)
   factory eval [--dry|--bijwerk] [--soort refine|bouw]  regressienet: gouden set door de werker + judge, tegen de basislijn (#361)
   factory brief                          beslis-gericht overzicht over alle apps (regie-brief, #404)
   factory golf [--app <a>] [--issue <n>] [--dry]  bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)
@@ -266,6 +268,11 @@ export async function main(argumenten: string[]): Promise<void> {
     case 'prioriteit': {
       const { positioneel } = leesArgumenten(rest);
       prioriteit(positioneel[0], positioneel[1]);
+      return;
+    }
+    case 'triage': {
+      const { positioneel } = leesArgumenten(rest);
+      triage(positioneel[0]);
       return;
     }
     case 'self-update':

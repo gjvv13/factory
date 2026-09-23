@@ -509,6 +509,19 @@ export function labelsVan(issue: number, cwd?: string): string[] {
   return ruw === undefined ? [] : parseLabelsAntwoord(ruw);
 }
 
+/** De jq-expressie waarmee `issueBestaat` het issuenummer terugleest. */
+export const JQ_NUMMER = '.number';
+
+/**
+ * Of een issue bestaat en leesbaar is. Leest `.number` (altijd aanwezig op een
+ * bestaand issue), niet `.body` — een issue met een lege body bestaat wél. Nodig
+ * omdat `zetLabel` zacht faalt: zonder deze check zou een typefout in het nummer
+ * stil niets doen (#783).
+ */
+export function issueBestaat(issue: number, cwd?: string): boolean {
+  return issueVeld(issue, JQ_NUMMER, cwd) !== undefined;
+}
+
 /** Parset de jq-uitvoer van `JQ_LABELS` tot een string[]. Geëxporteerd voor tests. */
 export function parseLabelsAntwoord(ruw: string): string[] {
   try {

@@ -32,6 +32,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory splits <issue>`                                 | Multi-slice-refinement opsplitsen in child-issues onder een epic (#378)                                         |
 | `factory board <issue> "<kolom>"`                        | Eén backlog-item van kolom veranderen via de gerichte query (1-2 GraphQL-punten i.p.v. 102)                     |
 | `factory prioriteit <issue> [getal]`                     | Prioriteit op het board zetten of wissen; toont de resulterende wachtrij                                        |
+| `factory triage <issue>`                                 | Een bug de autonome baan op zetten: `type:bug` + `fastlane` + `auto-merge-ok` + wachtrijkolom (#783)            |
 | `factory sync`                                           | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                                   |
 | `factory self-update`                                    | De nieuwste factory globaal installeren uit de npm-registry (`npm i -g @gjvv13/factory@latest`)                 |
 | `factory brief`                                          | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                                     |
