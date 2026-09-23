@@ -35,6 +35,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 | `factory sync`                                        | Slash commands, git hook en CI-workflow in een app gelijkzetten aan deze repo                             |
 | `factory self-update`                                 | De nieuwste factory globaal installeren uit de npm-registry (`npm i -g @gjvv13/factory@latest`)           |
 | `factory brief`                                       | Beslis-gericht overzicht over alle apps (regie-brief, #404)                                               |
+| `factory golf [--app <a>] [--issue <n>] [--dry]`      | Bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)                           |
 | `factory consolideer <--dry\|--voer-uit>`             | Geheugenconsolidatie: voorstel genereren of doorvoeren (#372)                                             |
 | `factory consolideer <--installeer\|--verwijder>`     | De LaunchAgent die `--dry` elke maandag om 09:00 draait                                                   |
 | `factory opruimen [--dry]`                            | Gemergede branches opruimen: lokaal en op de remote                                                       |

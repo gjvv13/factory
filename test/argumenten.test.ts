@@ -67,4 +67,22 @@ describe('leesArgumenten', () => {
       leesArgumenten(['--titel', '--dry'], { waarden: ['--titel'], schakelaars: ['--dry'] }),
     ).toThrow(GebruikersFout);
   });
+
+  it('verzamelt herhaalbare vlaggen in een lijst (meervoud)', () => {
+    const { meervoud } = leesArgumenten(
+      ['--issue', '1', '--app=assistant', '--issue', '2', '--app', 'beheer'],
+      { meervoud: ['--issue', '--app'] },
+    );
+    expect(meervoud.get('--issue')).toEqual(['1', '2']);
+    expect(meervoud.get('--app')).toEqual(['assistant', 'beheer']);
+  });
+
+  it('laat een niet-gebruikte meervoud-vlag afwezig i.p.v. leeg', () => {
+    const { meervoud } = leesArgumenten(['--issue', '1'], { meervoud: ['--issue', '--app'] });
+    expect(meervoud.get('--app')).toBeUndefined();
+  });
+
+  it('weigert een meervoud-vlag zonder waarde', () => {
+    expect(() => leesArgumenten(['--issue'], { meervoud: ['--issue'] })).toThrow(GebruikersFout);
+  });
 });

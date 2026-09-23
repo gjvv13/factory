@@ -7,13 +7,20 @@ import { GebruikersFout } from './shell.js';
 export interface VlagSpec {
   /** Vlaggen zonder waarde, bijvoorbeeld `--snel`. */
   readonly schakelaars?: readonly string[];
-  /** Vlaggen mét waarde, bijvoorbeeld `--repo`. */
+  /** Vlaggen mét waarde, bijvoorbeeld `--repo`. Eén waarde: een herhaling overschrijft. */
   readonly waarden?: readonly string[];
+  /**
+   * Vlaggen mét waarde die je mág herhalen, bijvoorbeeld `--issue 1 --issue 2`. Elke
+   * herhaling wordt verzameld in een lijst (`meervoud`), i.p.v. de vorige te overschrijven.
+   */
+  readonly meervoud?: readonly string[];
 }
 
 export interface Argumenten {
   readonly schakelaars: ReadonlySet<string>;
   readonly waarden: ReadonlyMap<string, string>;
+  /** Verzamelde waarden van de herhaalbare vlaggen uit `spec.meervoud`, in volgorde. */
+  readonly meervoud: ReadonlyMap<string, string[]>;
   readonly positioneel: readonly string[];
 }
 
@@ -29,9 +36,11 @@ export interface Argumenten {
 export function leesArgumenten(rest: readonly string[], spec: VlagSpec = {}): Argumenten {
   const schakelaarNamen = new Set(spec.schakelaars ?? []);
   const waardeNamen = new Set(spec.waarden ?? []);
+  const meervoudNamen = new Set(spec.meervoud ?? []);
 
   const schakelaars = new Set<string>();
   const waarden = new Map<string, string>();
+  const meervoud = new Map<string, string[]>();
   const positioneel: string[] = [];
 
   for (let i = 0; i < rest.length; i += 1) {
@@ -44,12 +53,18 @@ export function leesArgumenten(rest: readonly string[], spec: VlagSpec = {}): Ar
     const isPaar = argument.includes('=');
     const naam = isPaar ? argument.slice(0, argument.indexOf('=')) : argument;
 
-    if (waardeNamen.has(naam)) {
+    if (waardeNamen.has(naam) || meervoudNamen.has(naam)) {
       const waarde = isPaar ? argument.slice(naam.length + 1) : rest[i + 1];
       if (waarde === undefined || waarde === '' || (!isPaar && waarde.startsWith('--'))) {
         throw new GebruikersFout(`De vlag ${naam} verwacht een waarde: ${naam}=<waarde>.`);
       }
-      waarden.set(naam, waarde);
+      if (meervoudNamen.has(naam)) {
+        const bestaand = meervoud.get(naam) ?? [];
+        bestaand.push(waarde);
+        meervoud.set(naam, bestaand);
+      } else {
+        waarden.set(naam, waarde);
+      }
       if (!isPaar) i += 1; // de waarde is geen positioneel argument
       continue;
     }
@@ -59,7 +74,7 @@ export function leesArgumenten(rest: readonly string[], spec: VlagSpec = {}): Ar
       continue;
     }
 
-    const bekend = [...schakelaarNamen, ...waardeNamen].sort().join(', ');
+    const bekend = [...schakelaarNamen, ...waardeNamen, ...meervoudNamen].sort().join(', ');
     throw new GebruikersFout(
       bekend === ''
         ? `Onbekende vlag ${naam}; dit commando kent er geen. Zie: factory help`
@@ -67,5 +82,5 @@ export function leesArgumenten(rest: readonly string[], spec: VlagSpec = {}): Ar
     );
   }
 
-  return { schakelaars, waarden, positioneel };
+  return { schakelaars, waarden, meervoud, positioneel };
 }

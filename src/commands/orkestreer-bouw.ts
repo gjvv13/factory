@@ -90,7 +90,7 @@ import { leesWeigeringenUitLog, type SessieWeigering } from '../sessielog.js';
  */
 
 /** Waar de bouw-werker uit put. */
-const BOUW_KOLOM: Kolom = 'Klaar voor Bouwen';
+export const BOUW_KOLOM: Kolom = 'Klaar voor Bouwen';
 /** De kolom die "iemand werkt hieraan" betekent; een item dáár is geclaimd. */
 const GECLAIMD_KOLOM: Kolom = 'Bouwen';
 /** Alleen kleine klussen. Een epic is geen bouwopdracht, en een slice hoort bij zijn epic. */
