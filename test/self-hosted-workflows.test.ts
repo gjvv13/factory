@@ -19,7 +19,11 @@ describe('workflows op de mini halen geen node- of pnpm-action op', () => {
     return jobs.filter((job) => job.includes('[self-hosted, mini]')).join('\n');
   }
 
-  for (const bestand of ['workflows/sync-on-factory-bump.yml', 'workflows/deploy.yml']) {
+  for (const bestand of [
+    'workflows/sync-on-factory-bump.yml',
+    'workflows/deploy.yml',
+    'workflows/eval.yml',
+  ]) {
     it(`${bestand} gebruikt node en pnpm van de runner`, () => {
       const mini = miniJobs(bestand);
       expect(mini).not.toContain('uses: actions/setup-node');

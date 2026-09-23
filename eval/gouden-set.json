@@ -1,0 +1,27 @@
+{
+  "judgeModel": "claude-sonnet-4-20250514",
+  "judgeEffort": "medium",
+  "items": [
+    {
+      "issue": 803,
+      "app": "assistant",
+      "soort": "refine",
+      "titel": "Assistant · Herinnering met een tijdstip zetten via natuurlijke taal",
+      "body": "# Herinnering met een tijdstip zetten via natuurlijke taal\n\n## Samenvatting\n\nEen gezinslid kan in gewone taal een herinnering zetten (\"herinner me morgen om 8 uur aan de tandarts\"), en de assistent zet die klaar en meldt hem op het juiste moment in dezelfde chat.\n\n## Functionele besluiten (BINDEND — met gebruiker)\n\n1. **Relatieve én absolute tijden.** \"over een uur\", \"morgen om 8\", \"vrijdag 14:00\" moeten allemaal werken. Bij een ambigu tijdstip vraagt de assistent na in plaats van te gokken.\n2. **Bevestiging vooraf.** De assistent leest de begrepen herinnering terug (tekst + tijdstip) vóór hij hem vastzet, zodat een verkeerd begrepen tijd niet stil blijft staan.\n3. **Melden in hetzelfde kanaal.** De herinnering komt terug in de chat waarin hij gezet is.\n\n## Gedrag\n\n- Vrije tekst → intentie `herinnering-zetten` met velden `tekst` en `tijdstip`.\n- Bij lage zekerheid over het tijdstip: navragen.\n- Een gezet herinnering is terug te zien met \"welke herinneringen heb ik staan\".\n\n## Wat het expliciet niet doet\n\n- Geen terugkerende herinneringen (dagelijks/wekelijks) — dat is een later idee.\n- Geen herinneringen voor een ander gezinslid.\n"
+    },
+    {
+      "issue": 741,
+      "app": "beheer",
+      "soort": "refine",
+      "titel": "Beheer · Feature flags per omgeving in één overzicht tonen en omzetten",
+      "body": "# Feature flags per omgeving in één overzicht tonen en omzetten\n\n## Samenvatting\n\nDe beheerconsole toont per app de feature flags voor acc en prod naast elkaar, en laat een flag met één klik omzetten zonder een deploy.\n\n## Functionele besluiten (BINDEND — met gebruiker)\n\n1. **Acc en prod naast elkaar.** In één tabel per app zie je de stand van elke flag in beide omgevingen, zodat een verschil (aan op acc, uit op prod) meteen opvalt.\n2. **Omzetten is een bewuste actie.** Een klik vraagt een bevestiging met de naam van de flag en de omgeving; geen stille toggle.\n3. **De waarheid komt van de app zelf.** Het overzicht bevraagt elke app live; een onbereikbare app toont \"onbekend\", niet \"uit\".\n\n## Gedrag\n\n- Per app een rij per flag, met de stand in acc en prod.\n- Omzetten roept het bestaande flag-endpoint van de app aan.\n- Een onbereikbare app blokkeert het overzicht van de andere apps niet.\n\n## Wat het expliciet niet doet\n\n- Geen dev-omgeving in dit overzicht.\n- Geen historie van wie wanneer wat omzette (later idee).\n"
+    },
+    {
+      "issue": 512,
+      "app": "boodschappen",
+      "soort": "refine",
+      "titel": "Boodschappen · Een product van de lijst afvinken via natuurlijke taal",
+      "body": "# Een product van de lijst afvinken via natuurlijke taal\n\n## Samenvatting\n\nEen gezinslid kan in gewone taal zeggen dat een product gehaald is (\"melk heb ik\"), en dat product wordt op de boodschappenlijst afgevinkt.\n\n## Functionele besluiten (BINDEND — met gebruiker)\n\n1. **Afvinken, niet verwijderen.** Een afgevinkt product blijft zichtbaar als gehaald, zodat je de lijst achteraf nog kunt nalopen; het verdwijnt niet.\n2. **Fuzzy matchen op de lijst.** \"melk\" matcht \"halfvolle melk\" als dat het enige melk-item is; bij meerdere kandidaten vraagt de assistent welke.\n3. **Niets op de lijst = melden.** Staat het genoemde product er niet op, dan zegt de assistent dat, in plaats van stil niets te doen.\n\n## Gedrag\n\n- Vrije tekst → intentie `product-afvinken` met veld `product`.\n- Eén kandidaat: afvinken en bevestigen. Meerdere: navragen. Geen: melden.\n- Een afgevinkt product is terug te zetten op niet-gehaald.\n\n## Wat het expliciet niet doet\n\n- Geen hoeveelheden bijhouden (2 pakken melk) — later idee.\n- Geen afvinken van een product op de lijst van een andere winkel in dezelfde beurt.\n"
+    }
+  ]
+}
