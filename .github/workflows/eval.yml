@@ -1,0 +1,69 @@
+name: eval
+
+# Factory-eigen workflow, niet gesynct naar de apps (net als release.yml en claude.yml):
+# de eval is dev-tooling voor de factory zelf, waar de gouden set (`eval/gouden-set.json`)
+# woont. Een app heeft geen gouden set en dus geen regressienet, dus dit hoort niet in de
+# gesyncte `workflows/`-set — dat zou elke app een no-op-workflow en sync-drift geven.
+#
+# Draait op de self-hosted runner op de mini: de eval roept `claude` lokaal aan (net als
+# ci.yml's agent-rooktest). De exitcode van `factory eval` bepaalt of de workflow faalt —
+# bij "eval": "blokkeer" in package.json faalt hij op een regressie, bij "waarschuw"
+# blijft hij groen met een waarschuwing.
+#
+# Eenmalige setup: een repo-secret `CLAUDE_CODE_OAUTH_TOKEN` waarmee `claude` onbemand
+# inlogt (dezelfde token als de orkestrator gebruikt).
+
+on:
+  push:
+    branches: [main]
+    # Alleen draaien als de invoer van de eval kan zijn veranderd.
+    paths:
+      - 'templates/werker-*.md'
+      - 'skills/onbemand-werken/**'
+      - 'eval/gouden-set.json'
+  workflow_dispatch:
+
+concurrency:
+  group: eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: [self-hosted, mini]
+    steps:
+      - uses: actions/checkout@v7
+
+      # Geen actions/setup-node en pnpm/action-setup op de mini: node staat er al en pnpm
+      # komt uit corepack; die actions werden élke job opnieuw van codeload gehaald (#270).
+      - name: Node en pnpm van de runner
+        run: |
+          verwacht=$(tr -d ' \n' < .nvmrc)
+          huidig=$(node -p "process.versions.node.split('.')[0]")
+          if [ "$huidig" != "$verwacht" ]; then
+            echo "::warning::de runner draait node $huidig, maar .nvmrc vraagt $verwacht — wordt automatisch geremedieerd."
+            . "$HOME/.nvm/nvm.sh"
+            if ! nvm install "$verwacht"; then
+              echo "::error::nvm install $verwacht mislukte — de run was zonder zelfherstel ook rood geweest."
+              exit 1
+            fi
+            nvm use "$verwacht"
+            echo "$(dirname "$(command -v node)")" >> "$GITHUB_PATH"
+          fi
+          corepack enable pnpm
+          echo "node $(node --version), pnpm $(pnpm --version)"
+
+      - name: Dependencies installeren (met DNS-retry)
+        run: |
+          if pnpm install --frozen-lockfile; then exit 0; fi
+          for poging in 2 3; do
+            echo "::warning::pnpm install faalde (poging $((poging - 1))/3) — opnieuw over $(((poging - 1) * 5))s…"
+            sleep $(((poging - 1) * 5))
+            if pnpm install --frozen-lockfile; then exit 0; fi
+          done
+          echo "::error::pnpm install bleef falen na 3 pogingen"
+          exit 1
+
+      - name: Regressienet draaien
+        run: node dist/cli.js eval
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

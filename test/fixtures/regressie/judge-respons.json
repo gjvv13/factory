@@ -1,0 +1,11 @@
+{
+  "criteria": [
+    { "nummer": 1, "score": 2, "toelichting": "alle secties compleet per refinement.md" },
+    { "nummer": 2, "score": 2, "toelichting": "premisse verankerd met bewijsplaatsen" },
+    { "nummer": 3, "score": 1, "toelichting": "laagindeling grotendeels juist" },
+    { "nummer": 4, "score": 2, "toelichting": "alle criteria toetsbaar" },
+    { "nummer": 5, "score": 2, "toelichting": "tests per criterium aanwijsbaar" },
+    { "nummer": 6, "score": 2, "toelichting": "functionele secties letterlijk overgenomen" },
+    { "nummer": 7, "score": 1, "toelichting": "iets aan de lange kant" }
+  ]
+}

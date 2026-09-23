@@ -6,6 +6,7 @@ import { brief } from './commands/brief.js';
 import { consolideer } from './commands/consolideer.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
+import { evalueer } from './commands/eval.js';
 import { flag } from './commands/flag.js';
 import { golf } from './commands/golf.js';
 import { inleveren } from './commands/inleveren.js';
@@ -74,6 +75,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory opruimen [--dry]               gemergede branches opruimen: lokaal en op de remote
   factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
   factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
+  factory eval [--dry|--bijwerk]         regressienet: gouden set door de werker + judge, tegen de basislijn (#361)
   factory brief                          beslis-gericht overzicht over alle apps (regie-brief, #404)
   factory golf [--app <a>] [--issue <n>] [--dry]  bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
@@ -272,6 +274,11 @@ export async function main(argumenten: string[]): Promise<void> {
     case 'brief':
       brief();
       return;
+    case 'eval': {
+      const { schakelaars } = leesArgumenten(rest, { schakelaars: ['--dry', '--bijwerk'] });
+      await evalueer({ dry: schakelaars.has('--dry'), bijwerk: schakelaars.has('--bijwerk') });
+      return;
+    }
     case 'golf': {
       const { schakelaars: golfSchakelaars, meervoud: golfMeervoud } = leesArgumenten(rest, {
         schakelaars: ['--dry'],
