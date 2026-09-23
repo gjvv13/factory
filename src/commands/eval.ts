@@ -314,8 +314,13 @@ export async function evalueer(opties: EvalOpties = {}): Promise<void> {
   const goudenSetPad = opties.goudenSetPad ?? GOUDEN_SET_PAD;
   const set = leesGoudenSet(goudenSetPad);
 
+  // Zonder `--soort` beide taaksoorten; met `--soort` alleen die ene. Bepaal dit vóór de
+  // dry-tak, zodat de preview toont wat er écht zou draaien (niet de hele set).
+  const soorten: readonly EvalSoort[] =
+    opties.soort === undefined ? ['refine', 'bouw'] : [opties.soort];
+
   if (opties.dry === true) {
-    toonDroog(set);
+    toonDroog(set, soorten);
     return;
   }
 
@@ -331,9 +336,6 @@ export async function evalueer(opties: EvalOpties = {}): Promise<void> {
   const bekendeApps = appsVan(set);
   const nu = opties.nu ?? new Date(Date.now());
 
-  // Zonder `--soort` beide taaksoorten; met `--soort` alleen die ene.
-  const soorten: readonly EvalSoort[] =
-    opties.soort === undefined ? ['refine', 'bouw'] : [opties.soort];
   const refineItems = soorten.includes('refine') ? itemsVanSoort(set, 'refine') : [];
   const bouwItems = soorten.includes('bouw') ? itemsVanSoort(set, 'bouw') : [];
   const budgetVoor = (soort: EvalSoort): number => opties.budgetUsd ?? leesEvalBudget(soort);
@@ -408,9 +410,10 @@ export async function evalueer(opties: EvalOpties = {}): Promise<void> {
 }
 
 /** Toont de gouden set en het judge-model zonder iets te draaien (`--dry`). */
-function toonDroog(set: GoudenSet): void {
-  kop(`Gouden set (${String(set.items.length)} items)`);
-  for (const item of set.items) {
+function toonDroog(set: GoudenSet, soorten: readonly EvalSoort[]): void {
+  const teTonen = set.items.filter((item) => soorten.includes(item.soort));
+  kop(`Gouden set (${String(teTonen.length)} items · ${soorten.join(' + ')})`);
+  for (const item of teTonen) {
     process.stdout.write(
       `  #${String(item.issue).padEnd(5)} ${item.app.padEnd(12)} ${item.titel}\n`,
     );

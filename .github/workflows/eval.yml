@@ -10,6 +10,12 @@ name: eval
 # bij "eval": "blokkeer" in package.json faalt hij op een regressie, bij "waarschuw"
 # blijft hij groen met een waarschuwing.
 #
+# CI draait bewust alléén `--soort refine`: een refine-eval is een handvol read-only
+# claude-runs (goedkoop). De bouw-eval (`factory eval --soort bouw`) doet per item een
+# échte bouw-run in een worktree plus een verify — te duur en te traag om op elke
+# template-wijziging te vuren. Draai die met de hand of nachtelijk. Zonder --soort draait
+# `factory eval` beide (voor lokaal gebruik).
+#
 # Eenmalige setup: een repo-secret `CLAUDE_CODE_OAUTH_TOKEN` waarmee `claude` onbemand
 # inlogt (dezelfde token als de orkestrator gebruikt).
 
@@ -64,6 +70,6 @@ jobs:
           exit 1
 
       - name: Regressienet draaien
-        run: node dist/cli.js eval
+        run: node dist/cli.js eval --soort refine
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

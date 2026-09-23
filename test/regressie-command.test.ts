@@ -135,6 +135,14 @@ describe('factory eval (orchestratie)', () => {
     expect(judgeFn).not.toHaveBeenCalled();
   });
 
+  it('--dry respecteert --soort: toont alleen wat er zou draaien', async () => {
+    await evalueer({ dry: true, soort: 'bouw', goudenSetPad: goudenSetPad(GEMENGDE_SET) });
+    // Alleen het bouw-item (#3), niet de refine-items (#1, #2).
+    expect(tekst()).toContain('#3');
+    expect(tekst()).not.toContain('#1');
+    expect(tekst()).not.toContain('#2');
+  });
+
   it('draait de werker per item, scoort via de judge en toont het totaal naast de basislijn', async () => {
     const opdrachten: WerkerOpdracht[] = [];
     const werkerFn = (opdracht: WerkerOpdracht): Promise<WerkerUitkomst> => {
