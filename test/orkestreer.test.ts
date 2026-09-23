@@ -2674,6 +2674,41 @@ describe('bouwPrompt (refine)', () => {
     expect(prompt).toContain('assistant, beheer, factory');
     expect(prompt).not.toContain('{{BEKENDE_APPS}}');
   });
+
+  it('rendert {{SOORT}} als "bug" voor een type:bug (#782)', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 51,
+        titel: 'Test',
+        app: 'assistant',
+        kolom: 'Klaar voor technische refinement',
+        aangemaakt: '',
+        labels: ['type:bug'],
+      },
+      '/w/assistant',
+      '/w/factory',
+    );
+
+    expect(prompt).toContain('Soort: **bug**');
+    expect(prompt).not.toContain('{{SOORT}}');
+  });
+
+  it('rendert {{SOORT}} als "feature" zonder type:bug-label (#782)', () => {
+    const prompt = bouwPrompt(
+      {
+        issue: 51,
+        titel: 'Test',
+        app: 'assistant',
+        kolom: 'Klaar voor technische refinement',
+        aangemaakt: '',
+        labels: ['type:task'],
+      },
+      '/w/assistant',
+      '/w/factory',
+    );
+
+    expect(prompt).toContain('Soort: **feature**');
+  });
 });
 
 describe('ciSamenvatting — CI-status uit de statusCheckRollup', () => {

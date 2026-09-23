@@ -328,6 +328,7 @@ export function bouwPrompt(
     '{{WERKMAP}}': werkmap,
     '{{FACTORY_MAP}}': factoryMap,
     '{{BEKENDE_APPS}}': apps.join(', '),
+    '{{SOORT}}': item.labels.includes('type:bug') ? 'bug' : 'feature',
   };
   return Object.entries(vervang).reduce(
     (tekst, [sleutel, waarde]) => tekst.split(sleutel).join(waarde),
@@ -736,6 +737,23 @@ export function heeftFunctioneleSecties(body: string): boolean {
   return /^## Functionele architectuur/im.test(body) || /^## Functionele besluiten/im.test(body);
 }
 
+/**
+ * Of een item de onbemande refine-baan op mag (#782).
+ *
+ * Een getriageerde `type:bug` is definitorisch: het gewenste gedrag is "herstel
+ * wat kapot is", geen productkeuze. Daarom mag een bug de refine-gate voorbij ook
+ * zonder functionele secties (#767, besluit 3a; ADR 014). Features blijven
+ * functioneel-eerst: zonder `type:bug`-label valt de beslissing terug op
+ * `heeftFunctioneleSecties`.
+ *
+ * De uitzondering hoort hier op de call-site en niet in `heeftFunctioneleSecties`:
+ * die functie kent alleen de body, de labels leven op het item. Zo blijft
+ * `heeftFunctioneleSecties` puur en apart testbaar.
+ */
+export function magRefinen(labels: readonly string[], body: string): boolean {
+  return labels.includes('type:bug') || heeftFunctioneleSecties(body);
+}
+
 /** Werkt één item af: werkplaats verversen, werker draaien, uitkomst verwerken. */
 async function werkAf(
   item: Opdrachtitem,
@@ -750,7 +768,7 @@ async function werkAf(
   // De Claude-hook bewaakt het interactieve pad; dit bewaakt het onbemande pad,
   // dat buiten Claude Code draait en de hook dus niet raakt.
   const body = leesIssueBody(item.issue, cwd);
-  if (body !== undefined && !heeftFunctioneleSecties(body)) {
+  if (body !== undefined && !magRefinen(item.labels, body)) {
     waarschuwing(
       `#${String(item.issue)} heeft technische secties zonder functionele secties — overgeslagen.`,
     );

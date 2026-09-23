@@ -35,6 +35,21 @@ Een lege frontier bij de eerste ronde (er valt niets te beslissen, of het issue
 bevat al alle benodigde besluiten) is geldig: sla het interview over en ga
 direct verder met de volgende stap.
 
+**Een `type:bug` heeft een definitorisch lege frontier.** Het gewenste gedrag van
+een bug is "herstel wat kapot is" — dat volgt uit het defect, het is geen
+productkeuze (#767, besluit 3a; ADR 014). Bouw dus geen frontier en verzin geen
+besluiten; neem in plaats daarvan exact deze notitie op als het besluiten-blok:
+
+```markdown
+## Functionele besluiten
+
+1. **Herstel het beschreven gedrag.** Herstel het in dit issue beschreven gedrag;
+   dit is een bugfix, geen productkeuze.
+```
+
+Dit geldt alléén voor een `type:bug`. Een feature blijft functioneel-eerst: daar
+bouw en presenteer je de frontier zoals hierboven.
+
 ## Feiten vs. besluiten
 
 - **Feiten** — wat staat er in de code, welke API levert wat, hoe werkt het nu —

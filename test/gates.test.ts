@@ -12,7 +12,7 @@ vi.mock('../src/commands/integreer.js', async (importOriginal) => {
 
 import { parseLabelsAntwoord } from '../src/board.js';
 import { inleveren } from '../src/commands/inleveren.js';
-import { heeftFunctioneleSecties } from '../src/commands/orkestreer.js';
+import { heeftFunctioneleSecties, magRefinen } from '../src/commands/orkestreer.js';
 import { herstelUitvoerder, herstelWacht, stelUitvoerderIn, stelWachtIn } from '../src/shell.js';
 import { maakUitvoerderOpnemer, zetBoardOmgeving, type UitkomstBepaler } from './helpers.js';
 
@@ -48,6 +48,35 @@ describe('heeftFunctioneleSecties', () => {
     // "## Technische architectuur" midden in een zin telt niet.
     const body = 'Dit is geen ## Technische architectuur koptekst.';
     expect(heeftFunctioneleSecties(body)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// magRefinen (orkestreer.ts) — bugs uitgezonderd van functioneel-eerst (#782)
+// ---------------------------------------------------------------------------
+describe('magRefinen', () => {
+  const technischeOnly = '# Titel\n\n## Technische architectuur\n\nHoe.';
+  const kaal = '# Titel\n\nNog geen technische sectie.';
+  const volledig = '## Functionele besluiten\n\nBesluit.\n\n## Technische architectuur\n\nHoe.';
+
+  it('laat een type:bug de gate voorbij, óók bij technische secties zonder functionele', () => {
+    expect(magRefinen(['type:bug'], technischeOnly)).toBe(true);
+    // Regressie: heeftFunctioneleSecties zelf blijft die body afkeuren.
+    expect(heeftFunctioneleSecties(technischeOnly)).toBe(false);
+  });
+
+  it('blokkeert een feature met technische-only body', () => {
+    expect(magRefinen([], technischeOnly)).toBe(false);
+    expect(magRefinen(['type:task'], technischeOnly)).toBe(false);
+  });
+
+  it('laat een kaal item (nog geen technische sectie) altijd door', () => {
+    expect(magRefinen([], kaal)).toBe(true);
+  });
+
+  it('laat een volledige body door, met of zonder bug-label', () => {
+    expect(magRefinen([], volledig)).toBe(true);
+    expect(magRefinen(['type:bug'], volledig)).toBe(true);
   });
 });
 

@@ -693,6 +693,7 @@ export async function bouwAf(
   timeoutMs?: number,
   baan?: BouwBaan,
   opsMelding?: OpsMeldingConfig,
+  autonoom?: boolean,
 ): Promise<BouwAfResultaat> {
   kop(`#${String(item.issue)} — ${item.titel}`);
   zorgVoorEscalatieLabel(cwd);
@@ -848,6 +849,7 @@ export async function bouwAf(
     reeks,
     baan,
     slice,
+    autonoom,
   );
 
   // leverIn mislukte na een voltooide bouw (#630): de bouw-kosten komen mee in het
@@ -897,6 +899,7 @@ function verwerkBouw(
   reeks?: ReeksContext,
   baan?: BouwBaan,
   slice = 1,
+  autonoom?: boolean,
 ): VerwerkSignaal {
   const voetnoot = maakVoetnoot(item, uitkomst, reviewUitkomst, wortel);
 
@@ -976,17 +979,14 @@ function verwerkBouw(
   // inleveren: stuit `leverIn` op een omgevingsfout, dan is er géén PR en zou die comment
   // liegen (#383).
   const reviewComment = maakReviewComment(reviewUitkomst);
-  // Fastlane-items (#401) mergen zichzelf op groen; gewone items laten de label-check
-  // in `inleveren` bepalen of auto-merge aangaat (#573): `auto-merge-ok` op het issue
-  // is de gate, niet de `geenAutomerge`-vlag.
-  const isFastlane = baan === 'fastlane';
+  const viaFastlanePoort = landtViaFastlanePoort(baan, autonoom);
   let inleverResultaat: InleverenResultaat;
   try {
     // Mét titel: zonder `--titel` raadt `gh --fill` er een uit de branchnaam, en dan heet
     // de PR "slice/87 1" — zoals bij de eerste bouw-run gebeurde.
     inleverResultaat = leverIn({
       cwd: werkmap,
-      ...(isFastlane ? { fastlane: true } : {}),
+      ...(viaFastlanePoort ? { fastlane: true } : {}),
       titel: `#${String(item.issue)} — ${item.titel}`,
       // Ops-melding-config doorgeven zodat de review-gate bij falen de ops-room bedient (#586).
       ...(opsMelding !== undefined ? { opsMelding } : {}),
@@ -1021,7 +1021,7 @@ function verwerkBouw(
   }
 
   // Inleveren geslaagd: nu pas melden dat er gebouwd is en dat de PR openstaat.
-  const mergeRegel = isFastlane
+  const mergeRegel = viaFastlanePoort
     ? 'De PR staat open **met auto-merge** (fastlane); hij merget zichzelf op groen.'
     : 'De PR staat open **zonder auto-merge**; mergen is jouw beslissing.';
   const wrijvingSectie = maakWrijvingSectie(verdict.wrijving, logWeigeringen, uitkomst);
@@ -1061,7 +1061,7 @@ function verwerkBouw(
   }
 
   ok(
-    isFastlane
+    viaFastlanePoort
       ? `#${String(item.issue)} gebouwd en ingeleverd met auto-merge (fastlane).`
       : `#${String(item.issue)} gebouwd en ingeleverd zonder auto-merge.`,
   );
@@ -1836,6 +1836,9 @@ async function draaiNachtBouw(
             draaiOpties.timeoutMs,
             'fastlane',
             opsMeldingVan(instellingen),
+            // Autonoom: landt op de #573-schone-gate (auto-merge-ok + schone review),
+            // niet op de lossere #401-fastlane-poort (#784, #767-besluit 4).
+            true,
           );
           return resultaat;
         },
@@ -1933,6 +1936,28 @@ function verwijderBouwAgent(paden: OrkestratorPaden): void {
 
 /** De baan waarbinnen een bouw-run draait: gewoon of fastlane (#400). */
 export type BouwBaan = 'gewoon' | 'fastlane';
+
+/**
+ * Of de landing via de #401-fastlane-poort loopt, of via de #573-schone-gate (#784).
+ *
+ * Er zijn twee auto-merge-poorten in `inleveren`. De **#401-poort** (`fastlane: true`)
+ * merget op groen zodra het issue `fastlane`/`type:bug` draagt — de bewuste
+ * mens-afwijking van akkoord-voor-inleveren bij een interactieve `--baan fastlane`. De
+ * **#573-poort** (de default) merget alleen bij `auto-merge-ok` én een schone
+ * code-review-gate.
+ *
+ * De autonome nacht-fastlane (`autonoom === true`) landt op de #573-schone-gate — de
+ * bindende envelop van #767 (besluit 4), waarvoor triage `auto-merge-ok` stempelt
+ * (#783) — en dus **niet** op de lossere #401-poort. `fastlaneWachtrij` blijft in beide
+ * gevallen alleen de selectie; alleen de landing verschilt. Een gewoon item (baan
+ * `undefined`) landt eveneens op de #573-gate.
+ */
+export function landtViaFastlanePoort(
+  baan: BouwBaan | undefined,
+  autonoom: boolean | undefined,
+): boolean {
+  return baan === 'fastlane' && autonoom !== true;
+}
 
 /**
  * Leest `--baan`: `gewoon` (default) of `fastlane`. Elke andere waarde is een fout;
