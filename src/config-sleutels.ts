@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AppConfig } from './app-config.js';
+import { gedeeldSecretsPad, type AppConfig } from './app-config.js';
 import { configSamenvatting } from './env-herstart.js';
 import { kop, ok, run, waarschuwing, GebruikersFout } from './shell.js';
 
@@ -29,8 +29,9 @@ export function vergelijkSleutels(
   appDir: string,
   omgeving: 'acc' | 'prod',
   contract: SleutelContract,
+  gedeeldPad?: string,
 ): SleutelToetsResultaat {
-  const samenvatting = configSamenvatting(appDir, omgeving);
+  const samenvatting = configSamenvatting(appDir, omgeving, gedeeldPad);
   const aanwezig = new Set(samenvatting.sleutels);
 
   const ontbrekend = contract.verwacht.filter((s) => !aanwezig.has(s));
@@ -103,8 +104,13 @@ export function toetsConfigSleutels(
   }
 
   const omgevingen = ['acc', 'prod'] as const;
+  // Een gedeelde secrets-laag (~/AppEnvs/shared.secrets.env) telt mee als aanwezig, zodat
+  // een platform-breed secret niet als ontbrekend gemeld wordt (#517). Alleen af te leiden
+  // met een AppConfig die een envRoot draagt; zonder dat (directe repoDir-toets) blijft het
+  // gedrag als vroeger.
+  const gedeeldPad = config?.envRootPad !== undefined ? gedeeldSecretsPad(config) : undefined;
   const resultaten = omgevingen.map((omg) =>
-    vergelijkSleutels(config?.appDir ?? repoDir, omg, contract),
+    vergelijkSleutels(config?.appDir ?? repoDir, omg, contract, gedeeldPad),
   );
 
   const fouten: string[] = [];

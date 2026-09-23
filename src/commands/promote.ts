@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import {
+  gedeeldSecretsPad,
   leesOmgevingsWaarden,
   pm2NaamVan,
   vereisAppConfig,
@@ -33,13 +34,15 @@ function omgevingsVariabelen(
   appDir: string,
   werkmap: string,
   omgeving: Omgeving,
+  gedeeldPad?: string,
 ): NodeJS.ProcessEnv {
   // De env-bestanden van de omgeving eroverheen, zodat migrate en seed op de
   // juiste database draaien (bijv. DATABASE_FILE=data/prod.sqlite) en niet op de
-  // default. ROOT_DIR en FACTORY_ENV dwingen we daarna af, net als de ecosystem.
+  // default. Het gedeelde secrets-bestand zit tussen env en per-app secrets (#517).
+  // ROOT_DIR en FACTORY_ENV dwingen we daarna af, net als de ecosystem.
   return {
     ...process.env,
-    ...leesOmgevingsWaarden(appDir, omgeving),
+    ...leesOmgevingsWaarden(appDir, omgeving, gedeeldPad),
     ROOT_DIR: werkmap,
     FACTORY_ENV: omgeving,
   };
@@ -105,6 +108,9 @@ export async function promote(
 
   const config: AppConfig = vereisAppConfig();
   const repoDir = config.appDir;
+  // Platform-brede gedeelde secrets-laag (~/AppEnvs/shared.secrets.env), no-op als het
+  // bestand niet bestaat (#517). Op de mini leest promote het via het bestandssysteem.
+  const gedeeld = gedeeldSecretsPad(config);
 
   const tag =
     tagArgument ??
@@ -190,14 +196,14 @@ export async function promote(
   // migraties draaien niet automatisch terug).
   run(commando, [...basisArgumenten, 'run', 'migrate'], {
     cwd: werkmap,
-    env: omgevingsVariabelen(repoDir, werkmap, omgeving),
+    env: omgevingsVariabelen(repoDir, werkmap, omgeving, gedeeld),
   });
 
   if (omgeving === 'acc') {
     kop('Testdata inlezen op acceptatie');
     run(commando, [...basisArgumenten, 'run', 'seed'], {
       cwd: werkmap,
-      env: omgevingsVariabelen(repoDir, werkmap, omgeving),
+      env: omgevingsVariabelen(repoDir, werkmap, omgeving, gedeeld),
     });
   }
 
@@ -212,7 +218,7 @@ export async function promote(
       argumenten: ['dist/main.js'],
       cwd: werkmap,
       env: {
-        ...omgevingsVariabelen(repoDir, werkmap, omgeving),
+        ...omgevingsVariabelen(repoDir, werkmap, omgeving, gedeeld),
         PORT: String(controlePoort),
         HOST: '127.0.0.1',
       },
@@ -240,7 +246,7 @@ export async function promote(
   mkdirSync(path.join(repoDir, 'logs'), { recursive: true });
   const ecosystem = path.join(repoDir, 'environments', 'ecosystem.config.cjs');
   herstartOmgeving(ecosystem, pm2Naam);
-  toonGeladenConfig(repoDir, omgeving);
+  toonGeladenConfig(repoDir, omgeving, gedeeld);
 
   const healthUrl = `http://127.0.0.1:${String(poort)}/health`;
   kop(`Controleren of ${omgeving} leeft`);

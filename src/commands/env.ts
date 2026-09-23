@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import {
+  gedeeldSecretsPad,
   OMGEVINGEN,
   pm2NaamVan,
   vereisAppConfig,
@@ -132,7 +133,7 @@ export async function env(actie: string | undefined, omgevingArgument?: string):
         'reload herstart direct: korte downtime, geen swap of rollback. Gebruik promote voor een veilige swap.',
       );
       herstartOmgeving(ecosystemPad(config), pm2Naam);
-      toonGeladenConfig(config.appDir, omgeving);
+      toonGeladenConfig(config.appDir, omgeving, gedeeldSecretsPad(config));
       ok(`${pm2Naam} vers herstart; controleer met: factory env status`);
       return;
     }

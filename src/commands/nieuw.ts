@@ -191,6 +191,11 @@ function drukDeployChecklist(naam: string): void {
       `  2. runner-token op https://github.com/${repo}/settings/actions/runners/new, dan:`,
       `     RUNNER_TOKEN=<token> ./scripts/setup-runner.sh ${naam}`,
       '',
+      'Optioneel — platform-breed gedeeld secret (#517):',
+      '  Een credential die élke app deelt (bijv. een GitHub-PAT) hoort in',
+      '  ~/AppEnvs/shared.secrets.env (rechten 0600). Elke app leest het vanzelf',
+      '  mee, tussen de per-app env en de per-app secrets; per-app secrets winnen.',
+      '',
     ].join('\n'),
   );
 }

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  gedeeldSecretsPad,
   isOmgeving,
   leesAppConfig,
   leesOmgevingsWaarden,
@@ -102,5 +103,56 @@ describe('app-config', () => {
   it('geeft een lege set als er geen env-bestanden zijn', () => {
     const dir = maakApp(geldig);
     expect(leesOmgevingsWaarden(dir, 'prod')).toEqual({});
+  });
+
+  describe('gedeeld platform-secret (#517)', () => {
+    it('leidt het gedeelde pad af uit de oudermap van envRoot', () => {
+      const config = leesAppConfig(maakApp(geldig));
+      expect(gedeeldSecretsPad(config)).toBe(
+        path.join(os.homedir(), 'AppEnvs', 'shared.secrets.env'),
+      );
+    });
+
+    it('merget de drie lagen in volgorde: per-app env → gedeeld → per-app secrets', () => {
+      const dir = maakApp(geldig);
+      const envDir = path.join(dir, 'environments');
+      mkdirSync(envDir, { recursive: true });
+      writeFileSync(path.join(envDir, 'prod.env'), 'A=uit-env\nB=uit-env\nC=uit-env\n');
+      const gedeeld = path.join(dir, 'shared.secrets.env');
+      writeFileSync(gedeeld, 'B=uit-gedeeld\nC=uit-gedeeld\nD=uit-gedeeld\n');
+      writeFileSync(path.join(envDir, 'prod.secrets.env'), 'C=uit-secrets\n');
+
+      const waarden = leesOmgevingsWaarden(dir, 'prod', gedeeld);
+
+      expect(waarden.A).toBe('uit-env'); // alleen in env
+      expect(waarden.B).toBe('uit-gedeeld'); // gedeeld overrulet env
+      expect(waarden.C).toBe('uit-secrets'); // per-app secret overrulet gedeeld én env
+      expect(waarden.D).toBe('uit-gedeeld'); // alleen in gedeeld
+    });
+
+    it('laat een per-app secret altijd winnen van de gedeelde waarde', () => {
+      const dir = maakApp(geldig);
+      const envDir = path.join(dir, 'environments');
+      mkdirSync(envDir, { recursive: true });
+      const gedeeld = path.join(dir, 'shared.secrets.env');
+      writeFileSync(gedeeld, 'TOKEN=gedeeld\n');
+      writeFileSync(path.join(envDir, 'prod.secrets.env'), 'TOKEN=per-app\n');
+
+      expect(leesOmgevingsWaarden(dir, 'prod', gedeeld).TOKEN).toBe('per-app');
+    });
+
+    it('is gedragsidentiek aan vandaag zonder gedeeld pad of als het bestand ontbreekt', () => {
+      const dir = maakApp(geldig);
+      const envDir = path.join(dir, 'environments');
+      mkdirSync(envDir, { recursive: true });
+      writeFileSync(path.join(envDir, 'prod.env'), 'A=1\n');
+      writeFileSync(path.join(envDir, 'prod.secrets.env'), 'B=2\n');
+
+      const zonder = leesOmgevingsWaarden(dir, 'prod');
+      const ontbrekend = leesOmgevingsWaarden(dir, 'prod', path.join(dir, 'bestaat-niet.env'));
+
+      expect(zonder).toEqual({ A: '1', B: '2' });
+      expect(ontbrekend).toEqual({ A: '1', B: '2' });
+    });
   });
 });

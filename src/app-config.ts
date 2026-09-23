@@ -179,6 +179,18 @@ export function pm2NaamVan(config: AppConfig, omgeving: Omgeving): string {
   return `${config.naam}-${omgeving}`;
 }
 
+/**
+ * Pad naar het platform-brede gedeelde secrets-bestand: één plek om een
+ * credential (zoals een GitHub-PAT) voor élke app te zetten en te roteren, buiten
+ * git. Afgeleid uit de oudermap van `envRootPad` — alle apps volgen de conventie
+ * `~/AppEnvs/<naam>` (`nieuw.ts`), dus de oudermap is `~/AppEnvs/`. Geen nieuw
+ * veld in `factory.json` nodig (#517). Bestaat het bestand niet, dan is de laag
+ * een no-op (`leesEnvBestand` geeft `{}`).
+ */
+export function gedeeldSecretsPad(config: AppConfig): string {
+  return path.join(path.dirname(config.envRootPad), 'shared.secrets.env');
+}
+
 function leesEnvBestand(bestand: string): Record<string, string> {
   if (!existsSync(bestand)) {
     return {};
@@ -201,14 +213,25 @@ function leesEnvBestand(bestand: string): Record<string, string> {
 
 /**
  * Leest de omgevingswaarden zoals de pm2-ecosystem dat doet: eerst `<omgeving>.env`,
- * dan `<omgeving>.secrets.env` eroverheen. Zo draaien migrate en seed met dezelfde
- * `DATABASE_FILE` (en de rest) als de draaiende omgeving, in plaats van terug te
- * vallen op de standaardwaarden uit de config.
+ * dan de optionele gedeelde secrets-laag, dan `<omgeving>.secrets.env` eroverheen. Zo
+ * draaien migrate en seed met dezelfde `DATABASE_FILE` (en de rest) als de draaiende
+ * omgeving, in plaats van terug te vallen op de standaardwaarden uit de config.
+ *
+ * `gedeeldPad` (uit `gedeeldSecretsPad(config)`) zit **tussen** de niet-geheime en de
+ * geheime per-app-laag: een per-app secret overrulet altijd de gedeelde waarde, en een
+ * gedeelde waarde verslaat nooit een bewuste per-app secret (#517). De parameter is
+ * optioneel, zodat aanroepen zonder AppConfig (bestaande tests, directe aanroepen)
+ * ongewijzigd blijven werken.
  */
-export function leesOmgevingsWaarden(appDir: string, omgeving: Omgeving): Record<string, string> {
+export function leesOmgevingsWaarden(
+  appDir: string,
+  omgeving: Omgeving,
+  gedeeldPad?: string,
+): Record<string, string> {
   const map = path.join(appDir, 'environments');
   return {
     ...leesEnvBestand(path.join(map, `${omgeving}.env`)),
+    ...(gedeeldPad !== undefined ? leesEnvBestand(gedeeldPad) : {}),
     ...leesEnvBestand(path.join(map, `${omgeving}.secrets.env`)),
   };
 }

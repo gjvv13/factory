@@ -40,6 +40,26 @@ describe('configSamenvatting', () => {
     expect(s.bestanden).toEqual(['acc.env']);
     expect(s.legeSleutels).toEqual([]);
   });
+
+  it('neemt het gedeelde secrets-bestand mee in de lijst en telt zijn sleutels (#517)', () => {
+    const appDir = maakAppMetEnv();
+    const gedeeld = path.join(appDir, 'shared.secrets.env');
+    writeFileSync(gedeeld, 'GEDEELD_TOKEN=abc\n');
+
+    const s = configSamenvatting(appDir, 'prod', gedeeld);
+
+    // Leesvolgorde: per-app env → gedeeld → per-app secrets.
+    expect(s.bestanden).toEqual(['prod.env', 'shared.secrets.env', 'prod.secrets.env']);
+    expect(s.sleutels).toContain('GEDEELD_TOKEN');
+  });
+
+  it('laat het gedeelde bestand weg als het niet bestaat (#517)', () => {
+    const appDir = maakAppMetEnv();
+    const s = configSamenvatting(appDir, 'prod', path.join(appDir, 'shared.secrets.env'));
+
+    expect(s.bestanden).toEqual(['prod.env', 'prod.secrets.env']);
+    expect(s.sleutels).not.toContain('GEDEELD_TOKEN');
+  });
 });
 
 describe('toonGeladenConfig', () => {
