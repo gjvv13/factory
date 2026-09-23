@@ -28,10 +28,21 @@ function leesEnvBestand(bestand) {
   return resultaat;
 }
 
+// Platform-brede gedeelde secrets-laag: één bestand in de oudermap van envRoot
+// (~/AppEnvs/shared.secrets.env) dat élke app meeleest, buiten git. Eén plek om een
+// credential (zoals een GitHub-PAT) te zetten en te roteren (#517). Ontbreekt het
+// bestand, dan is dit een no-op (leesEnvBestand geeft {}).
+function gedeeldSecretsPad() {
+  return path.join(path.dirname(envRootPad()), 'shared.secrets.env');
+}
+
 function omgevingsWaarden(naam) {
   const map = path.join(repoRoot, 'environments');
   return {
     ...leesEnvBestand(path.join(map, `${naam}.env`)),
+    // Gedeelde platform-secrets: tussen de per-app env en de per-app secrets, zodat een
+    // per-app secret altijd wint en een gedeelde waarde nooit een bewuste per-app secret.
+    ...leesEnvBestand(gedeeldSecretsPad()),
     // Waarden die niet in git horen (tokens, sleutels) komen hier vandaan.
     ...leesEnvBestand(path.join(map, `${naam}.secrets.env`)),
   };

@@ -86,6 +86,22 @@ describe('vergelijkSleutels', () => {
     const r = vergelijkSleutels(appDir, 'acc', contract);
     expect(r.leeg).toEqual([]);
   });
+
+  it('beschouwt een sleutel uit het gedeelde bestand als aanwezig (#517)', () => {
+    const appDir = maakApp({ 'prod.env': 'LOG_LEVEL=info\n' });
+    const gedeeld = path.join(appDir, 'shared.secrets.env');
+    writeFileSync(gedeeld, 'DOORSTUUR_DOELEN=matrix\n');
+    const contract: SleutelContract = {
+      verwacht: ['LOG_LEVEL', 'DOORSTUUR_DOELEN'],
+      geheim: [],
+    };
+
+    const zonderGedeeld = vergelijkSleutels(appDir, 'prod', contract);
+    expect(zonderGedeeld.ontbrekend).toEqual(['DOORSTUUR_DOELEN']);
+
+    const metGedeeld = vergelijkSleutels(appDir, 'prod', contract, gedeeld);
+    expect(metGedeeld.ontbrekend).toEqual([]);
+  });
 });
 
 describe('toetsConfigSleutels', () => {

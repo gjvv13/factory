@@ -35,12 +35,25 @@ export interface ConfigSamenvatting {
  * bestanden, welke sleutels, en welke daarvan leeg zijn. Bewust alléén sleutelnamen
  * en geen waarden — namen zijn geen geheim, waarden (tokens, sleutels) wel.
  */
-export function configSamenvatting(appDir: string, omgeving: Omgeving): ConfigSamenvatting {
+export function configSamenvatting(
+  appDir: string,
+  omgeving: Omgeving,
+  gedeeldPad?: string,
+): ConfigSamenvatting {
   const map = path.join(appDir, 'environments');
-  const bestanden = [`${omgeving}.env`, `${omgeving}.secrets.env`].filter((bestand) =>
-    existsSync(path.join(map, bestand)),
-  );
-  const waarden = leesOmgevingsWaarden(appDir, omgeving);
+  // Leesvolgorde: per-app env → gedeelde secrets → per-app secrets (#517). Het gedeelde
+  // bestand staat buiten de environments-map; we tonen zijn bestandsnaam in de lijst.
+  const bestanden: string[] = [];
+  if (existsSync(path.join(map, `${omgeving}.env`))) {
+    bestanden.push(`${omgeving}.env`);
+  }
+  if (gedeeldPad !== undefined && existsSync(gedeeldPad)) {
+    bestanden.push(path.basename(gedeeldPad));
+  }
+  if (existsSync(path.join(map, `${omgeving}.secrets.env`))) {
+    bestanden.push(`${omgeving}.secrets.env`);
+  }
+  const waarden = leesOmgevingsWaarden(appDir, omgeving, gedeeldPad);
   const sleutels = Object.keys(waarden).sort();
   const legeSleutels = sleutels.filter((sleutel) => (waarden[sleutel] ?? '').trim() === '');
   return { map, bestanden, sleutels, legeSleutels };
@@ -51,8 +64,12 @@ export function configSamenvatting(appDir: string, omgeving: Omgeving): ConfigSa
  * meteen zichtbaar is in plaats van stil weg te vallen. Print het herkomst-pad en
  * de sleutelnamen (nooit waarden) en waarschuwt bij lege waarden.
  */
-export function toonGeladenConfig(appDir: string, omgeving: Omgeving): void {
-  const { map, bestanden, sleutels, legeSleutels } = configSamenvatting(appDir, omgeving);
+export function toonGeladenConfig(appDir: string, omgeving: Omgeving, gedeeldPad?: string): void {
+  const { map, bestanden, sleutels, legeSleutels } = configSamenvatting(
+    appDir,
+    omgeving,
+    gedeeldPad,
+  );
   kop('Geladen config');
   if (bestanden.length === 0) {
     waarschuwing(`geen env-bestanden gevonden in ${map} — de omgeving draait op standaardwaarden`);
