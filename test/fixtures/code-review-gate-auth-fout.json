@@ -4,7 +4,7 @@
   "is_error": true,
   "session_id": "gate-review-auth",
   "num_turns": 0,
-  "total_cost_usd": 0.00,
+  "total_cost_usd": 0.0,
   "permission_denials": [],
   "result": "Authentication error: your API token has expired. Please run `claude login` to refresh your session."
 }
