@@ -110,6 +110,13 @@ export const CONSOLIDEER_LAUNCH_LABEL = 'nl.factory.consolideer';
 /** De omgevingsvariabele waarmee de `claude`-CLI zich onbemand aanmeldt. */
 export const TOKEN_SLEUTEL = 'CLAUDE_CODE_OAUTH_TOKEN';
 
+/**
+ * Plafond voor één `factory golf` (#434): een golf dispatcht maximaal zoveel bouw-runs.
+ * Een vangnet, geen afstemknop (dus een constante, geen env-variabele): overschrijdt de
+ * selectie dit, dan weigert `golf` met de tip om met `--app`/`--issue` te filteren.
+ */
+export const MAX_GOLF_ITEMS = 5;
+
 const instellingenSchema = z.object({
   /** Hoeveel refine-werkers er per kalenderdag mogen starten. Default 4, zie #104. */
   FACTORY_DAGMAXIMUM: z.coerce.number().int().min(1).max(50).default(4),

@@ -7,6 +7,7 @@ import { consolideer } from './commands/consolideer.js';
 import { deploy } from './commands/deploy.js';
 import { env } from './commands/env.js';
 import { flag } from './commands/flag.js';
+import { golf } from './commands/golf.js';
 import { inleveren } from './commands/inleveren.js';
 import { integreer } from './commands/integreer.js';
 import { nieuw } from './commands/nieuw.js';
@@ -74,6 +75,7 @@ const HULP = `factory — pipeline van idee tot productie
   factory splits <issue>                 multi-slice-refinement opsplitsen in child-issues
   factory prioriteit <issue> [getal]     prioriteit op het board zetten of wissen; toont de resulterende wachtrij
   factory brief                          beslis-gericht overzicht over alle apps (regie-brief, #404)
+  factory golf [--app <a>] [--issue <n>] [--dry]  bouw-klare items over alle apps serieel dispatchen met één kostenakkoord (#434)
   factory board <issue> "<kolom>"        één backlog-item van kolom veranderen (goedkoop: geen volledige boardlezing)
   factory consolideer <--dry|--voer-uit>  geheugenconsolidatie: voorstel genereren of doorvoeren
   factory consolideer <--installeer|--verwijder>  de LaunchAgent die --dry elke maandag om 09:00 draait
@@ -270,6 +272,25 @@ export async function main(argumenten: string[]): Promise<void> {
     case 'brief':
       brief();
       return;
+    case 'golf': {
+      const { schakelaars: golfSchakelaars, meervoud: golfMeervoud } = leesArgumenten(rest, {
+        schakelaars: ['--dry'],
+        meervoud: ['--app', '--issue'],
+      });
+      const golfIssues = (golfMeervoud.get('--issue') ?? []).map((waarde) => {
+        const n = Number(waarde);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new GebruikersFout(`--issue verwacht een issue-nummer, niet '${waarde}'.`);
+        }
+        return n;
+      });
+      await golf({
+        apps: golfMeervoud.get('--app') ?? [],
+        issues: golfIssues,
+        dry: golfSchakelaars.has('--dry'),
+      });
+      return;
+    }
     case 'consolideer': {
       const { schakelaars: consSchakelaars } = leesArgumenten(rest, {
         schakelaars: ['--dry', '--voer-uit', '--installeer', '--verwijder'],
