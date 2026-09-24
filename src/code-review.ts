@@ -90,29 +90,75 @@ function reviewPrompt(diff: string): string {
 }
 
 /**
- * Parset de ruwe stdout van `claude -p --output-format json` naar een ReviewVerdict.
+ * Match voor auth-gerelateerde fouten in de `result`-tekst van de CLI. Bewust
+ * auth-*specifiek*: kale `token`/`session` matchen ook niet-auth-crashes ("unexpected
+ * token", een session-id in een stacktrace) en zouden zo'n crash ten onrechte als
+ * auth-fout labelen — precies de misleidende diagnostiek die #791 wil wegnemen. Bij
+ * twijfel is het dus een crash (`cli-fout`), niet een auth-fout; een te smalle match is
+ * minder erg dan een te brede (#791, #792-review). Dekt de echte claude-melding
+ * "Failed to authenticate: OAuth session expired…" via `authenticat`/`oauth`.
+ */
+const AUTH_PATROON = /oauth|authenticat|unauthor|credential|invalid api key/i;
+
+/**
+ * Discriminated union voor het resultaat van `parseReviewUitvoer` (#791).
+ *
+ * Vier takken, zodat "kon niet reviewen" nooit dezelfde tak is als "niets gevonden":
+ * - `succes`: het verdict is geldig.
+ * - `auth-fout`: `is_error: true` met een auth-gerelateerde foutmelding.
+ * - `geen-structured-output`: `is_error: false` maar `structured_output` ontbreekt.
+ * - `schema-mismatch`: `structured_output` aanwezig, maar de Zod-parse faalt.
+ * - `ongeldige-json`: de stdout is geen geldige JSON.
+ * - `cli-fout`: `is_error: true` zonder auth-patroon (generieke crash).
+ */
+export type ParseResultaat =
+  | { readonly soort: 'succes'; readonly verdict: ReviewVerdict }
+  | { readonly soort: 'auth-fout'; readonly detail: string }
+  | { readonly soort: 'geen-structured-output' }
+  | { readonly soort: 'schema-mismatch'; readonly detail: string }
+  | { readonly soort: 'ongeldige-json' }
+  | { readonly soort: 'cli-fout'; readonly detail: string };
+
+/**
+ * Parset de ruwe stdout van `claude -p --output-format json` naar een `ParseResultaat`.
  *
  * De `claude`-CLI levert een JSON-envelop met o.a. `structured_output`. Het verdict
- * zit daarin. Is de envelop niet leesbaar, het model-antwoord niet bruikbaar, of het
- * schema ongeldig, dan is het resultaat `undefined` — de gate degradeert graceful.
+ * zit daarin. Het return-type onderscheidt zes uitkomsten zodat de aanroeper
+ * (met name `draaiCodeReview`) de specifieke subreden kan loggen en doorsturen (#791).
  */
-export function parseReviewUitvoer(stdout: string): ReviewVerdict | undefined {
+export function parseReviewUitvoer(stdout: string): ParseResultaat {
   let ruw: unknown;
   try {
     ruw = JSON.parse(stdout) as unknown;
   } catch {
-    return undefined;
+    return { soort: 'ongeldige-json' };
   }
   const envelop = z
     .object({
       is_error: z.boolean(),
+      result: z.string().optional(),
       structured_output: z.unknown().optional(),
     })
     .safeParse(ruw);
-  if (!envelop.success || envelop.data.is_error) return undefined;
+  if (!envelop.success) return { soort: 'ongeldige-json' };
+
+  if (envelop.data.is_error) {
+    const resultTekst = envelop.data.result ?? '';
+    if (AUTH_PATROON.test(resultTekst)) {
+      return { soort: 'auth-fout', detail: resultTekst };
+    }
+    return { soort: 'cli-fout', detail: resultTekst };
+  }
+
+  if (envelop.data.structured_output === undefined || envelop.data.structured_output === null) {
+    return { soort: 'geen-structured-output' };
+  }
 
   const verdict = reviewVerdictSchema.safeParse(envelop.data.structured_output);
-  return verdict.success ? verdict.data : undefined;
+  if (!verdict.success) {
+    return { soort: 'schema-mismatch', detail: verdict.error.message };
+  }
+  return { soort: 'succes', verdict: verdict.data };
 }
 
 /**
@@ -211,18 +257,35 @@ export function draaiCodeReview(
     { cwd: repoDir, capture: true, toleranter: true, timeoutMs: REVIEW_TIMEOUT_MS },
   );
 
-  const verdict = parseReviewUitvoer(uitkomst.stdout);
-  if (verdict === undefined) {
-    waarschuwing('code-review gaf geen bruikbaar verdict — doorgaan.');
+  const parseResultaat = parseReviewUitvoer(uitkomst.stdout);
+  if (parseResultaat.soort !== 'succes') {
+    // Subreden bepalen voor diagnostiek (#791).
+    const SUBREDEN_MAP: Record<Exclude<ParseResultaat['soort'], 'succes'>, string> = {
+      'auth-fout': 'auth-fout',
+      'geen-structured-output': 'geen structured_output',
+      'schema-mismatch': 'schema-mismatch',
+      'ongeldige-json': 'ongeldige JSON',
+      'cli-fout': 'cli-fout',
+    };
+    const subreden = SUBREDEN_MAP[parseResultaat.soort];
+    const melding = `geen bruikbaar verdict (${subreden})`;
+
+    // Ruwe stdout loggen (max 2000 tekens) zodat de oorzaak terugvindbaar is (#791).
+    const MAX_STDOUT_LOG = 2_000;
+    const stdoutSamenvatting =
+      uitkomst.stdout.length > MAX_STDOUT_LOG
+        ? `${uitkomst.stdout.slice(0, MAX_STDOUT_LOG)}… (afgekapt, ${String(uitkomst.stdout.length)} tekens totaal)`
+        : uitkomst.stdout;
+    waarschuwing(`code-review gaf ${melding} — doorgaan.\nRuwe stdout:\n${stdoutSamenvatting}`);
+
     if (opsMelding !== undefined) {
       const app = opsMelding.app !== undefined ? ` (${opsMelding.app})` : '';
-      stuurOpsMelding(
-        opsMelding,
-        `⚠ Code-review-gate kon niet draaien${app}: geen bruikbaar verdict.`,
-      );
+      stuurOpsMelding(opsMelding, `⚠ Code-review-gate kon niet draaien${app}: ${melding}.`);
     }
-    return { doorgaan: true, reden: 'geen-verdict', melding: 'geen bruikbaar verdict' };
+    return { doorgaan: true, reden: 'geen-verdict', melding };
   }
+
+  const verdict = parseResultaat.verdict;
 
   const aantalBevindingen = verdict.bevindingen.length;
   if (aantalBevindingen === 0) {

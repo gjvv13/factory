@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "gate-review-no-struct",
+  "num_turns": 2,
+  "total_cost_usd": 0.04,
+  "permission_denials": [],
+  "result": "Ik heb de diff bekeken en zie geen problemen."
+}

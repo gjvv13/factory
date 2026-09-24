@@ -9,6 +9,7 @@ import {
   maakGateComment,
   parseReviewUitvoer,
   reviewGateUitReviewerVerdict,
+  type ParseResultaat,
 } from '../src/code-review.js';
 import type { ReviewUitkomst } from '../src/werker.js';
 import { herstelUitvoerder, stelUitvoerderIn } from '../src/shell.js';
@@ -20,42 +21,44 @@ function fixture(naam: string): string {
 }
 
 describe('parseReviewUitvoer', () => {
-  it('parseert een verdict met bevindingen', () => {
-    const verdict = parseReviewUitvoer(fixture('code-review-gate-bevindingen.json'));
-    expect(verdict).toBeDefined();
-    expect(verdict!.bevindingen).toHaveLength(2);
-    expect(verdict!.bevindingen[0]!.ernst).toBe('hoog');
-    expect(verdict!.bevindingen[0]!.bestand).toBe('src/commands/promote.ts');
-    expect(verdict!.bevindingen[0]!.regel).toBe(42);
-    expect(verdict!.oordeel).toContain('correctheid');
+  it('parseert een verdict met bevindingen als succes', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-bevindingen.json'));
+    expect(resultaat.soort).toBe('succes');
+    const r = resultaat as Extract<ParseResultaat, { soort: 'succes' }>;
+    expect(r.verdict.bevindingen).toHaveLength(2);
+    expect(r.verdict.bevindingen[0]!.ernst).toBe('hoog');
+    expect(r.verdict.bevindingen[0]!.bestand).toBe('src/commands/promote.ts');
+    expect(r.verdict.bevindingen[0]!.regel).toBe(42);
+    expect(r.verdict.oordeel).toContain('correctheid');
   });
 
-  it('parseert een schoon verdict zonder bevindingen', () => {
-    const verdict = parseReviewUitvoer(fixture('code-review-gate-schoon.json'));
-    expect(verdict).toBeDefined();
-    expect(verdict!.bevindingen).toHaveLength(0);
-    expect(verdict!.oordeel).toContain('goed');
+  it('parseert een schoon verdict zonder bevindingen als succes', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-schoon.json'));
+    expect(resultaat.soort).toBe('succes');
+    const r = resultaat as Extract<ParseResultaat, { soort: 'succes' }>;
+    expect(r.verdict.bevindingen).toHaveLength(0);
+    expect(r.verdict.oordeel).toContain('goed');
   });
 
-  it('geeft undefined bij een crash (is_error: true)', () => {
-    const verdict = parseReviewUitvoer(fixture('code-review-gate-crash.json'));
-    expect(verdict).toBeUndefined();
+  it('herkent een crash (is_error: true) als cli-fout', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-crash.json'));
+    expect(resultaat.soort).toBe('cli-fout');
   });
 
-  it('geeft undefined bij ongeldige JSON', () => {
-    expect(parseReviewUitvoer('dit is geen json')).toBeUndefined();
+  it('geeft ongeldige-json bij ongeldige JSON', () => {
+    expect(parseReviewUitvoer('dit is geen json').soort).toBe('ongeldige-json');
   });
 
-  it('geeft undefined bij een ontbrekend oordeel', () => {
+  it('geeft schema-mismatch bij een ontbrekend oordeel', () => {
     const ongeldig = JSON.stringify({
       type: 'result',
       is_error: false,
       structured_output: { bevindingen: [] },
     });
-    expect(parseReviewUitvoer(ongeldig)).toBeUndefined();
+    expect(parseReviewUitvoer(ongeldig).soort).toBe('schema-mismatch');
   });
 
-  it('geeft undefined bij een bevinding zonder verplichte velden', () => {
+  it('geeft schema-mismatch bij een bevinding zonder verplichte velden', () => {
     const ongeldig = JSON.stringify({
       type: 'result',
       is_error: false,
@@ -64,13 +67,44 @@ describe('parseReviewUitvoer', () => {
         oordeel: 'test',
       },
     });
-    expect(parseReviewUitvoer(ongeldig)).toBeUndefined();
+    expect(parseReviewUitvoer(ongeldig).soort).toBe('schema-mismatch');
+  });
+
+  it('herkent een auth-fout uit de fixture (#791)', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-auth-fout.json'));
+    expect(resultaat.soort).toBe('auth-fout');
+    const r = resultaat as Extract<ParseResultaat, { soort: 'auth-fout' }>;
+    expect(r.detail).toContain('token');
+  });
+
+  it('labelt een niet-auth-crash met "token"/"session" NIET als auth-fout (#792-review)', () => {
+    // AUTH_PATROON is auth-specifiek: een generieke CLI-crash die toevallig "token" of
+    // "session" bevat ("unexpected token", een session-id in een stacktrace) is een
+    // cli-fout, niet een auth-fout — anders keert precies de misleidende diagnostiek
+    // terug die #791 wegneemt.
+    const crash = JSON.stringify({
+      is_error: true,
+      result: 'SyntaxError: Unexpected token < in JSON; session 0xdeadbeef afgebroken',
+    });
+    expect(parseReviewUitvoer(crash).soort).toBe('cli-fout');
+  });
+
+  it('herkent ontbrekende structured_output uit de fixture (#791)', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-geen-structured.json'));
+    expect(resultaat.soort).toBe('geen-structured-output');
+  });
+
+  it('herkent schema-mismatch uit de fixture (#791)', () => {
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-schema-mismatch.json'));
+    expect(resultaat.soort).toBe('schema-mismatch');
   });
 });
 
 describe('maakGateComment', () => {
   it('bouwt een tabel bij bevindingen', () => {
-    const verdict = parseReviewUitvoer(fixture('code-review-gate-bevindingen.json'))!;
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-bevindingen.json'));
+    expect(resultaat.soort).toBe('succes');
+    const verdict = (resultaat as Extract<ParseResultaat, { soort: 'succes' }>).verdict;
     const comment = maakGateComment(verdict);
     expect(comment).toContain('Code-review gate (inleveren)');
     expect(comment).toContain('| Bestand | Regel | Ernst | Bevinding |');
@@ -81,7 +115,9 @@ describe('maakGateComment', () => {
   });
 
   it('meldt geen bevindingen bij een schoon verdict', () => {
-    const verdict = parseReviewUitvoer(fixture('code-review-gate-schoon.json'))!;
+    const resultaat = parseReviewUitvoer(fixture('code-review-gate-schoon.json'));
+    expect(resultaat.soort).toBe('succes');
+    const verdict = (resultaat as Extract<ParseResultaat, { soort: 'succes' }>).verdict;
     const comment = maakGateComment(verdict);
     expect(comment).toContain('Code-review gate (inleveren)');
     expect(comment).toContain('Geen bevindingen');
@@ -252,6 +288,32 @@ describe('draaiCodeReview', () => {
     expect(resultaat.reden).toBe('geen-verdict');
     expect(resultaat.verdict).toBeUndefined();
     expect(resultaat.melding).toContain('geen bruikbaar verdict');
+    expect(resultaat.melding).toContain('cli-fout');
+  });
+
+  it('logt de ruwe stdout bij "geen-verdict" zodat de oorzaak terugvindbaar is (#791, AC2)', () => {
+    // Zonder deze assertie zou het weghalen van de ruwe-stdout-logregel elke test groen
+    // laten (#792-review): de suite mockt process.stdout.write maar toetst hem niet.
+    // waarschuwing() schrijft naar process.stdout.write; grijp de bestaande spy (uit de
+    // beforeEach) via een handle, zodat we de geschreven regels kunnen inspecteren.
+    const schrijf = vi.spyOn(process.stdout, 'write');
+    const ruweStdout = '{"is_error":true,"result":"BOEM-UNIEKE-CLI-CRASH-marker"}';
+    const bepaal: UitkomstBepaler = ({ commando, argumenten }) => {
+      if (commando === 'claude') return { stdout: ruweStdout };
+      if (argumenten[0] === '--version') return { stdout: '2.3.0' };
+      if (argumenten.includes('--verify')) return { stdout: 'abc' };
+      if (argumenten[0] === 'diff') return { stdout: '--- a/foo\n+++ b/foo' };
+      return {};
+    };
+    stelUitvoerderIn(maakUitvoerderOpnemer(bepaal).uitvoerder);
+
+    const resultaat = draaiCodeReview('waarschuw', '/tmp/test');
+    expect(resultaat.reden).toBe('geen-verdict');
+
+    // De ruwe stdout (met het unieke marker) moet in een waarschuwing gelogd zijn.
+    const alleOutput = schrijf.mock.calls.map((aanroep) => String(aanroep[0])).join('');
+    expect(alleOutput).toContain('Ruwe stdout:');
+    expect(alleOutput).toContain('BOEM-UNIEKE-CLI-CRASH-marker');
   });
 
   it('stuurt ops-melding bij "geen-verdict" als opsMelding-config aanwezig is (#586)', () => {
@@ -284,6 +346,7 @@ describe('draaiCodeReview', () => {
     const body = curlAanroep!.argumenten[bodyIndex + 1]!;
     expect(body).toContain('proefapp');
     expect(body).toContain('geen bruikbaar verdict');
+    expect(body).toContain('cli-fout');
   });
 
   it('stuurt ops-melding bij "niet-beschikbaar" als opsMelding-config aanwezig is (#586)', () => {
