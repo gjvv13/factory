@@ -90,11 +90,15 @@ function reviewPrompt(diff: string): string {
 }
 
 /**
- * Brede match voor auth-gerelateerde fouten in de `result`-tekst van de CLI.
- * Bij twijfel is het een crash, niet een auth-fout — een te smalle match is
- * minder erg dan een te brede (#791).
+ * Match voor auth-gerelateerde fouten in de `result`-tekst van de CLI. Bewust
+ * auth-*specifiek*: kale `token`/`session` matchen ook niet-auth-crashes ("unexpected
+ * token", een session-id in een stacktrace) en zouden zo'n crash ten onrechte als
+ * auth-fout labelen — precies de misleidende diagnostiek die #791 wil wegnemen. Bij
+ * twijfel is het dus een crash (`cli-fout`), niet een auth-fout; een te smalle match is
+ * minder erg dan een te brede (#791, #792-review). Dekt de echte claude-melding
+ * "Failed to authenticate: OAuth session expired…" via `authenticat`/`oauth`.
  */
-const AUTH_PATROON = /auth|token|expired|session/i;
+const AUTH_PATROON = /oauth|authenticat|unauthor|credential|invalid api key/i;
 
 /**
  * Discriminated union voor het resultaat van `parseReviewUitvoer` (#791).
