@@ -3,10 +3,5 @@
     "key": "echo",
     "enabled": true,
     "description": "Het echo-commando herhaalt het argument."
-  },
-  {
-    "key": "whatsapp-channel",
-    "enabled": false,
-    "description": "WhatsApp-kanaal (slice 1). Staat standaard uit."
   }
 ]

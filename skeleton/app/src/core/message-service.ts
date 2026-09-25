@@ -11,7 +11,7 @@ export interface MessageService {
 
 /**
  * Het hart van de applicatie: kanaalonafhankelijk. Elke adapter (HTTP, CLI,
- * later WhatsApp of een eigen interface) doet niets anders dan hier afleveren.
+ * Matrix of een eigen interface) doet niets anders dan hier afleveren.
  */
 export function createMessageService(dependencies: {
   router: CommandRouter;

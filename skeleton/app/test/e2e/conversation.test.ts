@@ -82,6 +82,6 @@ describe('gesprek via het HTTP-kanaal (end to end)', () => {
     const response = await fetch(`${baseUrl()}/admin/flags`);
     const body = (await response.json()) as { flags: { key: string }[] };
 
-    expect(body.flags.map((flag) => flag.key)).toEqual(['echo', 'whatsapp-channel']);
+    expect(body.flags.map((flag) => flag.key)).toEqual(['echo']);
   });
 });

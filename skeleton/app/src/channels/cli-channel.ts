@@ -9,7 +9,7 @@ export const CLI_PARTICIPANT = 'local-terminal';
 
 /**
  * Handmatig praten met de applicatie vanuit de terminal.
- * Handig tijdens ontwikkelen en om een slice te demonstreren zonder WhatsApp.
+ * Handig tijdens ontwikkelen en om een slice te demonstreren zonder chat-kanaal.
  */
 export function createCliChannel(clock: Clock): ChannelAdapter {
   let reader: readline.Interface | undefined;

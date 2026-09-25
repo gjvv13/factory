@@ -4,7 +4,7 @@ import type { OutboundMessage } from '../core/message.js';
 /**
  * Elk kanaal waarover de applicatie te bereiken is implementeert dit.
  * De HTTP-route is het standaardkanaal (dev/acc en tests), de CLI is er voor
- * handmatig proberen, WhatsApp komt in slice 1 en een eigen interface later.
+ * handmatig proberen, Matrix (via de assistent) of een eigen interface komt later.
  */
 export interface ChannelAdapter {
   readonly name: string;

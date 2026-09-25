@@ -87,7 +87,7 @@ describe('app-config', () => {
     );
     writeFileSync(
       path.join(envDir, 'prod.secrets.env'),
-      'WHATSAPP_ALLOWLIST=316@c.us\nLOG_LEVEL=info\n',
+      'MATRIX_ALLOWLIST=@naomi:voorbeeld.nl\nLOG_LEVEL=info\n',
     );
 
     const waarden = leesOmgevingsWaarden(dir, 'prod');
@@ -96,7 +96,7 @@ describe('app-config', () => {
     // De secrets overrulen het basisbestand.
     expect(waarden.LOG_LEVEL).toBe('info');
     // Waarden met bijzondere tekens blijven heel; commentaar wordt genegeerd.
-    expect(waarden.WHATSAPP_ALLOWLIST).toBe('316@c.us');
+    expect(waarden.MATRIX_ALLOWLIST).toBe('@naomi:voorbeeld.nl');
     expect(waarden).not.toHaveProperty('# productie');
   });
 
