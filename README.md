@@ -8,7 +8,7 @@ eigen repositories naast deze map.
 ```
 ~/Documents/Software/
 ├── factory/      deze repo: proces, CLI, gedeelde configuratie, skelet
-├── assistant/    gezinsassistent — één backend, meerdere kanalen (o.a. WhatsApp)
+├── assistant/    gezinsassistent — één backend, meerdere kanalen (Matrix)
 └── beheer/       beheerconsole — health en feature flags van álle apps op één plek
 ```
 

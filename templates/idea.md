@@ -18,7 +18,7 @@ níet doe?
 
 ## Hoe zie ik het voor me?
 
-Een voorbeeld van hoe het zou werken. Bij een WhatsApp-functie: schrijf het
+Een voorbeeld van hoe het zou werken. Bij een chat-functie: schrijf het
 gesprek uit.
 
 ```

@@ -323,7 +323,7 @@ describe('factory flag toont vervalstatus', () => {
     );
     schrijfMeta(dir, {
       ping: { permanent: true },
-      'whatsapp-channel': { verlooptOp: '2026-07-01' },
+      'oud-kanaal': { verlooptOp: '2026-07-01' },
     });
 
     const origCwd = process.cwd();
@@ -337,7 +337,7 @@ describe('factory flag toont vervalstatus', () => {
           Promise.resolve({
             flags: [
               { key: 'ping', enabled: true, description: 'Ping-commando' },
-              { key: 'whatsapp-channel', enabled: false, description: 'WhatsApp' },
+              { key: 'oud-kanaal', enabled: false, description: 'Oud kanaal' },
             ],
           }),
       })) as unknown as typeof fetch;

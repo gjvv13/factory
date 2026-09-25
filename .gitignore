@@ -22,6 +22,5 @@ skeleton/**/.tmp/
 skeleton/**/logs/
 skeleton/**/coverage/
 skeleton/**/pacts/
-skeleton/**/.whatsapp-session/
 skeleton/**/*.local.env
 skeleton/**/*.secrets.env

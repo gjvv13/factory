@@ -6,7 +6,7 @@ gebouwd worden. De applicaties zelf staan in eigen repositories naast deze map.
 ```
 ~/Documents/Software/
 ├── factory/      deze repo: proces, CLI, gedeelde configuratie
-├── assistant/    gezinsassistent (kanaalonafhankelijke backend, o.a. WhatsApp)
+├── assistant/    gezinsassistent (kanaalonafhankelijke backend, Matrix)
 └── beheer/       beheerconsole over de apps heen (health + feature flags)
 ```
 

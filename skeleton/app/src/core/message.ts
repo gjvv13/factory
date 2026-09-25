@@ -1,5 +1,5 @@
 export interface InboundMessage {
-  /** Naam van het kanaal waarover het bericht binnenkwam, bijv. 'http' of 'whatsapp'. */
+  /** Naam van het kanaal waarover het bericht binnenkwam, bijv. 'http' of 'matrix'. */
   readonly channel: string;
   /** Kanaalspecifieke identificatie van de afzender (telefoonnummer, chat-id). */
   readonly from: string;

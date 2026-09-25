@@ -9,7 +9,6 @@ logs/
 coverage/
 pacts/*
 !pacts/verify/
-.whatsapp-session/
 *.local.env
 environments/*.secrets.env
 .DS_Store

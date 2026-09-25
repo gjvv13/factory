@@ -2,9 +2,5 @@
   "echo": {
     "permanent": true,
     "beschrijving": "killswitch voor het echo-commando"
-  },
-  "whatsapp-channel": {
-    "verlooptOp": "2026-09-01",
-    "beschrijving": "WhatsApp-kanaal slice 1"
   }
 }

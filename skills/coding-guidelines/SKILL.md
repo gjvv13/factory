@@ -39,7 +39,7 @@ channels/  clients/  http/      ← buitenkant: praten met de wereld
   wat"; bij een console zijn het services (een overzicht opbouwen, een flag omzetten).
   Deze laag doet geen netwerk-I/O, kent geen Fastify en leest geen omgevingsvariabelen.
 - **`channels/`** is de laag voor apps die inkomende berichten verwerken: dunne
-  adapters die iets van buiten (HTTP, terminal, later WhatsApp) omzetten in een
+  adapters die iets van buiten (HTTP, terminal, Matrix) omzetten in een
   `InboundMessage` en aan de `MessageService` in `core/` geven. Een app zonder
   inkomende berichten (een console, een tool) heeft deze laag niet. Zit er logica in
   een adapter, dan hoort die in `core/`.
@@ -179,7 +179,7 @@ een geïnterpoleerde string als bericht:
 
 ```ts
 // goed: gestructureerd, doorzoekbaar, geen persoonlijke data in het bericht
-logger.warn({ channel: 'whatsapp', messageId, error: err.message }, 'doorsturen mislukt');
+logger.warn({ channel: 'matrix', messageId, error: err.message }, 'doorsturen mislukt');
 
 // fout: string-interpolatie, niet doorzoekbaar, risico op PII-lek
 logger.warn(`Doorsturen van ${messageId} naar ${channel} mislukt: ${err.message}`);
