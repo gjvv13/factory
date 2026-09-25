@@ -367,6 +367,14 @@ $0,02 tegen $0,32 voor een verse run, want de context zit in de cache. Is de ses
 niet meer, dan zegt het commando dat en biedt het `--opnieuw` aan — een verse run met
 je antwoord erbij.
 
+**Token verlopen?** Faalt de nacht met `run mislukt: Failed to authenticate: OAuth
+session expired…`, dan is de orchestrator-token in `~/.config/factory/orkestrator.env`
+verlopen (de `--nacht`-baan leest die daar; `--eenmalig` gebruikt bewust de terminal-auth).
+Ververs 'm met `claude setup-token` en plaats de nieuwe token met
+`scripts/zet-orchestrator-token.sh` — dat zet 'm met rechten 600, zonder de overige
+env-regels te raken en zonder het token te tonen. Het item dat op de auth-fout escaleerde
+pak je daarna weer op door het `escalatie`-label te verwijderen.
+
 **Een tweede taaksoort: bouwen (#164).** `--soort bouw` richt dezelfde harness op de
 kolom **Klaar voor Bouwen** in plaats van op de refinement-wachtrij. Geen `--soort` blijft
 refinen, zodat bestaande aanroepen niet van betekenis veranderen.
